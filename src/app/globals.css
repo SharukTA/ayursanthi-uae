@@ -1,0 +1,728 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-sans);
+
+  /* =========================================================
+     AMAZON-STYLE NEUTRAL PALETTE
+
+     The brand teal (#156c6b) is NO LONGER a global colour. It now
+     survives in exactly two places, both opted-in explicitly by the
+     markup, never by this palette:
+       1. <footer>            (see the .surface-brand rules below)
+       2. the homepage gift card (.gift-card)
+
+     Everywhere else reads as Amazon: white//grey surfaces, near-black
+     ink text, navy chrome, and a yellow-orange accent for CTAs.
+
+     Every Tailwind colour family is still remapped (rather than left at
+     its stock value) on purpose — the codebase is full of `emerald-600`,
+     `teal-700`, `green-500` etc. Restoring stock Tailwind would put real
+     green straight back onto the page, which is exactly what we're
+     removing. So each family collapses onto the neutral ramp instead.
+     `rose` stays untouched for error/destructive states.
+     ========================================================= */
+
+  /* Neutral ramp (Amazon greys → navy → ink) */
+  --color-brand-50: #ffffff;
+  --color-brand-100: #f7fafa;
+  --color-brand-200: #eaeded;
+  --color-brand-300: #d5d9d9;
+  --color-brand-400: #aab7b8;
+  --color-brand-500: #6f7373;
+  --color-brand-600: #565959;
+  --color-brand-700: #3f4545;
+  --color-brand-800: #232f3e;
+  --color-brand-900: #131921;
+  --color-brand-950: #0f1111;
+
+  --color-emerald-50: #ffffff;
+  --color-emerald-100: #f7fafa;
+  --color-emerald-200: #eaeded;
+  --color-emerald-300: #d5d9d9;
+  --color-emerald-400: #aab7b8;
+  --color-emerald-500: #6f7373;
+  --color-emerald-600: #565959;
+  --color-emerald-700: #3f4545;
+  --color-emerald-800: #232f3e;
+  --color-emerald-900: #131921;
+  --color-emerald-950: #0f1111;
+
+  --color-teal-50: #ffffff;
+  --color-teal-100: #f7fafa;
+  --color-teal-200: #eaeded;
+  --color-teal-300: #d5d9d9;
+  --color-teal-400: #aab7b8;
+  --color-teal-500: #6f7373;
+  --color-teal-600: #565959;
+  --color-teal-700: #3f4545;
+  --color-teal-800: #232f3e;
+  --color-teal-900: #131921;
+  --color-teal-950: #0f1111;
+
+  --color-green-50: #ffffff;
+  --color-green-100: #f7fafa;
+  --color-green-200: #eaeded;
+  --color-green-300: #d5d9d9;
+  --color-green-400: #aab7b8;
+  --color-green-500: #6f7373;
+  --color-green-600: #565959;
+  --color-green-700: #3f4545;
+  --color-green-800: #232f3e;
+  --color-green-900: #131921;
+  --color-green-950: #0f1111;
+
+  --color-lime-50: #ffffff;
+  --color-lime-100: #f7fafa;
+  --color-lime-200: #eaeded;
+  --color-lime-300: #d5d9d9;
+  --color-lime-400: #aab7b8;
+  --color-lime-500: #6f7373;
+  --color-lime-600: #565959;
+  --color-lime-700: #3f4545;
+  --color-lime-800: #232f3e;
+  --color-lime-900: #131921;
+  --color-lime-950: #0f1111;
+
+  --color-indigo-50: #ffffff;
+  --color-indigo-100: #f7fafa;
+  --color-indigo-200: #eaeded;
+  --color-indigo-300: #d5d9d9;
+  --color-indigo-400: #aab7b8;
+  --color-indigo-500: #6f7373;
+  --color-indigo-600: #565959;
+  --color-indigo-700: #3f4545;
+  --color-indigo-800: #232f3e;
+  --color-indigo-900: #131921;
+  --color-indigo-950: #0f1111;
+
+  --color-sky-50: #ffffff;
+  --color-sky-100: #f7fafa;
+  --color-sky-200: #eaeded;
+  --color-sky-300: #d5d9d9;
+  --color-sky-400: #aab7b8;
+  --color-sky-500: #6f7373;
+  --color-sky-600: #565959;
+  --color-sky-700: #3f4545;
+  --color-sky-800: #232f3e;
+  --color-sky-900: #131921;
+  --color-sky-950: #0f1111;
+
+  --color-blue-50: #ffffff;
+  --color-blue-100: #f7fafa;
+  --color-blue-200: #eaeded;
+  --color-blue-300: #d5d9d9;
+  --color-blue-400: #aab7b8;
+  --color-blue-500: #6f7373;
+  --color-blue-600: #565959;
+  --color-blue-700: #3f4545;
+  --color-blue-800: #232f3e;
+  --color-blue-900: #131921;
+  --color-blue-950: #0f1111;
+
+  --color-cyan-50: #ffffff;
+  --color-cyan-100: #f7fafa;
+  --color-cyan-200: #eaeded;
+  --color-cyan-300: #d5d9d9;
+  --color-cyan-400: #aab7b8;
+  --color-cyan-500: #6f7373;
+  --color-cyan-600: #565959;
+  --color-cyan-700: #3f4545;
+  --color-cyan-800: #232f3e;
+  --color-cyan-900: #131921;
+  --color-cyan-950: #0f1111;
+
+  --color-violet-50: #ffffff;
+  --color-violet-100: #f7fafa;
+  --color-violet-200: #eaeded;
+  --color-violet-300: #d5d9d9;
+  --color-violet-400: #aab7b8;
+  --color-violet-500: #6f7373;
+  --color-violet-600: #565959;
+  --color-violet-700: #3f4545;
+  --color-violet-800: #232f3e;
+  --color-violet-900: #131921;
+  --color-violet-950: #0f1111;
+
+  --color-fuchsia-50: #ffffff;
+  --color-fuchsia-100: #f7fafa;
+  --color-fuchsia-200: #eaeded;
+  --color-fuchsia-300: #d5d9d9;
+  --color-fuchsia-400: #aab7b8;
+  --color-fuchsia-500: #6f7373;
+  --color-fuchsia-600: #565959;
+  --color-fuchsia-700: #3f4545;
+  --color-fuchsia-800: #232f3e;
+  --color-fuchsia-900: #131921;
+  --color-fuchsia-950: #0f1111;
+
+  --color-pink-50: #ffffff;
+  --color-pink-100: #f7fafa;
+  --color-pink-200: #eaeded;
+  --color-pink-300: #d5d9d9;
+  --color-pink-400: #aab7b8;
+  --color-pink-500: #6f7373;
+  --color-pink-600: #565959;
+  --color-pink-700: #3f4545;
+  --color-pink-800: #232f3e;
+  --color-pink-900: #131921;
+  --color-pink-950: #0f1111;
+
+  --color-slate-50: #ffffff;
+  --color-slate-100: #f7fafa;
+  --color-slate-200: #eaeded;
+  --color-slate-300: #d5d9d9;
+  --color-slate-400: #aab7b8;
+  --color-slate-500: #6f7373;
+  --color-slate-600: #565959;
+  --color-slate-700: #3f4545;
+  --color-slate-800: #232f3e;
+  --color-slate-900: #131921;
+  --color-slate-950: #0f1111;
+
+  /* Amber / yellow / orange keep a real accent ramp — these are Amazon's
+     own CTA + star-rating colours, so they stay warm rather than collapsing
+     to grey. This is the ONLY hue in the system besides the two opted-in
+     brand-teal surfaces. */
+  --color-amber-50: #fff8e7;
+  --color-amber-100: #ffefc7;
+  --color-amber-200: #ffe4a3;
+  --color-amber-300: #ffd814;
+  --color-amber-400: #ffa41c;
+  --color-amber-500: #f0900a;
+  --color-amber-600: #c77700;
+  --color-amber-700: #9e5f00;
+  --color-amber-800: #7a4a00;
+  --color-amber-900: #5c3800;
+  --color-amber-950: #3d2500;
+
+  --color-yellow-50: #fff8e7;
+  --color-yellow-100: #ffefc7;
+  --color-yellow-200: #ffe4a3;
+  --color-yellow-300: #ffd814;
+  --color-yellow-400: #ffa41c;
+  --color-yellow-500: #f0900a;
+  --color-yellow-600: #c77700;
+  --color-yellow-700: #9e5f00;
+  --color-yellow-800: #7a4a00;
+  --color-yellow-900: #5c3800;
+  --color-yellow-950: #3d2500;
+
+  --color-orange-50: #fff8e7;
+  --color-orange-100: #ffefc7;
+  --color-orange-200: #ffe4a3;
+  --color-orange-300: #ffd814;
+  --color-orange-400: #ffa41c;
+  --color-orange-500: #f0900a;
+  --color-orange-600: #c77700;
+  --color-orange-700: #9e5f00;
+  --color-orange-800: #7a4a00;
+  --color-orange-900: #5c3800;
+  --color-orange-950: #3d2500;
+
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  /* ---- Amazon system tokens ---- */
+  --amz-navy: #131921; /* primary chrome (top nav) */
+  --amz-navy-2: #232f3e; /* secondary chrome (sub nav) */
+  --amz-ink: #0f1111; /* body text */
+  --amz-ink-muted: #565959; /* secondary text */
+  --amz-link: #007185; /* links */
+  --amz-link-hover: #c7511f;
+  --amz-yellow: #ffd814; /* primary CTA */
+  --amz-yellow-hover: #f7ca00;
+  --amz-orange: #ffa41c; /* secondary CTA / stars */
+  --amz-orange-hover: #fa8900;
+  --amz-border: #d5d9d9;
+  --amz-surface: #eaeded; /* page grey */
+
+  /* The brand teal. Deliberately NOT wired into any colour family — only
+     .surface-brand (footer) and .gift-card reference it. */
+  --brand-teal: #156c6b;
+  --brand-teal-deep: #0f5453;
+
+  --background: #ffffff;
+  --foreground: #0f1111;
+  --card: #ffffff;
+  --card-foreground: #0f1111;
+  --popover: #ffffff;
+  --popover-foreground: #0f1111;
+  --primary: #ffd814;
+  --primary-foreground: #0f1111;
+  --secondary: #eaeded;
+  --secondary-foreground: #0f1111;
+  --muted: #f7fafa;
+  --muted-foreground: #565959;
+  --accent: #eaeded;
+  --accent-foreground: #0f1111;
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: #d5d9d9;
+  --input: #d5d9d9;
+  --ring: #007185;
+  --chart-1: #232f3e;
+  --chart-2: #565959;
+  --chart-3: #ffa41c;
+  --chart-4: #007185;
+  --chart-5: #aab7b8;
+  --radius: 0.625rem;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #0f1111;
+  --sidebar-primary: #232f3e;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #eaeded;
+  --sidebar-accent-foreground: #0f1111;
+  --sidebar-border: #d5d9d9;
+  --sidebar-ring: #007185;
+}
+
+.dark {
+  --background: #ffffff;
+  --foreground: #0f1111;
+  --card: #ffffff;
+  --card-foreground: #0f1111;
+  --popover: #ffffff;
+  --popover-foreground: #0f1111;
+  --primary: #ffd814;
+  --primary-foreground: #0f1111;
+  --secondary: #eaeded;
+  --secondary-foreground: #0f1111;
+  --muted: #f7fafa;
+  --muted-foreground: #565959;
+  --accent: #eaeded;
+  --accent-foreground: #0f1111;
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: #d5d9d9;
+  --input: #d5d9d9;
+  --ring: #007185;
+  --chart-1: #232f3e;
+  --chart-2: #565959;
+  --chart-3: #ffa41c;
+  --chart-4: #007185;
+  --chart-5: #aab7b8;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #0f1111;
+  --sidebar-primary: #232f3e;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #eaeded;
+  --sidebar-accent-foreground: #0f1111;
+  --sidebar-border: #d5d9d9;
+  --sidebar-ring: #007185;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+
+  main[class*="bg-slate-50"] {
+    background-color: #ffffff !important;
+  }
+
+  /* Per-page banner sections were solid fills; they stay white so only the
+     footer + gift card carry a brand colour. */
+  [class*="bg-slate-900"]:not(header):not(nav):not(footer) {
+    background-color: #ffffff !important;
+    background-image: none !important;
+  }
+
+  /* =====================================================================
+     WHITE-PAGE TEXT LEGIBILITY
+     Every "light" text utility (written for the old dark-teal page) is
+     remapped to Amazon ink so it stays readable on white. The dark
+     surfaces below (navbar, footer, gift card, image heroes) re-assert
+     white text with higher specificity.
+     ===================================================================== */
+  .text-white,
+  .text-foreground,
+  .text-slate-100, .text-slate-200, .text-slate-300, .text-slate-400,
+  .text-emerald-50, .text-emerald-100, .text-emerald-200, .text-emerald-300, .text-emerald-400,
+  .text-teal-100, .text-teal-200, .text-teal-300, .text-teal-400 {
+    color: var(--amz-ink);
+  }
+
+  /* Light surfaces anchor ink text for any inherited foreground. */
+  .bg-white,
+  main .bg-slate-50,
+  .bg-emerald-50,
+  .bg-emerald-100 {
+    color: var(--amz-ink);
+  }
+
+  /* Dark surfaces re-assert white text (self + descendants, listed per
+     utility so specificity / source-order beats the global flip above).
+     Surfaces = navbar (.surface-navy), footer (.surface-brand), the
+     homepage gift card (.gift-card), and dark image heroes (bg-slate-95x). */
+  .surface-navy,
+  .surface-navy .text-white, .surface-navy .text-slate-200, .surface-navy .text-slate-300, .surface-navy .text-slate-400, .surface-navy .text-emerald-100, .surface-navy .text-emerald-200, .surface-navy .text-emerald-300,
+  .surface-brand,
+  .surface-brand .text-white, .surface-brand .text-slate-200, .surface-brand .text-slate-300, .surface-brand .text-slate-400, .surface-brand .text-emerald-100, .surface-brand .text-emerald-200, .surface-brand .text-emerald-300,
+  .gift-card, .gift-card .text-white,
+  .hero-light, .hero-light .text-white,
+  footer.text-white, footer .text-white, footer .text-slate-200, footer .text-slate-300, footer .text-slate-400, footer .text-emerald-100, footer .text-emerald-200, footer .text-emerald-300,
+  [class*="bg-slate-95"], [class*="bg-slate-95"] .text-white, [class*="bg-slate-95"] .text-slate-200, [class*="bg-slate-95"] .text-slate-300, [class*="bg-slate-95"] .text-slate-400 {
+    color: #ffffff;
+  }
+
+  /* Muted text inside the dark chrome should read as a soft grey, not ink. */
+  .surface-brand .text-slate-400,
+  footer .text-slate-400 {
+    color: rgba(255, 255, 255, 0.72);
+  }
+
+  /* Links adopt Amazon's teal-blue link colour on light surfaces. */
+  main a:not([class*="bg-"]):not([class*="text-"]):not([data-slot="button"]):hover {
+    color: var(--amz-link-hover);
+  }
+
+  /* Smooth motion on every interactive element */
+  button,
+  a,
+  [role="button"],
+  input,
+  textarea,
+  select {
+    transition:
+      transform 200ms cubic-bezier(0.22, 1, 0.36, 1),
+      box-shadow 250ms cubic-bezier(0.22, 1, 0.36, 1),
+      background-color 200ms ease,
+      color 200ms ease,
+      border-color 200ms ease,
+      filter 200ms ease;
+  }
+}
+
+/* =========================================================
+   THE TWO OPTED-IN BRAND-TEAL SURFACES
+   Nothing else in the system may reference --brand-teal.
+   ========================================================= */
+
+/* 1. Site footer — unchanged from the original teal treatment. */
+.surface-brand {
+  background-color: var(--brand-teal) !important;
+  background-image: none !important;
+}
+
+/* 2. Homepage gift card — unchanged teal gradient. */
+.gift-card {
+  background-image: linear-gradient(
+    to bottom right,
+    var(--brand-teal),
+    var(--brand-teal-deep)
+  ) !important;
+}
+
+/* =========================================================
+   Amazon CTA buttons.
+   Primary  = yellow  (#FFD814) + ink text
+   Secondary= orange  (#FFA41C) + ink text
+   These target the same class patterns the codebase already uses for
+   primary CTAs, so existing markup picks up the Amazon look for free.
+   ========================================================= */
+button[class*="bg-emerald-6"]:not([class*="bg-clip-text"]),
+button[class*="bg-emerald-7"]:not([class*="bg-clip-text"]),
+button[class*="bg-emerald-8"]:not([class*="bg-clip-text"]),
+a[class*="bg-emerald-6"]:not([class*="bg-clip-text"]),
+a[class*="bg-emerald-7"]:not([class*="bg-clip-text"]),
+a[class*="bg-emerald-8"]:not([class*="bg-clip-text"]),
+[data-slot="button"][data-variant="default"] {
+  background-color: var(--amz-yellow) !important;
+  color: var(--amz-ink) !important;
+  border: 1px solid #fcd200;
+  border-radius: 8px;
+  box-shadow: 0 2px 5px rgba(15, 17, 17, 0.15);
+}
+
+button[class*="bg-emerald-6"]:not([class*="bg-clip-text"]):hover:not(:disabled),
+button[class*="bg-emerald-7"]:not([class*="bg-clip-text"]):hover:not(:disabled),
+button[class*="bg-emerald-8"]:not([class*="bg-clip-text"]):hover:not(:disabled),
+a[class*="bg-emerald-6"]:not([class*="bg-clip-text"]):hover,
+a[class*="bg-emerald-7"]:not([class*="bg-clip-text"]):hover,
+a[class*="bg-emerald-8"]:not([class*="bg-clip-text"]):hover,
+[data-slot="button"][data-variant="default"]:hover {
+  background-color: var(--amz-yellow-hover) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(15, 17, 17, 0.22);
+}
+
+button[class*="bg-emerald-7"]:not([class*="bg-clip-text"]):active:not(:disabled),
+a[class*="bg-emerald-7"]:not([class*="bg-clip-text"]):active {
+  transform: translateY(0);
+  filter: brightness(0.96);
+}
+
+/* The gift card keeps its own white/teal buttons — the Amazon yellow rule
+   above must not reach inside it. */
+.gift-card button[class*="bg-emerald-7"],
+.gift-card a[class*="bg-emerald-7"],
+.gift-card [data-slot="button"][data-variant="default"] {
+  background-color: var(--brand-teal) !important;
+  color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.gift-card button[class*="bg-emerald-7"]:hover,
+.gift-card a[class*="bg-emerald-7"]:hover,
+.gift-card [data-slot="button"][data-variant="default"]:hover {
+  background-color: var(--brand-teal-deep) !important;
+}
+
+/* The gift card's white buttons keep their teal label rather than Amazon ink. */
+.gift-card button[class*="bg-white"]:not([class*="bg-white/"]),
+.gift-card a[class*="bg-white"]:not([class*="bg-white/"]),
+.gift-card [data-slot="button"][class*="bg-white"] {
+  color: var(--brand-teal-deep) !important;
+  border-color: rgba(255, 255, 255, 0.4) !important;
+}
+
+/* White/secondary buttons on light surfaces */
+button[class*="bg-white"]:not([class*="bg-clip-text"]):not([class*="bg-white/"]):not([class*=":bg-white"]),
+a[class*="bg-white"]:not([class*="bg-clip-text"]):not([class*="bg-white/"]):not([class*=":bg-white"]) {
+  color: var(--amz-ink) !important;
+  border: 1px solid var(--amz-border);
+  border-radius: 8px;
+  box-shadow: 0 2px 5px rgba(15, 17, 17, 0.1);
+}
+
+button[class*="bg-white"]:not([class*="bg-clip-text"]):not([class*="bg-white/"]):hover:not(:disabled),
+a[class*="bg-white"]:not([class*="bg-clip-text"]):not([class*="bg-white/"]):hover {
+  background-color: #f7fafa !important;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(15, 17, 17, 0.16);
+}
+
+/* Outline / translucent buttons on the white page */
+button[class*="bg-white/"][class*="border"],
+a[class*="bg-white/"][class*="border"],
+[data-slot="button"][data-variant="outline"] {
+  border-width: 1px;
+  border-color: var(--amz-border) !important;
+  color: var(--amz-ink) !important;
+  border-radius: 8px;
+  box-shadow: 0 2px 5px rgba(15, 17, 17, 0.08);
+}
+
+button[class*="bg-white/"][class*="border"]:hover:not(:disabled),
+a[class*="bg-white/"][class*="border"]:hover,
+[data-slot="button"][data-variant="outline"]:hover {
+  transform: translateY(-1px);
+  background-color: #f7fafa !important;
+  color: var(--amz-ink) !important;
+  border-color: #adb1b8 !important;
+  box-shadow: 0 4px 10px rgba(15, 17, 17, 0.14);
+}
+
+/* Translucent icon buttons living ON dark chrome (navbar / footer / gift
+   card) — their class strings contain both "bg-white/" and "border", so the
+   light-page outline rule above would force ink-on-navy at rest, leaving the
+   icon invisible. Re-assert white here. */
+.surface-navy button[class*="bg-white/"][class*="border"],
+.surface-navy a[class*="bg-white/"][class*="border"],
+.surface-brand button[class*="bg-white/"][class*="border"],
+.surface-brand a[class*="bg-white/"][class*="border"],
+.gift-card button[class*="bg-white/"][class*="border"],
+.gift-card a[class*="bg-white/"][class*="border"] {
+  border-color: rgba(255, 255, 255, 0.3) !important;
+  color: #ffffff !important;
+  background-color: transparent !important;
+  box-shadow: none;
+}
+
+.surface-navy button[class*="bg-white/"][class*="border"]:hover:not(:disabled),
+.surface-navy a[class*="bg-white/"][class*="border"]:hover,
+.surface-brand button[class*="bg-white/"][class*="border"]:hover:not(:disabled),
+.surface-brand a[class*="bg-white/"][class*="border"]:hover,
+.gift-card button[class*="bg-white/"][class*="border"]:hover,
+.gift-card a[class*="bg-white/"][class*="border"]:hover {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+  border-color: #ffffff !important;
+  color: #ffffff !important;
+}
+
+/* Generic outline button (no bg class, just border) */
+button[class*="border-slate"][class*="bg-transparent"],
+button.outline,
+[role="button"][class*="border-slate"] {
+  box-shadow: 0 1px 3px rgba(15, 17, 17, 0.12);
+}
+
+button:not([class*="bg-"]):not(:disabled):hover,
+a[class*="rounded"]:not([class*="bg-"]):hover {
+  transform: translateY(-1px);
+}
+
+/* Form inputs — Amazon's blue focus ring */
+input:focus-visible:not([type="checkbox"]):not([type="radio"]):not(.search-bare),
+textarea:focus-visible,
+select:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 3px rgba(0, 113, 133, 0.25),
+    inset 0 0 0 1px var(--amz-link);
+}
+
+input.search-bare:focus-visible,
+input.search-bare:focus {
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+button:disabled,
+[data-slot="button"]:disabled,
+input:disabled,
+textarea:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none !important;
+  filter: none !important;
+}
+
+/* Marquee scroll strip for trust badges */
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [class*="animate-[marquee"] {
+    animation: none !important;
+  }
+}
+
+details > summary::-webkit-details-marker {
+  display: none;
+}
+
+/* =====================================================================
+   DEPTH SYSTEM — neutral shadows, no hue.
+   ===================================================================== */
+:root {
+  --shadow-color: 15, 17, 17;
+}
+
+body {
+  background-color: #ffffff;
+  background-image: none;
+}
+
+main[class*="bg-slate-50"] {
+  background-color: #ffffff !important;
+  background-image: none !important;
+}
+
+/* Light text only survives on dark chrome + dark image heroes; give it a
+   soft shadow there for weight. */
+.surface-navy .text-white,
+.surface-brand .text-white,
+.hero-light .text-white,
+footer .text-white,
+[class*="bg-slate-95"] .text-white,
+[class*="bg-slate-95"] [class*="text-slate-2"],
+[class*="bg-slate-95"] [class*="text-slate-3"] {
+  text-shadow: 0 1px 2px rgba(var(--shadow-color), 0.28);
+}
+
+/* Ink text on light cards stays crisp — no shadow. */
+.bg-white,
+.bg-white *,
+main .bg-slate-50,
+main .bg-slate-50 *,
+.bg-emerald-50,
+.bg-emerald-50 *,
+.bg-emerald-100,
+.bg-emerald-100 * {
+  text-shadow: none;
+}
+
+/* Card elevation — Amazon cards are flat with a hairline border rather than
+   a heavy float, so this is deliberately subtle. */
+main .bg-white:not([class*="shadow"]):not(button):not(a):not([role="button"]) {
+  box-shadow: 0 1px 2px rgba(var(--shadow-color), 0.06);
+}
+
+/* Header chrome */
+header[class*="sticky"] {
+  -webkit-backdrop-filter: saturate(1.4) blur(14px);
+  backdrop-filter: saturate(1.4) blur(14px);
+}
+
+/* On the homepage the header floats over the hero tint, so it must not blur
+   or tint the gradient behind it while it's transparent. */
+header[data-transparent="true"] {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+header[class*="sticky"] img[alt="Ayursanthi"] {
+  filter: drop-shadow(0 6px 14px rgba(var(--shadow-color), 0.28));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body,
+  main[class*="bg-slate-50"] {
+    background-attachment: scroll;
+  }
+}
+
+/* Hide the scrollbar on horizontally-scrollable strips. */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
