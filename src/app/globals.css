@@ -15,10 +15,8 @@
      AMAZON-STYLE NEUTRAL PALETTE
 
      The brand teal (#156c6b) is NO LONGER a global colour. It now
-     survives in exactly two places, both opted-in explicitly by the
-     markup, never by this palette:
-       1. <footer>            (see the .surface-brand rules below)
-       2. the homepage gift card (.gift-card)
+     survives in exactly one place, opted-in explicitly by the markup,
+     never by this palette: the <footer> (see .surface-brand below).
 
      Everywhere else reads as Amazon: white//grey surfaces, near-black
      ink text, navy chrome, and a yellow-orange accent for CTAs.
@@ -282,7 +280,7 @@
   --amz-surface: #eaeded; /* page grey */
 
   /* The brand teal. Deliberately NOT wired into any colour family — only
-     .surface-brand (footer) and .gift-card reference it. */
+     .surface-brand (footer) references it. */
   --brand-teal: #156c6b;
   --brand-teal-deep: #0f5453;
 
@@ -370,7 +368,7 @@
   }
 
   /* Per-page banner sections were solid fills; they stay white so only the
-     footer + gift card carry a brand colour. */
+     footer carries a brand colour. */
   [class*="bg-slate-900"]:not(header):not(nav):not(footer) {
     background-color: #ffffff !important;
     background-image: none !important;
@@ -380,8 +378,8 @@
      WHITE-PAGE TEXT LEGIBILITY
      Every "light" text utility (written for the old dark-teal page) is
      remapped to Amazon ink so it stays readable on white. The dark
-     surfaces below (navbar, footer, gift card, image heroes) re-assert
-     white text with higher specificity.
+     surfaces below (navbar, footer, image heroes) re-assert white text
+     with higher specificity.
      ===================================================================== */
   .text-white,
   .text-foreground,
@@ -401,14 +399,12 @@
 
   /* Dark surfaces re-assert white text (self + descendants, listed per
      utility so specificity / source-order beats the global flip above).
-     Surfaces = navbar (.surface-navy), footer (.surface-brand), the
-     homepage gift card (.gift-card), and dark image heroes (bg-slate-95x). */
+     Surfaces = navbar (.surface-navy), footer (.surface-brand), and dark
+     image heroes (bg-slate-95x). */
   .surface-navy,
   .surface-navy .text-white, .surface-navy .text-slate-200, .surface-navy .text-slate-300, .surface-navy .text-slate-400, .surface-navy .text-emerald-100, .surface-navy .text-emerald-200, .surface-navy .text-emerald-300,
   .surface-brand,
   .surface-brand .text-white, .surface-brand .text-slate-200, .surface-brand .text-slate-300, .surface-brand .text-slate-400, .surface-brand .text-emerald-100, .surface-brand .text-emerald-200, .surface-brand .text-emerald-300,
-  .gift-card, .gift-card .text-white,
-  .hero-light, .hero-light .text-white,
   footer.text-white, footer .text-white, footer .text-slate-200, footer .text-slate-300, footer .text-slate-400, footer .text-emerald-100, footer .text-emerald-200, footer .text-emerald-300,
   [class*="bg-slate-95"], [class*="bg-slate-95"] .text-white, [class*="bg-slate-95"] .text-slate-200, [class*="bg-slate-95"] .text-slate-300, [class*="bg-slate-95"] .text-slate-400 {
     color: #ffffff;
@@ -453,15 +449,6 @@
   background-image: none !important;
 }
 
-/* 2. Homepage gift card — unchanged teal gradient. */
-.gift-card {
-  background-image: linear-gradient(
-    to bottom right,
-    var(--brand-teal),
-    var(--brand-teal-deep)
-  ) !important;
-}
-
 /* =========================================================
    Amazon CTA buttons.
    Primary  = yellow  (#FFD814) + ink text
@@ -501,30 +488,6 @@ a[class*="bg-emerald-7"]:not([class*="bg-clip-text"]):active {
   filter: brightness(0.96);
 }
 
-/* The gift card keeps its own white/teal buttons — the Amazon yellow rule
-   above must not reach inside it. */
-.gift-card button[class*="bg-emerald-7"],
-.gift-card a[class*="bg-emerald-7"],
-.gift-card [data-slot="button"][data-variant="default"] {
-  background-color: var(--brand-teal) !important;
-  color: #ffffff !important;
-  border-color: rgba(255, 255, 255, 0.25);
-}
-
-.gift-card button[class*="bg-emerald-7"]:hover,
-.gift-card a[class*="bg-emerald-7"]:hover,
-.gift-card [data-slot="button"][data-variant="default"]:hover {
-  background-color: var(--brand-teal-deep) !important;
-}
-
-/* The gift card's white buttons keep their teal label rather than Amazon ink. */
-.gift-card button[class*="bg-white"]:not([class*="bg-white/"]),
-.gift-card a[class*="bg-white"]:not([class*="bg-white/"]),
-.gift-card [data-slot="button"][class*="bg-white"] {
-  color: var(--brand-teal-deep) !important;
-  border-color: rgba(255, 255, 255, 0.4) !important;
-}
-
 /* White/secondary buttons on light surfaces */
 button[class*="bg-white"]:not([class*="bg-clip-text"]):not([class*="bg-white/"]):not([class*=":bg-white"]),
 a[class*="bg-white"]:not([class*="bg-clip-text"]):not([class*="bg-white/"]):not([class*=":bg-white"]) {
@@ -562,16 +525,14 @@ a[class*="bg-white/"][class*="border"]:hover,
   box-shadow: 0 4px 10px rgba(15, 17, 17, 0.14);
 }
 
-/* Translucent icon buttons living ON dark chrome (navbar / footer / gift
-   card) — their class strings contain both "bg-white/" and "border", so the
-   light-page outline rule above would force ink-on-navy at rest, leaving the
-   icon invisible. Re-assert white here. */
+/* Translucent icon buttons living ON dark chrome (navbar / footer) — their
+   class strings contain both "bg-white/" and "border", so the light-page
+   outline rule above would force ink-on-navy at rest, leaving the icon
+   invisible. Re-assert white here. */
 .surface-navy button[class*="bg-white/"][class*="border"],
 .surface-navy a[class*="bg-white/"][class*="border"],
 .surface-brand button[class*="bg-white/"][class*="border"],
-.surface-brand a[class*="bg-white/"][class*="border"],
-.gift-card button[class*="bg-white/"][class*="border"],
-.gift-card a[class*="bg-white/"][class*="border"] {
+.surface-brand a[class*="bg-white/"][class*="border"] {
   border-color: rgba(255, 255, 255, 0.3) !important;
   color: #ffffff !important;
   background-color: transparent !important;
@@ -581,9 +542,7 @@ a[class*="bg-white/"][class*="border"]:hover,
 .surface-navy button[class*="bg-white/"][class*="border"]:hover:not(:disabled),
 .surface-navy a[class*="bg-white/"][class*="border"]:hover,
 .surface-brand button[class*="bg-white/"][class*="border"]:hover:not(:disabled),
-.surface-brand a[class*="bg-white/"][class*="border"]:hover,
-.gift-card button[class*="bg-white/"][class*="border"]:hover,
-.gift-card a[class*="bg-white/"][class*="border"]:hover {
+.surface-brand a[class*="bg-white/"][class*="border"]:hover {
   background-color: rgba(255, 255, 255, 0.1) !important;
   border-color: #ffffff !important;
   color: #ffffff !important;
@@ -668,7 +627,6 @@ main[class*="bg-slate-50"] {
    soft shadow there for weight. */
 .surface-navy .text-white,
 .surface-brand .text-white,
-.hero-light .text-white,
 footer .text-white,
 [class*="bg-slate-95"] .text-white,
 [class*="bg-slate-95"] [class*="text-slate-2"],

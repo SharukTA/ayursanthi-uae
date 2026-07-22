@@ -7,13 +7,11 @@ import {
   User,
   Mail,
   Phone,
-  Link2,
   Calendar,
   Save,
   Loader2,
   KeyRound,
   ShoppingBag,
-  Users,
 } from "lucide-react";
 import Link from "next/link";
 import { FadeIn, PageReveal } from "@/components/Animated";
@@ -151,29 +149,6 @@ export default function ProfilePage() {
             />
           )}
 
-          <div className="grid gap-2">
-            <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-[#565959]">
-              <Link2 className="size-3.5" />
-              Referral Code
-            </span>
-            <div className="flex items-center gap-2">
-              <code className="rounded border border-[#d5d9d9] bg-[#f8fafc] px-2.5 py-1.5 font-mono text-xs font-bold text-[#0f1111]">
-                {profile?.referralCode || "—"}
-              </code>
-              {profile?.referralCode && (
-                <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(profile.referralCode);
-                    toast.success("Referral code copied!");
-                  }}
-                  className="text-xs font-semibold text-[#0f1111] hover:underline"
-                >
-                  Copy
-                </button>
-              )}
-            </div>
-          </div>
-
           {infoField(
             "Member Since",
             Calendar,
@@ -185,8 +160,6 @@ export default function ProfilePage() {
                 })
               : "—"
           )}
-
-          {infoField("Referred By", Users, profile?.referredBy?.name || "Direct Registration")}
         </div>
 
         {/* Save / Cancel */}
@@ -222,7 +195,7 @@ export default function ProfilePage() {
       </FadeIn>
 
       {/* Quick stats */}
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4">
         <FadeIn className="flex items-center gap-4 rounded-md border border-border bg-white p-5 shadow-sm">
           <span className="flex size-11 items-center justify-center rounded-md bg-[#232f3e] text-white">
             <ShoppingBag className="size-5" />
@@ -231,18 +204,6 @@ export default function ProfilePage() {
             <p className="text-[10px] font-bold uppercase tracking-wider text-[#565959]">Total Orders</p>
             <p className="mt-0.5 text-xl font-extrabold text-[#0f1111]">
               {profile?._count?.orders ?? 0}
-            </p>
-          </div>
-        </FadeIn>
-
-        <FadeIn className="flex items-center gap-4 rounded-md border border-border bg-white p-5 shadow-sm">
-          <span className="flex size-11 items-center justify-center rounded-md bg-[#232f3e] text-white">
-            <Users className="size-5" />
-          </span>
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-[#565959]">Referrals Made</p>
-            <p className="mt-0.5 text-xl font-extrabold text-[#0f1111]">
-              {profile?._count?.referrals ?? 0}
             </p>
           </div>
         </FadeIn>

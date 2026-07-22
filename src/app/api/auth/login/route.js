@@ -17,13 +17,12 @@ export async function POST(request) {
 
     const cleanIdentifier = identifier.trim();
 
-    // Look up the user by email, phone, or referralCode (case-insensitive for email/referral)
+    // Look up the user by email or phone (email is matched case-insensitively)
     const user = await prisma.user.findFirst({
       where: {
         OR: [
           { email: cleanIdentifier.toLowerCase() },
           { phone: cleanIdentifier },
-          { referralCode: cleanIdentifier.toUpperCase() },
         ],
       },
     });

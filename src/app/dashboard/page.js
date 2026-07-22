@@ -4,19 +4,14 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   ShoppingBag,
-  Wallet,
-  Users,
   IndianRupee,
   ArrowRight,
   Clock,
-  TrendingUp,
-  Gift,
   Package,
   AlertTriangle,
   RefreshCw,
 } from "lucide-react";
 import { FadeIn, PageReveal, Stagger, StaggerItem } from "@/components/Animated";
-import { NextDrawProgress } from "@/components/NextDrawProgress";
 
 export default function DashboardPage() {
   const [data, setData] = useState(null);
@@ -90,20 +85,6 @@ export default function DashboardPage() {
       color: "bg-emerald-100 text-emerald-800",
       href: "/dashboard/orders",
     },
-    {
-      label: "Wallet Balance",
-      value: `Rs. ${Number(data.walletBalance).toLocaleString()}`,
-      icon: Wallet,
-      color: "bg-amber-100 text-amber-800",
-      href: "/dashboard/wallet",
-    },
-    {
-      label: "Referrals",
-      value: data.referralsCount,
-      icon: Users,
-      color: "bg-rose-100 text-rose-800",
-      href: "/dashboard/referrals",
-    },
   ];
 
   const statusColor = (status) => {
@@ -122,12 +103,12 @@ export default function DashboardPage() {
       <PageReveal>
         <h1 className="text-2xl font-bold text-white">My Dashboard</h1>
         <p className="mt-1 text-sm text-[#3f4545]">
-          Overview of your orders, wallet, and referral activity.
+          Overview of your orders and account activity.
         </p>
       </PageReveal>
 
       {/* Stats grid */}
-      <Stagger className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <Stagger className="grid gap-4 sm:grid-cols-2">
         {stats.map((stat) => {
           const Icon = stat.icon;
           return (
@@ -151,10 +132,7 @@ export default function DashboardPage() {
         })}
       </Stagger>
 
-      {/* When is the next gift draw — community progress toward the milestone. */}
-      <NextDrawProgress tone="light" />
-
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-6">
         {/* Recent Orders */}
         <FadeIn className="rounded-md border border-border bg-white p-5 shadow-sm">
           <div className="mb-4 flex items-center justify-between border-b border-[#d5d9d9] pb-3">
@@ -206,67 +184,6 @@ export default function DashboardPage() {
                       {order.status}
                     </span>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </FadeIn>
-
-        {/* Wallet Activity */}
-        <FadeIn className="rounded-md border border-border bg-white p-5 shadow-sm">
-          <div className="mb-4 flex items-center justify-between border-b border-[#d5d9d9] pb-3">
-            <h2 className="flex items-center gap-2 text-sm font-bold text-[#0f1111]">
-              <TrendingUp className="size-4 text-[#0f1111]" />
-              Wallet Activity
-            </h2>
-            <Link
-              href="/dashboard/wallet"
-              className="flex items-center gap-1 text-xs font-semibold text-[#0f1111] hover:underline"
-            >
-              View all <ArrowRight className="size-3" />
-            </Link>
-          </div>
-
-          <div className="mb-4 flex items-center justify-between rounded-md border-2 border-[#d5d9d9] bg-[#f8fafc] p-3">
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-wide text-[#565959]">
-                Available Balance
-              </p>
-              <p className="text-xl font-extrabold text-[#0f1111]">
-                Rs. {Number(data.walletBalance).toLocaleString()}
-              </p>
-            </div>
-            <Gift className="size-8 text-[#0f1111]" />
-          </div>
-
-          {data.recentTransactions.length === 0 ? (
-            <p className="py-4 text-center text-xs text-[#565959]">
-              No transactions yet. Earn from referrals!
-            </p>
-          ) : (
-            <div className="divide-y divide-[#d5d9d9]">
-              {data.recentTransactions.map((tx) => (
-                <div key={tx.id} className="flex items-start justify-between py-2.5">
-                  <div className="min-w-0 pr-3">
-                    <p className="truncate text-xs font-medium text-[#0f1111]">
-                      {tx.description || tx.type}
-                    </p>
-                    <p className="mt-0.5 text-[10px] text-[#565959]">
-                      {new Date(tx.createdAt).toLocaleDateString("en-IN", {
-                        month: "short",
-                        day: "numeric",
-                        year: "numeric",
-                      })}
-                    </p>
-                  </div>
-                  <span
-                    className={`shrink-0 text-xs font-extrabold ${
-                      tx.type === "CREDIT" ? "text-[#0f1111]" : "text-rose-600"
-                    }`}
-                  >
-                    {tx.type === "CREDIT" ? "+" : "-"}Rs.{" "}
-                    {Number(tx.amount).toLocaleString()}
-                  </span>
                 </div>
               ))}
             </div>

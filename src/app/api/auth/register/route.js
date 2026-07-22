@@ -5,19 +5,10 @@ import { validateRegistration, normalizePhone } from "@/lib/validation";
 
 export const runtime = "nodejs";
 
-function generateReferralCode(name) {
-  const prefix = String(name || "USR")
-    .replace(/[^a-zA-Z]/g, "")
-    .substring(0, 4)
-    .toUpperCase();
-  const randomSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
-  return `${prefix}${randomSuffix}`;
-}
-
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { name, email, phone, password, referralId } = body;
+    const { name, email, phone, password } = body;
 
     // Validation — mirrors the client-side checks so the API can't be bypassed.
     const errors = validateRegistration({ name, email, phone, password });
@@ -49,54 +40,16 @@ export async function POST(request) {
       return Response.json({ message, errors: { [field]: message } }, { status: 400 });
     }
 
-    // Handle referral if provided
-    let referredById = null;
-    if (referralId) {
-      const referrer = await prisma.user.findFirst({
-        where: {
-          OR: [
-            { referralCode: referralId.trim() },
-            { id: referralId.trim() },
-          ],
-        },
-      });
-
-      if (!referrer) {
-        return Response.json(
-          { message: "Invalid referral code or referrer not found." },
-          { status: 400 }
-        );
-      }
-      referredById = referrer.id;
-    }
-
-    // Generate referral code and ensure uniqueness (simple check)
-    let referralCode = generateReferralCode(name);
-    let codeExists = await prisma.user.findUnique({ where: { referralCode } });
-    while (codeExists) {
-      referralCode = generateReferralCode(name);
-      codeExists = await prisma.user.findUnique({ where: { referralCode } });
-    }
-
     // Hash password
     const passwordHash = hashPassword(password);
 
-    // Create user and wallet in transaction
     const newUser = await prisma.user.create({
       data: {
         name: name.trim(),
         email: cleanEmail,
         phone: cleanPhone,
         passwordHash,
-        referralCode,
-        referredById,
         role: "CUSTOMER", // default
-        wallet: {
-          create: {
-            balance: 0.0,
-            pendingBalance: 0.0,
-          },
-        },
       },
       select: {
         id: true,
@@ -104,7 +57,6 @@ export async function POST(request) {
         email: true,
         phone: true,
         role: true,
-        referralCode: true,
         createdAt: true,
       },
     });

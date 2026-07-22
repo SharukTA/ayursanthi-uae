@@ -36,24 +36,11 @@ if (!order) {
     });
   }
 
-  const pending = await prisma.pendingCheckout.findFirst({
-    where: { orderId: order.id },
-  });
-  console.log("=== PENDING CHECKOUT ===");
-  console.log(pending ? { status: pending.status, orderId: pending.orderId } : "none");
-
   console.log("=== CURRENT STOCK FOR PURCHASED PRODUCTS ===");
   for (const it of order.items) {
     const prod = await prisma.product.findUnique({ where: { id: it.productId } });
     console.log(`${it.productName}: stock now = ${prod?.stock}`);
   }
-
-  const buyer = await prisma.user.findUnique({
-    where: { id: order.userId },
-    select: { referredById: true },
-  });
-  console.log("=== REFERRAL COMMISSION ===");
-  console.log(buyer?.referredById ? `Buyer was referred by ${buyer.referredById}` : "Buyer has no referrer (no commission expected)");
 }
 
 await prisma.$disconnect();

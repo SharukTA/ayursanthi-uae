@@ -14,10 +14,8 @@ import {
   CheckCircle2,
   Clock,
   LayoutTemplate,
-  Gift,
   Settings,
-  FileText,
-  PiggyBank
+  FileText
 } from "lucide-react";
 import { FadeIn, PageReveal, Stagger, StaggerItem } from "@/components/Animated";
 import { SiteHeader } from "@/components/SiteHeader";
@@ -84,22 +82,10 @@ export default async function AdminDashboardPage() {
               <Link href="/admin/orders">Orders</Link>
             </Button>
             <Button asChild variant="secondary" className="bg-white border-2 border-white text-[#0f1111] hover:bg-[#f8fafc] shadow-lg shadow-black/30 h-9 rounded font-bold">
-              <Link href="/admin/withdrawals">Account Payout</Link>
-            </Button>
-            <Button asChild variant="secondary" className="bg-white border-2 border-white text-[#0f1111] hover:bg-[#f8fafc] shadow-lg shadow-black/30 h-9 rounded font-bold">
               <Link href="/admin/categories">Categories Portal</Link>
             </Button>
             <Button asChild variant="secondary" className="bg-white border-2 border-white text-[#0f1111] hover:bg-[#f8fafc] shadow-lg shadow-black/30 h-9 rounded font-bold">
               <Link href="/admin/products">Inventory Portal</Link>
-            </Button>
-            <Button asChild variant="secondary" className="bg-white border-2 border-white text-[#0f1111] hover:bg-[#f8fafc] shadow-lg shadow-black/30 h-9 rounded font-bold">
-              <Link href="/admin/gift-draws">Gift Draws</Link>
-            </Button>
-            <Button asChild variant="secondary" className="bg-white border-2 border-white text-[#0f1111] hover:bg-[#f8fafc] shadow-lg shadow-black/30 h-9 rounded font-bold">
-              <Link href="/admin/referral-rewards">Referral Rewards</Link>
-            </Button>
-            <Button asChild variant="secondary" className="bg-white border-2 border-white text-[#0f1111] hover:bg-[#f8fafc] shadow-lg shadow-black/30 h-9 rounded font-bold">
-              <Link href="/admin/company-earnings">Company Earnings</Link>
             </Button>
             <Button asChild variant="secondary" className="bg-white border-2 border-white text-[#0f1111] hover:bg-[#f8fafc] shadow-lg shadow-black/30 h-9 rounded font-bold">
               <Link href="/admin/pages">Pages &amp; FAQ</Link>
@@ -214,13 +200,6 @@ export default async function AdminDashboardPage() {
                   color: "bg-blue-100 text-blue-800"
                 },
                 {
-                  title: "Account Payout",
-                  desc: "Review affiliate withdrawal requests; mark paid after sending money, or reject to refund the held balance.",
-                  href: "/admin/withdrawals",
-                  icon: IndianRupee,
-                  color: "bg-green-100 text-green-800"
-                },
-                {
                   title: "Home Builder",
                   desc: "Compose the public homepage: add, reorder, and fill video, deal, category, product, promo, and review blocks.",
                   href: "/admin/home",
@@ -240,27 +219,6 @@ export default async function AdminDashboardPage() {
                   href: "/admin/products",
                   icon: Package,
                   color: "bg-indigo-150 text-indigo-850"
-                },
-                {
-                  title: "Gift Draws",
-                  desc: "Build milestone tiers and their gifts, run each draw to pick random eligible winners, and ship gifts to winners and their referrers.",
-                  href: "/admin/gift-draws",
-                  icon: Gift,
-                  color: "bg-fuchsia-100 text-fuchsia-800"
-                },
-                {
-                  title: "Referral Rewards",
-                  desc: "Fulfil the free product each customer earns at their referral milestone: ship claimed rewards with a tracking note, or void a gamed one.",
-                  href: "/admin/referral-rewards",
-                  icon: Gift,
-                  color: "bg-rose-100 text-rose-800"
-                },
-                {
-                  title: "Company Earnings",
-                  desc: "Ledger of referral commission retained before customers reach their milestone — revenue kept rather than paid out, with top contributors.",
-                  href: "/admin/company-earnings",
-                  icon: PiggyBank,
-                  color: "bg-emerald-100 text-emerald-800"
                 },
                 {
                   title: "Pages & FAQ",

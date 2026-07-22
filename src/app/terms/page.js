@@ -9,7 +9,7 @@ import { getPage } from "@/lib/pages";
 
 export const metadata = {
   title: "Terms & Conditions | Ayursanthi",
-  description: "Terms and conditions, refund policies, and affiliate rules for the Ayursanthi wellness platform.",
+  description: "Terms and conditions and refund policies for the Ayursanthi wellness platform.",
 };
 
 // Admin-editable page content (lib/pages.js falls back to defaults if unedited).
@@ -35,7 +35,7 @@ export default async function TermsPage() {
             />
             <AnimatedReveal delay={0.3}>
               <p className="mx-auto mt-4 max-w-xl text-base text-slate-300">
-                Please read our website policies, purchase terms, refund parameters, and affiliate guidelines carefully.
+                Please read our website policies, purchase terms, and refund parameters carefully.
               </p>
             </AnimatedReveal>
           </PageReveal>

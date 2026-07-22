@@ -10,20 +10,13 @@ export async function GET() {
   }
 
   try {
-    const [recentOrders, wallet, referralsCount, totalOrders, totalSpentAgg] = await Promise.all([
+    const [recentOrders, totalOrders, totalSpentAgg] = await Promise.all([
       prisma.order.findMany({
         where: { userId: session.userId },
         orderBy: { createdAt: "desc" },
         take: 5,
         include: { items: true },
       }),
-      prisma.wallet.findUnique({
-        where: { userId: session.userId },
-        include: {
-          transactions: { orderBy: { createdAt: "desc" }, take: 5 },
-        },
-      }),
-      prisma.user.count({ where: { referredById: session.userId } }),
       prisma.order.count({ where: { userId: session.userId } }),
       prisma.order.aggregate({
         where: { userId: session.userId, paymentStatus: "PAID" },
@@ -34,11 +27,7 @@ export async function GET() {
     return Response.json({
       totalOrders,
       totalSpent: Number(totalSpentAgg._sum.total || 0),
-      walletBalance: Number(wallet?.balance || 0),
-      pendingBalance: Number(wallet?.pendingBalance || 0),
-      referralsCount,
       recentOrders,
-      recentTransactions: wallet?.transactions || [],
     });
   } catch (err) {
     const isDbDown = err?.code === "P1001";

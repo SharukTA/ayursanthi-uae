@@ -58,8 +58,6 @@ export default function AdminProductsPage() {
   // Extra search terms (synonyms, benefits, use-cases) that power the storefront
   // search but aren't shown on the product page. See Product.searchKeywords.
   const [searchKeywords, setSearchKeywords] = useState("");
-  // Opts the product into the pool that milestone customers get one of, free.
-  const [isReferralReward, setIsReferralReward] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   // When set, the left-hand form is editing this product instead of adding one.
@@ -79,7 +77,6 @@ export default function AdminProductsPage() {
     setShortDescription("");
     setDescription("");
     setSearchKeywords("");
-    setIsReferralReward(false);
   };
 
   const startEditProduct = (prod) => {
@@ -110,7 +107,6 @@ export default function AdminProductsPage() {
     setShortDescription(prod.shortDescription || "");
     setDescription(prod.description || "");
     setSearchKeywords(prod.searchKeywords || "");
-    setIsReferralReward(Boolean(prod.isReferralReward));
     // Bring the form into view on smaller screens where it sits above the list.
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -271,7 +267,6 @@ export default function AdminProductsPage() {
         shortDescription: editingId ? shortDescription.trim() : shortDescription.trim() || undefined,
         description: editingId ? description.trim() : description.trim() || undefined,
         searchKeywords: editingId ? searchKeywords.trim() : searchKeywords.trim() || undefined,
-        isReferralReward,
         images: imagesArray,
         attributes: attributesArray,
       };
@@ -483,25 +478,6 @@ export default function AdminProductsPage() {
                     placeholder="100"
                     className="w-full min-w-0 min-h-10 rounded border border-input bg-white px-3 text-xs font-normal outline-none transition focus:border-emerald-700"
                   />
-                </label>
-
-                {/* Referral milestone reward pool. Customers who reach the referral
-                    milestone are given ONE product picked at random from this pool. */}
-                <label className="flex items-start gap-2.5 min-w-0 rounded border border-input bg-white p-3 text-xs font-semibold text-slate-800 sm:col-span-2">
-                  <input
-                    type="checkbox"
-                    checked={isReferralReward}
-                    onChange={(e) => setIsReferralReward(e.target.checked)}
-                    disabled={submitting}
-                    className="mt-0.5 size-4 shrink-0 accent-emerald-700"
-                  />
-                  <span className="grid gap-1">
-                    Free gift for referral milestone
-                    <span className="text-[10px] font-normal text-slate-500">
-                      Adds this product to the pool that milestone customers get free,
-                      one picked at random. Only active, in-stock products are drawn.
-                    </span>
-                  </span>
                 </label>
 
                 {/* Media gallery builder — ordered list of images & videos.

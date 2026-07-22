@@ -165,10 +165,6 @@ export async function PATCH(request, { params }) {
       data.isFeatured = readBoolean(body.isFeatured, false);
     }
 
-    if ("isReferralReward" in body) {
-      data.isReferralReward = readBoolean(body.isReferralReward, false);
-    }
-
     if ("isActive" in body) {
       data.isActive = readBoolean(body.isActive, true);
     }

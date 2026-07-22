@@ -29,24 +29,6 @@ function hashPassword(password) {
   return `${salt}:${hash}`;
 }
 
-// Mirrors the referral-code style used by the registration route.
-function generateReferralCode(name) {
-  const prefix = String(name || "ADM")
-    .replace(/[^a-zA-Z]/g, "")
-    .substring(0, 4)
-    .toUpperCase();
-  const suffix = Math.random().toString(36).substring(2, 6).toUpperCase();
-  return `${prefix}${suffix}`;
-}
-
-async function uniqueReferralCode(name) {
-  let code = generateReferralCode(name);
-  while (await prisma.user.findUnique({ where: { referralCode: code } })) {
-    code = generateReferralCode(name);
-  }
-  return code;
-}
-
 async function main() {
   const email = (process.env.ADMIN_EMAIL || "").trim().toLowerCase();
   const password = process.env.ADMIN_PASSWORD || "";
@@ -70,35 +52,18 @@ async function main() {
   const passwordHash = hashPassword(password);
   const existing = await prisma.user.findUnique({ where: { email } });
 
-  let user;
   if (existing) {
-    // Promote/refresh an existing account — don't touch its wallet or referral code.
-    user = await prisma.user.update({
+    await prisma.user.update({
       where: { email },
       data: { passwordHash, role: "ADMIN", name },
     });
     console.log(`Updated existing user to ADMIN: ${email}`);
   } else {
-    user = await prisma.user.create({
-      data: {
-        name,
-        email,
-        phone,
-        passwordHash,
-        role: "ADMIN",
-        referralCode: await uniqueReferralCode(name),
-        wallet: { create: { balance: 0.0, pendingBalance: 0.0 } },
-      },
+    await prisma.user.create({
+      data: { name, email, phone, passwordHash, role: "ADMIN" },
     });
     console.log(`Created new ADMIN: ${email}`);
   }
-
-  // Make sure the admin has a wallet even if the account predated wallets.
-  await prisma.wallet.upsert({
-    where: { userId: user.id },
-    update: {},
-    create: { userId: user.id, balance: 0.0, pendingBalance: 0.0 },
-  });
 
   console.log("Done. You can now log in at /login with this email.");
 }

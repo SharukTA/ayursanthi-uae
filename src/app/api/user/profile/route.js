@@ -17,9 +17,7 @@ export async function GET() {
       email: true,
       phone: true,
       role: true,
-      referralCode: true,
-      referredBy: { select: { name: true, referralCode: true } },
-      _count: { select: { referrals: true, orders: true } },
+      _count: { select: { orders: true } },
       createdAt: true,
     },
   });

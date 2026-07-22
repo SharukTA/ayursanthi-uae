@@ -11,11 +11,6 @@ async function main() {
   // 1. Clean existing records (Optional, but ensures idempotence)
   await prisma.homeSectionItem.deleteMany();
   await prisma.homeSection.deleteMany();
-  await prisma.giftWin.deleteMany();
-  await prisma.giftTierItem.deleteMany();
-  await prisma.giftTier.deleteMany();
-  await prisma.voucherRedemption.deleteMany();
-  await prisma.voucher.deleteMany();
   await prisma.siteSetting.deleteMany();
   await prisma.faqItem.deleteMany();
   await prisma.page.deleteMany();
@@ -25,8 +20,6 @@ async function main() {
   await prisma.payment.deleteMany();
   await prisma.order.deleteMany();
   await prisma.cartItem.deleteMany();
-  await prisma.walletTransaction.deleteMany();
-  await prisma.wallet.deleteMany();
   await prisma.product.deleteMany();
   await prisma.category.deleteMany();
   await prisma.address.deleteMany();
@@ -62,11 +55,11 @@ async function main() {
     },
   });
 
-  const catAffiliate = await prisma.category.create({
+  const catBundles = await prisma.category.create({
     data: {
-      name: "Affiliate Packs",
-      slug: "affiliate-packs",
-      description: "Starter kits, business packs, and reward-linked products",
+      name: "Wellness Bundles",
+      slug: "wellness-bundles",
+      description: "Starter kits, family packs, and multi-product bundles",
       imageUrl: "https://images.pexels.com/photos/4871365/pexels-photo-4871365.jpeg?auto=compress&cs=tinysrgb&w=900",
     },
   });
@@ -136,12 +129,12 @@ async function main() {
       ],
     },
     {
-      categoryId: catAffiliate.id,
-      name: "Affiliate Starter Pack",
-      slug: "affiliate-starter-pack",
-      sku: "ASP005",
-      shortDescription: "Become an affiliate partner and unlock rewards. Includes 3 premium products.",
-      description: "Purchase this package to activate your affiliate account level. Includes the Herbal Wellness Kit, Ayurvedic Hair Oil, Triphala Digestive Powder, plus access to referral dashboards, digital onboarding, and downline commission levels.",
+      categoryId: catBundles.id,
+      name: "Wellness Starter Pack",
+      slug: "wellness-starter-pack",
+      sku: "WSP005",
+      shortDescription: "Our three best-selling essentials in one discounted bundle.",
+      description: "A curated starter bundle for anyone new to Ayurveda. Includes the Herbal Wellness Kit, Ayurvedic Hair Oil, and Triphala Digestive Powder — everything needed for a complete daily routine, at a lower price than buying each separately.",
       price: 2999.00,
       mrp: 3499.00,
       stock: 50,
@@ -208,7 +201,6 @@ async function main() {
   await seedSection(0, "STATS_BAR", {}, [
     { metric: "REGISTERED_CUSTOMERS", title: "registered customers" },
     { metric: "PAID_ORDERS", title: "successful bookings" },
-    { metric: "REWARDED_CUSTOMERS", title: "customers earned rewards" },
     { metric: "STATIC", title: "100% Natural Ingredients" },
     { metric: "STATIC", title: "Free shipping over Rs. 1000" },
     { metric: "STATIC", title: "AYUSH certified products" },
@@ -231,7 +223,7 @@ async function main() {
     eyebrow: "Explore our range",
     title: "Shop by category",
     subtitle: "Browse the wellness collections curated by our team.",
-  }, [catDaily, catSkin, catDigestive, catAffiliate].map((c) => ({
+  }, [catDaily, catSkin, catDigestive, catBundles].map((c) => ({
     title: c.name,
     body: c.description,
     imageUrl: c.imageUrl,
@@ -247,7 +239,7 @@ async function main() {
     { productId: productBySlug["herbal-wellness-kit"]?.id, subtitle: "Featured", imageUrl: "https://images.pexels.com/photos/4871365/pexels-photo-4871365.jpeg?auto=compress&cs=tinysrgb&w=900" },
     { productId: productBySlug["ayurvedic-hair-oil"]?.id, subtitle: "Best seller", imageUrl: "https://images.pexels.com/photos/18680598/pexels-photo-18680598.jpeg?auto=compress&cs=tinysrgb&w=900" },
     { productId: productBySlug["daily-immunity-tonic"]?.id, subtitle: "New", imageUrl: "https://images.pexels.com/photos/10863953/pexels-photo-10863953.jpeg?auto=compress&cs=tinysrgb&w=900" },
-    { productId: productBySlug["affiliate-starter-pack"]?.id, subtitle: "Trending", imageUrl: "https://images.pexels.com/photos/4871365/pexels-photo-4871365.jpeg?auto=compress&cs=tinysrgb&w=900" },
+    { productId: productBySlug["wellness-starter-pack"]?.id, subtitle: "Trending", imageUrl: "https://images.pexels.com/photos/4871365/pexels-photo-4871365.jpeg?auto=compress&cs=tinysrgb&w=900" },
   ]);
 
   // PROMO_ADS — "Spotlight"
@@ -267,38 +259,7 @@ async function main() {
     title: "What our customers say",
   }, []);
 
-  // 6. Default vouchers (scratch cards) and site settings.
-  // NOTE: the money voucher is currently retired from the homepage in favour of
-  // the gift-prize scratch game below; these rows are kept so it can be brought
-  // back later, but nothing renders them publicly right now.
-  await prisma.voucher.createMany({
-    data: [
-      { code: "GIFT500", label: "Welcome Gift Card", amount: "500", unlockNote: "Unlocks at 10 referrals", minReferrals: 10, isActive: false, sortOrder: 0 },
-      { code: "REWARD1000", label: "Loyalty Voucher", amount: "1000", unlockNote: "Unlocks at 25 referrals", minReferrals: 25, isActive: false, sortOrder: 1 },
-    ],
-  });
-
-  // 6b. Gift-draw milestone tiers. When enough customers have paid, an admin runs
-  // a tier's draw: each gift line's `quantity` goes to one random eligible member
-  // (and the same to their direct referrer). Admins manage these in /admin/gift-draws.
-  const tier100 = await prisma.giftTier.create({
-    data: { memberThreshold: 100, label: "100 Members", sortOrder: 0 },
-  });
-  await prisma.giftTierItem.createMany({
-    data: [{ tierId: tier100.id, name: "Smart Watch", quantity: 1, sortOrder: 0 }],
-  });
-
-  const tier1000 = await prisma.giftTier.create({
-    data: { memberThreshold: 1000, label: "1000 Members", sortOrder: 1 },
-  });
-  await prisma.giftTierItem.createMany({
-    data: [
-      { tierId: tier1000.id, name: "Mobile Phone", quantity: 1, sortOrder: 0 },
-      { tierId: tier1000.id, name: "Smart Watch", quantity: 5, sortOrder: 1 },
-      { tierId: tier1000.id, name: "Non Stick Fry Pan", quantity: 5, sortOrder: 2 },
-    ],
-  });
-
+  // 6. Default site settings.
   const defaultSettings = {
     contact_phone: "+91 99999 99999",
     contact_email: "support@ayursanthi.com",
@@ -313,12 +274,10 @@ async function main() {
 
   await prisma.faqItem.createMany({
     data: [
-      { question: "How do I create an account?", answer: "Click the Register button in the header and fill in your name, email, phone number, and password. If you were referred by an affiliate, enter their referral code during sign-up.", sortOrder: 0 },
-      { question: "How does the affiliate / referral program work?", answer: "Every registered user receives a unique referral code. When someone registers with it and makes a purchase, you earn a 10% commission credited to your Ayursanthi Wallet.", sortOrder: 1 },
-      { question: "How can I track my orders?", answer: "Login and go to Dashboard → My Orders to see status, item details, price breakdown, and shipping address.", sortOrder: 2 },
-      { question: "What is the Ayursanthi Wallet?", answer: "Your wallet stores affiliate commissions, refunds, and rewards. View all credits and debits under Dashboard → Wallet.", sortOrder: 3 },
-      { question: "What payment methods are accepted?", answer: "All major credit/debit cards, UPI, net banking, and wallet balance — processed through secure, encrypted gateways.", sortOrder: 4 },
-      { question: "What is the return and refund policy?", answer: "A 15-day return policy for unopened products in original packaging. Approved refunds are processed within 5-7 business days.", sortOrder: 5 },
+      { question: "How do I create an account?", answer: "Click the Register button in the header and fill in your name, email, phone number, and password.", sortOrder: 0 },
+      { question: "How can I track my orders?", answer: "Login and go to Dashboard → My Orders to see status, item details, price breakdown, and shipping address.", sortOrder: 1 },
+      { question: "What payment methods are accepted?", answer: "All major credit/debit cards, UPI, and net banking — processed through secure, encrypted gateways.", sortOrder: 2 },
+      { question: "What is the return and refund policy?", answer: "A 15-day return policy for unopened products in original packaging. Approved refunds are processed within 5-7 business days.", sortOrder: 3 },
     ],
   });
 

@@ -16,7 +16,6 @@ datasource db {
 
 enum UserRole {
   CUSTOMER
-  AFFILIATE
   ADMIN
 }
 
@@ -34,37 +33,6 @@ enum PaymentStatus {
   PAID
   FAILED
   REFUNDED
-}
-
-enum WalletTransactionType {
-  CREDIT
-  DEBIT
-}
-
-enum WithdrawalStatus {
-  PENDING    // submitted (or auto-created), amount held in Wallet.pendingBalance
-  PROCESSING // handed to RazorpayX; the payout is in flight (queued/processing)
-  PAID       // money sent; held amount cleared, recorded as a DEBIT
-  REJECTED   // declined/reversed; held amount refunded back to Wallet.balance
-}
-
-// Where a CompanyEarning row came from. Right now there is exactly one source:
-// referral commission earned BEFORE the referrer reached their referral
-// milestone, which the program retains instead of paying out (see lib/referral.js).
-enum CompanyEarningType {
-  PRE_MILESTONE_REFERRAL_COMMISSION
-}
-
-// Lifecycle of a gift-draw win (see GiftWin).
-//   WON      -> the customer was drawn as a winner; awaiting their shipping address.
-//   CLAIMED  -> winner submitted a shipping address; awaiting admin fulfillment.
-//   SHIPPED  -> admin dispatched the physical gift (adminNote holds tracking).
-//   REJECTED -> admin voided the win (e.g. duplicate / ineligible on review).
-enum GiftWinStatus {
-  WON
-  CLAIMED
-  SHIPPED
-  REJECTED
 }
 
 // Type of a homepage block. Each value maps to a renderer component on the
@@ -100,36 +68,14 @@ model User {
   phone        String?         @unique
   passwordHash String
   role         UserRole        @default(CUSTOMER)
-  referralCode String?         @unique
-  referredById String?
-  referredBy   User?           @relation("UserReferrals", fields: [referredById], references: [id])
-  referrals    User[]          @relation("UserReferrals")
-
-  // The one-way latch for the referral program (see src/lib/referral.js).
-  // Null  => still climbing: commission from this user's referrals is RETAINED by
-  //          the company (written to CompanyEarning, never credited to them).
-  // Set   => they reached the milestone (N direct referrals who each paid for an
-  //          order). From this instant every future commission is theirs and is
-  //          paid out automatically. Never cleared — a later refund cannot demote
-  //          someone who already earned the milestone.
-  referralMilestoneAt DateTime?
 
   addresses    Address[]
   cartItems    CartItem[]
   orders       Order[]
   reviews      ProductReview[]
-  wallet       Wallet?
-  payoutAccount PayoutAccount?
-  withdrawals  WithdrawalRequest[]
-  voucherRedemptions VoucherRedemption[]
-  giftWins     GiftWin[]
-  referralReward ReferralReward?
-  companyEarnings CompanyEarning[] @relation("CompanyEarningReferrer")
   passwordResetOtps PasswordResetOtp[]
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
-
-  @@index([referredById])
 }
 
 // One-time password used by the Amazon-style forgot/reset password flow.
@@ -210,18 +156,12 @@ model Product {
   stock            Int             @default(0)
   isFeatured       Boolean         @default(false)
   isActive         Boolean         @default(true)
-  // Opts this product into the milestone reward pool: when a customer reaches the
-  // referral milestone they are given ONE product picked at random from the active,
-  // in-stock products with this flag set. Keeping it an explicit opt-in means a
-  // high-value item can never be gifted away by accident.
-  isReferralReward Boolean         @default(false)
   images           ProductImage[]
   attributes       ProductAttribute[]
   cartItems        CartItem[]
   orderItems       OrderItem[]
   reviews          ProductReview[]
   homeItems        HomeSectionItem[]
-  referralRewards  ReferralReward[]
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
 
@@ -312,60 +252,13 @@ model Payment {
   id                String        @id @default(cuid())
   orderId           String
   order             Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  provider          String
-  providerPaymentId String?       @unique // Razorpay payment id — unique guards against duplicate order creation (verify + webhook race)
+  provider          String        // "cod" — cash collected by the courier on delivery
+  providerPaymentId String?       @unique // set only by an external gateway; null for COD
   amount            Decimal       @db.Decimal(10, 2)
   status            PaymentStatus @default(PENDING)
   rawResponse       Json?
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
-}
-
-// A checkout intent created the moment we ask Razorpay to create an order (before
-// payment). It holds a fully-priced server-side snapshot of the cart + address so
-// the order can be created from trusted data — by EITHER the browser (/verify) or
-// the Razorpay webhook (covers the "customer closed the tab after paying" case).
-// status: PENDING (awaiting payment) | COMPLETED (order created) | FAILED.
-model PendingCheckout {
-  id              String   @id @default(cuid())
-  razorpayOrderId String   @unique
-  userId          String
-  items           Json     // [{ productId, productName, quantity, price, total }]
-  subtotal        Decimal  @db.Decimal(10, 2)
-  tax             Decimal  @db.Decimal(10, 2)
-  shipping        Decimal  @db.Decimal(10, 2)
-  total           Decimal  @db.Decimal(10, 2)
-  shippingAddress Json
-  status          String   @default("PENDING")
-  failureReason   String?
-  orderId         String?  // the Order created once COMPLETED
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  @@index([status, createdAt])
-}
-
-model Wallet {
-  id             String              @id @default(cuid())
-  userId         String              @unique
-  user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  balance        Decimal             @default(0) @db.Decimal(10, 2)
-  pendingBalance Decimal             @default(0) @db.Decimal(10, 2)
-  transactions   WalletTransaction[]
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
-}
-
-model WalletTransaction {
-  id            String                @id @default(cuid())
-  walletId      String
-  wallet        Wallet                @relation(fields: [walletId], references: [id], onDelete: Cascade)
-  type          WalletTransactionType
-  amount        Decimal               @db.Decimal(10, 2)
-  description   String?
-  referenceType String?
-  referenceId   String?
-  createdAt     DateTime              @default(now())
 }
 
 // A single configurable CMS block. The admin creates these in the Content
@@ -418,233 +311,6 @@ model HomeSectionItem {
   updatedAt DateTime    @updatedAt
 
   @@index([sectionId, position])
-}
-
-// A payout of wallet money to a user's UPI / bank account. Two ways one is born:
-//
-//   AUTO (isAuto = true, the normal path post-milestone) — created by the system
-//     the moment commission lands, with no user action. If RazorpayX is configured
-//     it is immediately handed to the Payouts API (-> PROCESSING -> PAID/REJECTED
-//     driven by the payout webhook). If it is NOT configured, it simply sits at
-//     PENDING for an admin to pay offline — the customer still clicked nothing.
-//
-//   MANUAL (isAuto = false) — the user asked to withdraw from the wallet page
-//     (used for money that never auto-flushed, e.g. voucher credit, or commission
-//     that landed before they saved payout details).
-//
-// Money movement is identical for both: on create, amount moves Wallet.balance ->
-// Wallet.pendingBalance (a hold, so it can't be paid twice). Resolving clears it:
-//   PAID     -> pendingBalance cleared + a DEBIT WalletTransaction recorded
-//   REJECTED -> pendingBalance refunded back to Wallet.balance
-model WithdrawalRequest {
-  id          String           @id @default(cuid())
-  userId      String
-  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  amount      Decimal          @db.Decimal(10, 2)
-  status      WithdrawalStatus @default(PENDING)
-  method      String           // "UPI" | "BANK"
-  accountInfo String           // UPI id, or account number + IFSC text
-  isAuto      Boolean          @default(false) // system-created (no user action)
-  // RazorpayX payout id (pout_xxx). Also the idempotency anchor: a payout webhook
-  // resolves the request it names, so a replayed webhook can't pay twice.
-  providerPayoutId String?     @unique
-  // Why an automatic payout could not be sent (bad IFSC, insufficient RazorpayX
-  // balance, ...). Set while status stays PENDING so an admin can settle it by hand.
-  failureReason String?
-  adminNote   String?          // optional reason shown to the user (e.g. on rejection)
-  processedAt DateTime?        // when it was marked PAID / REJECTED
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
-
-  @@index([userId, createdAt])
-  @@index([status, createdAt])
-}
-
-// Where a user's automatic payouts are sent. Until a user saves one of these there
-// is no destination for their money, so post-milestone commission simply parks in
-// Wallet.balance; saving payout details flushes the whole balance out (see
-// flushWalletToPayout in src/lib/payouts.js).
-model PayoutAccount {
-  id     String @id @default(cuid())
-  userId String @unique
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  method        String  // "UPI" | "BANK"
-  upiId         String? // method=UPI  -> e.g. name@bank
-  accountName   String? // method=BANK -> name exactly as on the bank account
-  accountNumber String?
-  ifsc          String?
-
-  // Explicit opt-in switch. Saving details alone does NOT start payouts; the user
-  // must turn this ON ("connect") for commission to be swept to the account
-  // automatically. Off => money accrues in the wallet and can be withdrawn by hand.
-  autoPayoutEnabled Boolean @default(false)
-
-  // RazorpayX handles, cached after the first payout so we don't recreate the
-  // contact/fund-account on every transfer. Cleared whenever the details change.
-  rzpContactId     String?
-  rzpFundAccountId String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-// Revenue the PROGRAM retained rather than paid out: the referral commission a
-// referrer generated BEFORE hitting their milestone. There is no money movement
-// here — the buyer's payment already landed in the company's Razorpay account, so
-// "crediting the company" just means not crediting the referrer. This table is the
-// ledger of that decision: it powers the admin revenue report and the customer's
-// "Rs. X earned toward your milestone" progress.
-model CompanyEarning {
-  id          String             @id @default(cuid())
-  type        CompanyEarningType @default(PRE_MILESTONE_REFERRAL_COMMISSION)
-  amount      Decimal            @db.Decimal(10, 2)
-  referrerId  String?            // who WOULD have been paid had they been past the milestone
-  referrer    User?              @relation("CompanyEarningReferrer", fields: [referrerId], references: [id], onDelete: SetNull)
-  buyerId     String?
-  buyerName   String?            // snapshot, survives buyer deletion
-  // One earning per order, enforced — the order finalizer runs from both the
-  // browser verify call and the Razorpay webhook, so this is the backstop that
-  // makes double-crediting the company impossible.
-  orderId     String?            @unique
-  orderNumber String?
-  description String?
-  createdAt   DateTime           @default(now())
-
-  @@index([referrerId, createdAt])
-  @@index([createdAt])
-}
-
-// The free product a customer is given when they reach the referral milestone —
-// one random pick from the admin-curated pool (Product.isReferralReward). Terms are
-// snapshotted so later edits to the product never change what was promised, and the
-// fulfilment lifecycle reuses GiftWinStatus (WON -> CLAIMED -> SHIPPED).
-//
-// userId is UNIQUE: the reward is granted exactly once, at the milestone, and that
-// constraint is what makes the award safe to attempt from a retried transaction.
-model ReferralReward {
-  id     String @id @default(cuid())
-  userId String @unique
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  productId       String?
-  product         Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
-  productName     String   // snapshot at award time
-  productImageUrl String?  // snapshot at award time
-  quantity        Int      @default(1)
-
-  status          GiftWinStatus @default(WON)
-  addressSnapshot Json?         // shipping address captured at claim time
-  adminNote       String?       // tracking number / void reason
-  processedAt     DateTime?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-
-  @@index([status, createdAt])
-}
-
-// A promotional voucher / gift card surfaced as a scratch card. The admin manages
-// these in the Promotions panel; the homepage renders the active ones. This is a
-// rewards record (code + value + unlock rule + expiry), not homepage "content" —
-// redemption logic (crediting the wallet) can be layered on later.
-model Voucher {
-  id             String    @id @default(cuid())
-  code           String    @unique
-  label          String    // e.g. "Welcome Gift Card"
-  amount         Decimal   @db.Decimal(10, 2)
-  unlockNote     String?   // e.g. "Unlocks at 10 referrals"
-  minReferrals   Int       @default(0) // Eligibility threshold (0 = no gate)
-  isActive       Boolean   @default(true)
-  expiresAt      DateTime?
-  sortOrder      Int       @default(0)
-  redemptions    VoucherRedemption[]
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-
-  @@index([isActive, sortOrder])
-}
-
-// One claim of a voucher by a user. The unique (voucherId, userId) pair enforces
-// one-time redemption per user; creating a row also credits the user's wallet
-// (see api/vouchers/[code]/claim).
-model VoucherRedemption {
-  id        String   @id @default(cuid())
-  voucherId String
-  voucher   Voucher  @relation(fields: [voucherId], references: [id], onDelete: Cascade)
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  amount    Decimal  @db.Decimal(10, 2)
-  createdAt DateTime @default(now())
-
-  @@unique([voucherId, userId])
-}
-
-// A milestone tier from the gift-draw program (one row of the gift list). When
-// the number of paying customers reaches `memberThreshold`, the tier becomes
-// READY and an admin runs its draw: for each GiftTierItem, one random eligible
-// customer is drawn as a winner. Managed in /admin/gift-draws.
-model GiftTier {
-  id              String         @id @default(cuid())
-  memberThreshold Int            // paying customers required to unlock the draw (100, 1000, ...)
-  label           String?        // e.g. "100 Members"
-  sortOrder       Int            @default(0)
-  isActive        Boolean        @default(true)
-  drawnAt         DateTime?      // set once the draw has been run (=> COMPLETED)
-  items           GiftTierItem[]
-  wins            GiftWin[]
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
-
-  @@index([isActive, sortOrder])
-}
-
-// One gift line inside a tier (item + quantity). `quantity` is the PDF "NUMBERS"
-// column — the number of units the single drawn winner receives (and the same
-// number their direct referrer receives as a mirror gift).
-model GiftTierItem {
-  id          String    @id @default(cuid())
-  tierId      String
-  tier        GiftTier  @relation(fields: [tierId], references: [id], onDelete: Cascade)
-  name        String    // e.g. "Smart Watch"
-  imageUrl    String?
-  description String?
-  quantity    Int       @default(1) // units the winner (and their referrer) each get
-  sortOrder   Int       @default(0)
-  wins        GiftWin[]
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-
-  @@index([tierId, sortOrder])
-}
-
-// One result of a gift draw. Two kinds:
-//   primary  (isReferrerMirror = false) -> the randomly drawn winner.
-//   mirror   (isReferrerMirror = true)  -> the winner's DIRECT referrer, who
-//            receives the same gift + quantity; `relatedWinId` points to the
-//            primary win. The gift terms are snapshotted so later edits/deletes
-//            of the source tier item never change what was promised.
-model GiftWin {
-  id               String        @id @default(cuid())
-  tierId           String
-  tier             GiftTier      @relation(fields: [tierId], references: [id], onDelete: Cascade)
-  tierItemId       String?
-  tierItem         GiftTierItem? @relation(fields: [tierItemId], references: [id], onDelete: SetNull)
-  userId           String
-  user             User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  isReferrerMirror Boolean       @default(false)
-  relatedWinId     String?       // mirror -> the primary win it echoes
-  giftName         String        // snapshot at draw time
-  giftImageUrl     String?       // snapshot at draw time
-  quantity         Int           // snapshot at draw time
-  status           GiftWinStatus @default(WON)
-  addressSnapshot  Json?         // shipping address captured at claim time
-  adminNote        String?       // tracking number / void reason
-  processedAt      DateTime?     // when an admin marked it SHIPPED / REJECTED
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
-
-  @@index([userId, createdAt])
-  @@index([status, createdAt])
 }
 
 // Simple key/value store for editable site-wide settings (contact phone, email,

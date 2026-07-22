@@ -272,9 +272,6 @@ export function SiteHeader({ transparent = false }) {
                       {cat.name}
                     </Link>
                   ))}
-                  <Link href="/gifts" className={NAV_LINK}>
-                    Gifts &amp; Rewards
-                  </Link>
                   <Link href="/contact" className={NAV_LINK}>
                     Customer Service
                   </Link>
@@ -377,9 +374,6 @@ export function SiteHeader({ transparent = false }) {
           ))}
           {!isAdmin && (
             <>
-              <Link href="/gifts" className={NAV_LINK}>
-                Gifts &amp; Rewards
-              </Link>
               <Link href="/contact" className={NAV_LINK}>
                 Customer Service
               </Link>

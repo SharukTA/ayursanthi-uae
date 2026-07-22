@@ -1,28 +1,21 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { Logo3D } from "@/components/Logo3D";
 import { validateRegistration } from "@/lib/validation";
 
-function RegisterPage() {
+export default function RegisterPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
-  const [referralId, setReferralId] = useState("");
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
-
-  useEffect(() => {
-    const ref = searchParams.get("ref");
-    if (ref) setReferralId(ref);
-  }, [searchParams]);
 
   // Clear a field's error as soon as the user edits it.
   const clearError = (field) =>
@@ -51,7 +44,6 @@ function RegisterPage() {
           email: email.trim(),
           phone: phone.trim() || undefined,
           password,
-          referralId: referralId.trim() || undefined,
         }),
       });
 
@@ -199,19 +191,6 @@ function RegisterPage() {
             )}
           </label>
 
-          <label className="mt-4 grid gap-2 text-sm font-semibold text-slate-900">
-            <span>Referral ID <span className="font-normal text-slate-400">(optional)</span></span>
-            <input
-              type="text"
-              name="referralId"
-              value={referralId}
-              onChange={(e) => setReferralId(e.target.value)}
-              disabled={loading}
-              placeholder="Enter a referral code"
-              className="min-h-12 w-full rounded-md border border-slate-300 bg-white px-4 text-sm font-normal text-slate-900 outline-none transition focus:border-[#007185] focus:ring-4 focus:ring-[#007185]/25 disabled:opacity-60"
-            />
-          </label>
-
           <button
             type="submit"
             disabled={loading}
@@ -257,15 +236,5 @@ function RegisterPage() {
         </div>
       </footer>
     </div>
-  );
-}
-
-// useSearchParams() triggers a client-side bailout, so the component reading it
-// must sit under a Suspense boundary for the static shell to render.
-export default function RegisterPageRoute() {
-  return (
-    <Suspense fallback={null}>
-      <RegisterPage />
-    </Suspense>
   );
 }

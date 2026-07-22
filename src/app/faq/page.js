@@ -9,7 +9,7 @@ import { getFaqs } from "@/lib/pages";
 
 export const metadata = {
   title: "FAQ | Ayursanthi",
-  description: "Frequently asked questions about Ayursanthi products, orders, the affiliate program, wallet, payments, shipping, and returns.",
+  description: "Frequently asked questions about Ayursanthi products, orders, payments, shipping, and returns.",
 };
 
 // Admin-managed FAQ list (lib/pages.js falls back to defaults if none exist).
@@ -35,7 +35,7 @@ export default async function FAQPage() {
             />
             <AnimatedReveal delay={0.3}>
               <p className="mx-auto mt-4 max-w-xl text-base text-slate-300">
-                Quick answers to common queries about products, orders, the affiliate program, and your wallet.
+                Quick answers to common queries about products, orders, payments, and delivery.
               </p>
             </AnimatedReveal>
           </PageReveal>

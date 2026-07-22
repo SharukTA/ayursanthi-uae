@@ -20,7 +20,6 @@ export async function GET() {
       email: true,
       phone: true,
       role: true,
-      referralCode: true,
       createdAt: true,
     },
   });

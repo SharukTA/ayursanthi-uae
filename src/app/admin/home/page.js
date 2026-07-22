@@ -136,7 +136,6 @@ function typesForPlacement(placement) {
 const STATS_METRIC_OPTIONS = [
   { value: "REGISTERED_CUSTOMERS", label: "Live: Registered customers" },
   { value: "PAID_ORDERS", label: "Live: Successful bookings" },
-  { value: "REWARDED_CUSTOMERS", label: "Live: Customers earned rewards" },
   { value: "STATIC", label: "Static text (no number)" },
 ];
 

@@ -68,7 +68,6 @@ async function main() {
   await seedSection(0, "STATS_BAR", {}, [
     { metric: "REGISTERED_CUSTOMERS", title: "registered customers" },
     { metric: "PAID_ORDERS", title: "successful bookings" },
-    { metric: "REWARDED_CUSTOMERS", title: "customers earned rewards" },
     { metric: "STATIC", title: "100% Natural Ingredients" },
     { metric: "STATIC", title: "Free shipping over Rs. 1000" },
     { metric: "STATIC", title: "Secure encrypted checkout" },
@@ -136,19 +135,9 @@ async function main() {
     title: "What our customers say",
   }, [
     { title: "Anjali R.", body: "The product selection feels organized, premium, and simple to browse." },
-    { title: "Rahul M.", body: "The rewards and affiliate sections make repeat shopping more meaningful." },
+    { title: "Rahul M.", body: "Checkout is quick and my orders have arrived on time every single order." },
     { title: "Meera S.", body: "Clear product information helps me compare and choose with confidence." },
   ]);
-
-  // Default vouchers (scratch cards) — reset to defaults.
-  await prisma.voucher.deleteMany();
-  await prisma.voucher.createMany({
-    data: [
-      { code: "GIFT500", label: "Welcome Gift Card", amount: "500", unlockNote: "Unlocks at 10 referrals", minReferrals: 10, sortOrder: 0 },
-      { code: "REWARD1000", label: "Loyalty Voucher", amount: "1000", unlockNote: "Unlocks at 25 referrals", minReferrals: 25, sortOrder: 1 },
-    ],
-  });
-  console.log("Seeded default vouchers.");
 
   // Default site settings (contact + socials) — upsert so admin edits aren't lost
   // unless the key was never set.
@@ -173,12 +162,10 @@ async function main() {
   if ((await prisma.faqItem.count()) === 0) {
     await prisma.faqItem.createMany({
       data: [
-        { question: "How do I create an account?", answer: "Click the Register button in the header and fill in your name, email, phone number, and password. If you were referred by an affiliate, enter their referral code during sign-up.", sortOrder: 0 },
-        { question: "How does the affiliate / referral program work?", answer: "Every registered user receives a unique referral code. When someone registers with it and makes a purchase, you earn a 10% commission credited to your Ayursanthi Wallet.", sortOrder: 1 },
-        { question: "How can I track my orders?", answer: "Login and go to Dashboard → My Orders to see status, item details, price breakdown, and shipping address.", sortOrder: 2 },
-        { question: "What is the Ayursanthi Wallet?", answer: "Your wallet stores affiliate commissions, refunds, and rewards. View all credits and debits under Dashboard → Wallet.", sortOrder: 3 },
-        { question: "What payment methods are accepted?", answer: "All major credit/debit cards, UPI, net banking, and wallet balance — processed through secure, encrypted gateways.", sortOrder: 4 },
-        { question: "What is the return and refund policy?", answer: "A 15-day return policy for unopened products in original packaging. Approved refunds are processed within 5-7 business days.", sortOrder: 5 },
+        { question: "How do I create an account?", answer: "Click the Register button in the header and fill in your name, email, phone number, and password.", sortOrder: 0 },
+        { question: "How can I track my orders?", answer: "Login and go to Dashboard → My Orders to see status, item details, price breakdown, and shipping address.", sortOrder: 1 },
+        { question: "What payment methods are accepted?", answer: "All major credit/debit cards, UPI, and net banking — processed through secure, encrypted gateways.", sortOrder: 2 },
+        { question: "What is the return and refund policy?", answer: "A 15-day return policy for unopened products in original packaging. Approved refunds are processed within 5-7 business days.", sortOrder: 3 },
       ],
     });
     console.log("Seeded default FAQ items.");

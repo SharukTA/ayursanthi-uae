@@ -17,7 +17,7 @@ import { HeroHome } from "@/components/HeroHome";
 //
 // The tint is sized to cover header + hero. It can't just use `inset-0`: its
 // parent is <main>, which spans the whole page, so it's measured instead.
-export function HomeTop({ videos = [], teaserGifts = [], moreGifts = false }) {
+export function HomeTop({ videos = [] }) {
   // Dominant colour of the active hero video ("r, g, b"); null until the first
   // frame is sampled.
   const [heroColor, setHeroColor] = useState(null);
@@ -85,12 +85,7 @@ export function HomeTop({ videos = [], teaserGifts = [], moreGifts = false }) {
       <SiteHeader transparent />
 
       <div ref={heroRef}>
-        <HeroHome
-          videos={videos}
-          teaserGifts={teaserGifts}
-          moreGifts={moreGifts}
-          onDominantColor={setHeroColor}
-        />
+        <HeroHome videos={videos} onDominantColor={setHeroColor} />
       </div>
     </>
   );

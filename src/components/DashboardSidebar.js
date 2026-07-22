@@ -9,10 +9,7 @@ import {
   LayoutDashboard,
   User,
   ShoppingBag,
-  Wallet,
   KeyRound,
-  Users,
-  Gift,
   LogOut,
   Menu,
   X,
@@ -22,9 +19,6 @@ const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, exact: true },
   { href: "/dashboard/profile", label: "My Profile", icon: User },
   { href: "/dashboard/orders", label: "My Orders", icon: ShoppingBag },
-  { href: "/dashboard/wallet", label: "Wallet", icon: Wallet },
-  { href: "/dashboard/referrals", label: "Referrals", icon: Users },
-  { href: "/dashboard/rewards", label: "Gift Reward", icon: Gift },
   { href: "/dashboard/change-password", label: "Change Password", icon: KeyRound },
 ];
 

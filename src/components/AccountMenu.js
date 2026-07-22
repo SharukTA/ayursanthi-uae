@@ -9,16 +9,13 @@ import {
   LayoutDashboard,
   User,
   ShoppingBag,
-  Wallet,
   KeyRound,
-  Users,
   LogOut,
   Menu,
   X,
   LayoutTemplate,
   FolderTree,
   Package,
-  IndianRupee,
   FileText,
   Settings,
 } from "lucide-react";
@@ -30,8 +27,6 @@ const customerNavItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, exact: true },
   { href: "/dashboard/profile", label: "My Profile", icon: User },
   { href: "/dashboard/orders", label: "My Orders", icon: ShoppingBag },
-  { href: "/dashboard/wallet", label: "Wallet", icon: Wallet },
-  { href: "/dashboard/referrals", label: "Referrals", icon: Users },
   { href: "/dashboard/change-password", label: "Change Password", icon: KeyRound },
 ];
 
@@ -40,7 +35,6 @@ const customerNavItems = [
 const adminNavItems = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard, exact: true },
   { href: "/admin/orders", label: "Orders", icon: ShoppingBag },
-  { href: "/admin/withdrawals", label: "Account Payout", icon: IndianRupee },
   { href: "/admin/home", label: "Home Builder", icon: LayoutTemplate },
   { href: "/admin/categories", label: "Categories", icon: FolderTree },
   { href: "/admin/products", label: "Inventory", icon: Package },

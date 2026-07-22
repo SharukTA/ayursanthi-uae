@@ -2,10 +2,10 @@ import Link from "next/link";
 import { FooterAuth } from "@/components/FooterAuth";
 
 export function SiteFooter() {
-  // `surface-brand` is what keeps the brand teal alive here. It is one of only
-  // two opted-in teal surfaces left in the app (the other is the homepage gift
-  // card) — the rest of the site is Amazon-neutral, so this can no longer lean on
-  // a colour-family mapping and pins the colour itself. See globals.css.
+  // `surface-brand` is what keeps the brand teal alive here — it is the only
+  // opted-in teal surface left in the app. The rest of the site is
+  // Amazon-neutral, so this can no longer lean on a colour-family mapping and
+  // pins the colour itself. See globals.css.
   return (
     <footer className="surface-brand relative border-t border-white/10 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_-12px_40px_-20px_rgba(12,38,38,0.6)]">
       {/* Soft gradient seam that fades the footer smoothly into the page above */}

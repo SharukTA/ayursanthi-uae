@@ -126,9 +126,6 @@ export async function POST(request) {
         stock: readInteger(body.stock, 0),
         isFeatured: readBoolean(body.isFeatured, false),
         isActive: readBoolean(body.isActive, true),
-        // Opt-in to the milestone free-product pool (see lib/referral.js). Defaults
-        // to false so a new product is never given away by accident.
-        isReferralReward: readBoolean(body.isReferralReward, false),
         images: buildProductImageData(body.images),
         attributes: buildProductAttributeData(body.attributes),
       },

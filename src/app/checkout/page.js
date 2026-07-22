@@ -4,16 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { 
-  ArrowLeft, 
-  CreditCard, 
-  MapPin, 
-  Lock, 
-  CheckCircle, 
-  ChevronRight, 
-  Loader2, 
-  ShoppingCart,
-  Wallet
+import {
+  Banknote,
+  MapPin,
+  Lock,
+  CheckCircle,
+  ChevronRight,
+  Loader2,
+  ShoppingCart
 } from "lucide-react";
 import { FadeIn, PageReveal, Stagger, StaggerItem } from "@/components/Animated";
 import { SiteHeader } from "@/components/SiteHeader";
@@ -46,7 +44,8 @@ export default function CheckoutPage() {
   const [state, setState] = useState("");
   const [postalCode, setPostalCode] = useState("");
   
-  const [paymentMethod, setPaymentMethod] = useState("RAZORPAY");
+  // Cash on Delivery is currently the only way to pay — no online gateway.
+  const [paymentMethod, setPaymentMethod] = useState("COD");
   const [submitting, setSubmitting] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState(false);
   const [placedOrderDetails, setPlacedOrderDetails] = useState(null);
@@ -123,20 +122,6 @@ export default function CheckoutPage() {
   const shipping = subtotal === 0 ? 0 : subtotal >= 1000 ? 0.0 : 99.0;
   const total = parseFloat((subtotal + tax + shipping).toFixed(2));
 
-  // Loads Razorpay's hosted checkout script once, on demand.
-  const loadRazorpayScript = () =>
-    new Promise((resolve) => {
-      if (typeof window !== "undefined" && window.Razorpay) {
-        resolve(true);
-        return;
-      }
-      const script = document.createElement("script");
-      script.src = "https://checkout.razorpay.com/v1/checkout.js";
-      script.onload = () => resolve(true);
-      script.onerror = () => resolve(false);
-      document.body.appendChild(script);
-    });
-
   const buildShippingAddress = () => ({
     fullName: fullName.trim(),
     phone: phone.trim(),
@@ -171,81 +156,34 @@ export default function CheckoutPage() {
     setOrderSuccess(true);
   };
 
-  // Real payment path: create a Razorpay order, open the popup, then verify.
-  const handleRazorpayPayment = async () => {
+  // Cash on Delivery: a single call creates the order. Nothing is charged now —
+  // the customer pays the courier on delivery.
+  const submitCodOrder = async () => {
     setSubmitting(true);
-    const toastId = toast.loading("Starting secure payment...");
+    const toastId = toast.loading("Placing your order...");
 
     try {
       const cartPayload = bookingItems.map((item) => ({
         productId: item.productId,
         quantity: item.quantity,
       }));
-      const shippingAddress = buildShippingAddress();
 
-      // 1. Ask our server to create a Razorpay order. We send the address now so
-      //    the server stores a full checkout snapshot — this lets the webhook
-      //    finish the order even if the browser never reaches the verify step.
-      const orderRes = await fetch("/api/payment/razorpay/order", {
+      const res = await fetch("/api/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cart: cartPayload, shippingAddress }),
+        body: JSON.stringify({
+          cart: cartPayload,
+          shippingAddress: buildShippingAddress(),
+        }),
       });
-      const orderData = await orderRes.json();
-      if (!orderRes.ok) throw new Error(orderData.message || "Could not start payment.");
-
-      // 2. Load the Razorpay checkout script.
-      const loaded = await loadRazorpayScript();
-      if (!loaded) throw new Error("Could not load the payment gateway. Check your connection.");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Could not place your order.");
 
       toast.dismiss(toastId);
-
-      // 3. Open the popup. Verification happens in the success handler.
-      const rzp = new window.Razorpay({
-        key: orderData.keyId,
-        amount: orderData.amount,
-        currency: orderData.currency,
-        name: "Ayursanthi",
-        description: "Order payment",
-        order_id: orderData.razorpayOrderId,
-        prefill: { name: fullName, contact: phone },
-        theme: { color: "#047857" },
-        handler: async (response) => {
-          const verifyToast = toast.loading("Verifying payment...");
-          try {
-            const verifyRes = await fetch("/api/payment/razorpay/verify", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                razorpay_order_id: response.razorpay_order_id,
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_signature: response.razorpay_signature,
-              }),
-            });
-            const verifyData = await verifyRes.json();
-            if (!verifyRes.ok) throw new Error(verifyData.message || "Verification failed.");
-            toast.success("Payment verified!", { id: verifyToast });
-            onOrderSuccess(verifyData);
-          } catch (err) {
-            toast.error(err.message || "Payment verification failed.", { id: verifyToast });
-          } finally {
-            setSubmitting(false);
-          }
-        },
-        modal: {
-          ondismiss: () => {
-            setSubmitting(false);
-            toast.message("Payment cancelled.");
-          },
-        },
-      });
-      rzp.on("payment.failed", (resp) => {
-        toast.error(resp?.error?.description || "Payment failed.");
-        setSubmitting(false);
-      });
-      rzp.open();
+      onOrderSuccess(data);
     } catch (error) {
-      toast.error(error.message || "Something went wrong starting payment.", { id: toastId });
+      toast.error(error.message || "Something went wrong placing your order.", { id: toastId });
+    } finally {
       setSubmitting(false);
     }
   };
@@ -268,16 +206,16 @@ export default function CheckoutPage() {
       return;
     }
 
-    // The phone is required here and must be a valid 10-digit Indian mobile so
-    // delivery / Razorpay contact details are usable.
+    // The phone is required here so the courier has a usable contact number for
+    // the delivery and the cash collection.
     const phoneError = validatePhone(phone, { required: true });
     if (phoneError) {
       toast.error(phoneError);
       return;
     }
 
-    // All orders go through Razorpay's two-step verified payment flow.
-    await handleRazorpayPayment();
+    // Cash on Delivery is the only payment option right now.
+    await submitCodOrder();
   };
 
   if (!authChecked) {
@@ -360,7 +298,10 @@ export default function CheckoutPage() {
           <PageReveal className="max-w-lg w-full bg-white rounded-md border border-border p-8 shadow-xl text-center">
             <CheckCircle className="size-16 text-emerald-600 mx-auto" />
             <h2 className="mt-5 text-2xl font-bold text-slate-950">Order Placed Successfully!</h2>
-            <p className="mt-2 text-sm text-slate-500">Thank you for your purchase. Your wellness booking is confirmed.</p>
+            <p className="mt-2 text-sm text-slate-500">
+              Thank you for your purchase. Please keep the cash ready — you pay the delivery
+              agent when your order arrives.
+            </p>
 
             {/* Receipt Summary Box */}
             <div className="mt-6 rounded-md bg-slate-50 border border-border p-5 text-left text-xs font-medium text-slate-650 space-y-3">
@@ -369,7 +310,7 @@ export default function CheckoutPage() {
                 <span className="font-mono text-emerald-800">{placedOrderDetails.orderNumber}</span>
               </div>
               <div className="flex justify-between">
-                <span>Total Amount Paid</span>
+                <span>Amount Payable on Delivery</span>
                 <span className="font-extrabold text-slate-950">Rs. {placedOrderDetails.totalAmount.toLocaleString()}</span>
               </div>
               <div className="flex flex-col gap-1 border-t border-slate-200 pt-2.5">
@@ -531,13 +472,13 @@ export default function CheckoutPage() {
               {/* Payment selection Frame */}
               <FadeIn className="rounded-md border border-border bg-white p-6 shadow-sm">
                 <h2 className="text-lg font-bold text-slate-950 flex items-center gap-2 border-b border-slate-100 pb-3">
-                  <CreditCard className="size-5 text-emerald-700" />
+                  <Banknote className="size-5 text-emerald-700" />
                   Select Payment Option
                 </h2>
 
                 <div className="mt-5 grid gap-3">
                   {[
-                    { id: "RAZORPAY", label: "Pay Online — Razorpay", desc: "Card / UPI / Netbanking via Razorpay secure checkout" }
+                    { id: "COD", label: "Cash on Delivery", desc: "Pay the delivery agent in cash when your order arrives" }
                   ].map((gateway) => (
                     <label 
                       key={gateway.id} 
@@ -623,7 +564,7 @@ export default function CheckoutPage() {
                   {submitting ? (
                     <>
                       <Loader2 className="size-4 animate-spin mr-2" />
-                      Processing payment...
+                      Placing order...
                     </>
                   ) : (
                     <>
@@ -633,8 +574,8 @@ export default function CheckoutPage() {
                 </Button>
 
                 <div className="flex items-center justify-center gap-1.5 text-[10px] text-slate-400 font-semibold uppercase tracking-wider">
-                  <Lock className="size-3.5" />
-                  SSL Secured Checkout
+                  <Banknote className="size-3.5" />
+                  Pay Cash on Delivery
                 </div>
               </div>
               </Tilt3D>

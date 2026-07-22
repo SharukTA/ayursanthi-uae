@@ -5,7 +5,6 @@ import {
   TicketCheck,
   Users,
   ShoppingBag,
-  Gift,
   ShieldCheck,
   LayoutGrid,
 } from "lucide-react";
@@ -416,7 +415,6 @@ function ReviewsSection({ section }) {
 const METRIC_ICONS = {
   REGISTERED_CUSTOMERS: Users,
   PAID_ORDERS: ShoppingBag,
-  REWARDED_CUSTOMERS: Gift,
   STATIC: ShieldCheck,
 };
 
@@ -424,7 +422,10 @@ function StatsBarSection({ section, stats = {} }) {
   const entries = section.items
     .map((item) => {
       const metric = item.metric || "STATIC";
-      const Icon = METRIC_ICONS[metric] || ShieldCheck;
+      // A metric that no longer exists (e.g. a retired one still saved on an old
+      // item) has no number to show — drop the entry rather than render a "0".
+      const Icon = METRIC_ICONS[metric];
+      if (!Icon) return null;
       if (metric === "STATIC") {
         if (!item.title) return null;
         return { id: item.id, Icon, text: item.title };

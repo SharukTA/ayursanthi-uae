@@ -79,8 +79,14 @@ export default function AdminOrdersPage() {
       if (!res.ok) {
         toast.error(data.message || "Failed to update status.", { id: toastId });
       } else {
+        // paymentStatus rides along: marking an order DELIVERED settles the cash,
+        // so the Payment column has to reflect that without a reload.
         setOrders((prev) =>
-          prev.map((o) => (o.id === orderId ? { ...o, status: data.order.status } : o))
+          prev.map((o) =>
+            o.id === orderId
+              ? { ...o, status: data.order.status, paymentStatus: data.order.paymentStatus }
+              : o
+          )
         );
         toast.success(`Order marked ${status}.`, { id: toastId });
       }

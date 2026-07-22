@@ -45,22 +45,17 @@ async function getSections(placement) {
 // never the numbers themselves (they are DB counts).
 export async function getCommunityStats() {
   try {
-    const [registeredCount, bookingsCount, rewardWallets] = await Promise.all([
+    const [registeredCount, bookingsCount] = await Promise.all([
       prisma.user.count({ where: { role: "CUSTOMER" } }),
       prisma.order.count({ where: { paymentStatus: "PAID" } }),
-      prisma.walletTransaction.groupBy({
-        by: ["walletId"],
-        where: { type: "CREDIT" },
-      }),
     ]);
 
     return {
       REGISTERED_CUSTOMERS: registeredCount,
       PAID_ORDERS: bookingsCount,
-      REWARDED_CUSTOMERS: rewardWallets.length,
     };
   } catch {
-    return { REGISTERED_CUSTOMERS: 0, PAID_ORDERS: 0, REWARDED_CUSTOMERS: 0 };
+    return { REGISTERED_CUSTOMERS: 0, PAID_ORDERS: 0 };
   }
 }
 
