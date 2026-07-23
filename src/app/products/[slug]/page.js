@@ -7,11 +7,14 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { ProductActions } from "@/components/ProductActions";
 import { ProductGallery } from "@/components/ProductGallery";
+import { Breadcrumbs } from "@/components/Breadcrumbs";
+import { DeliveryEstimator } from "@/components/DeliveryEstimator";
+import { OffersBox } from "@/components/OffersBox";
 import { AnimatedHeading, AnimatedReveal } from "@/components/AnimatedText";
 import { ProductCard, RatingStars, summarizeReviews } from "@/components/ProductCard";
 import { ReviewForm } from "@/components/ReviewForm";
 import { ProductReviews } from "@/components/ProductReviews";
-import { ProductDescription } from "@/components/ProductDescription";
+import { ProductDescription, AboutThisItem } from "@/components/ProductDescription";
 import { PageSections } from "@/components/HomeSections";
 import { getPageSections } from "@/lib/page-sections";
 
@@ -112,6 +115,14 @@ export default async function ProductDetailPage({ params }) {
 
       {/* Product Detail Grid */}
       <section className="mx-auto max-w-7xl px-4 py-4 sm:py-6 sm:px-6 lg:px-8 flex-1 w-full">
+        <Breadcrumbs
+          items={[
+            { label: "Home", href: "/" },
+            { label: product.category.name, href: `/products?category=${product.category.slug}` },
+            { label: product.name },
+          ]}
+        />
+
         <div className="grid gap-6 sm:gap-10 lg:grid-cols-2">
           
           {/* Left Column: Swipeable media gallery (images + videos) */}
@@ -185,6 +196,18 @@ export default async function ProductDetailPage({ params }) {
               {product.shortDescription}
             </p>
 
+            {/* About this item — Amazon-style bullet summary of the key selling
+                points, pulled from the description's bullet lists. */}
+            <AboutThisItem body={product.description} />
+
+            {/* Available offers — derived from the product's real discount /
+                badge plus the site-wide COD & dispatch promises. */}
+            <OffersBox
+              price={Number(product.price)}
+              mrp={product.mrp != null ? Number(product.mrp) : null}
+              offerLabel={product.offerLabel}
+            />
+
             {/* Actions (Quantity and Checkout). The PDF href is passed through so
                 the sticky action bar can show a Download button beside them. */}
             <ProductActions
@@ -205,6 +228,9 @@ export default async function ProductDetailPage({ params }) {
               <Download className="size-4" />
               Download details as PDF
             </a>
+
+            {/* Delivery estimator — pincode → estimated window + COD/returns. */}
+            <DeliveryEstimator />
 
             {/* Value Badges */}
             <div className="mt-8 grid gap-4 border-t border-slate-100 pt-6 sm:grid-cols-3">
@@ -255,7 +281,7 @@ export default async function ProductDetailPage({ params }) {
         <div className="mt-10 border-t border-border pt-8 sm:mt-14 sm:pt-10">
           <AnimatedHeading
             as="h2"
-            text="Detailed Description"
+            text="Product Description"
             className="text-xl font-bold text-[#0f1111]"
             highlightWords={["Description"]}
             highlightClassName=""

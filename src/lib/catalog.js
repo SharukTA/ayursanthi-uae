@@ -41,20 +41,83 @@ export function buildTsQuery(search = "") {
   return [...new Set(tokens)].map((t) => `${t}:*`).join(" | ");
 }
 
-// Shared filter clause for the *non-search* listing paths (category browse, the
-// plain "all products" grid). Search has its own ranked path — see
-// getCatalogPage / searchCatalogRanked — so this no longer handles `search`.
-export function buildCatalogWhere({ category = "" } = {}) {
+// Normalize the raw facet inputs (which arrive as query strings from the URL or
+// the /api/catalog fetch) into a clean, trusted shape: numbers or null for the
+// range/threshold facets, real booleans for the toggles. Everything downstream
+// (the SQL builder, the active-filter chips) reads this canonical form.
+export function normalizeFilters({
+  category = "",
+  minPrice,
+  maxPrice,
+  minRating,
+  minDiscount,
+  inStock,
+  featured,
+} = {}) {
+  const num = (v) => {
+    if (v === "" || v == null) return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+  const bool = (v) => v === true || v === "true" || v === "1";
   return {
-    isActive: true,
-    ...(category ? { category: { slug: category } } : {}),
+    category: category || "",
+    minPrice: num(minPrice),
+    maxPrice: num(maxPrice),
+    minRating: num(minRating),
+    minDiscount: num(minDiscount),
+    inStock: bool(inStock),
+    featured: bool(featured),
   };
 }
 
-function buildCatalogOrderBy(sort) {
-  if (sort === "price-asc") return { price: "asc" };
-  if (sort === "price-desc") return { price: "desc" };
-  return { createdAt: "desc" };
+// Build the AND-clauses shared by both the plain listing and the ranked-search
+// path, from the normalized facets. Every value is passed as a bound parameter
+// (never interpolated), so this is injection-safe. Discount is computed from
+// mrp vs price; customer rating is a correlated average over ProductReview so
+// the "4★ & up" facet reflects real reviews, not a stored column.
+function buildFilterSql(f) {
+  const parts = [];
+  if (f.category) parts.push(Prisma.sql`AND "Category".slug = ${f.category}`);
+  if (f.minPrice != null) parts.push(Prisma.sql`AND "Product".price >= ${f.minPrice}`);
+  if (f.maxPrice != null) parts.push(Prisma.sql`AND "Product".price <= ${f.maxPrice}`);
+  if (f.inStock) parts.push(Prisma.sql`AND "Product".stock > 0`);
+  if (f.featured) parts.push(Prisma.sql`AND "Product"."isFeatured" = true`);
+  if (f.minDiscount != null) {
+    parts.push(
+      Prisma.sql`AND "Product".mrp IS NOT NULL AND "Product".mrp > 0 AND (("Product".mrp - "Product".price) / "Product".mrp * 100) >= ${f.minDiscount}`
+    );
+  }
+  if (f.minRating != null) {
+    parts.push(
+      Prisma.sql`AND (SELECT COALESCE(AVG(r.rating), 0) FROM "ProductReview" r WHERE r."productId" = "Product".id) >= ${f.minRating}`
+    );
+  }
+  return parts.length ? Prisma.join(parts, " ") : Prisma.empty;
+}
+
+// ORDER BY fragment for a given sort key. `query` is the compiled to_tsquery (or
+// null): when present and no explicit sort is chosen, results fall back to
+// relevance ranking; otherwise to newest-first. Discount/rating/popularity all
+// sort by the same computed expressions the facets filter on.
+function buildOrderSql(sort, query) {
+  switch (sort) {
+    case "price-asc":
+      return Prisma.sql`"Product".price ASC`;
+    case "price-desc":
+      return Prisma.sql`"Product".price DESC`;
+    case "discount":
+      return Prisma.sql`(CASE WHEN "Product".mrp IS NULL OR "Product".mrp = 0 THEN 0 ELSE ("Product".mrp - "Product".price) / "Product".mrp END) DESC, "Product"."createdAt" DESC`;
+    case "rating":
+      return Prisma.sql`(SELECT COALESCE(AVG(r.rating), 0) FROM "ProductReview" r WHERE r."productId" = "Product".id) DESC, "Product"."createdAt" DESC`;
+    case "popular":
+      return Prisma.sql`(SELECT COUNT(*) FROM "ProductReview" r WHERE r."productId" = "Product".id) DESC, "Product"."createdAt" DESC`;
+    case "newest":
+    default:
+      return query
+        ? Prisma.sql`ts_rank("Product"."searchVector", ${query}) DESC, "Product"."createdAt" DESC`
+        : Prisma.sql`"Product"."createdAt" DESC`;
+  }
 }
 
 // Prisma returns Decimal for price/mrp and full relation rows; flatten to a
@@ -95,33 +158,26 @@ const CATALOG_INCLUDE = {
   reviews: { select: { rating: true } },
 };
 
-// Relevance-ranked, full-text search page (the "Amazon search" path). Runs the
-// match + ranking in Postgres against the generated `searchVector` so paging and
-// the total count stay consistent, then re-fetches the page's products through
-// Prisma (preserving rank order) so they serialize exactly like the plain
-// listing. Sort defaults to relevance; price sorts are still honoured within the
-// matched set.
-async function searchCatalogRanked({ tsquery, category, sort, currentPage }) {
-  const query = Prisma.sql`to_tsquery('english', ${tsquery})`;
-  const categoryFilter = category
-    ? Prisma.sql`AND "Category".slug = ${category}`
-    : Prisma.empty;
+// The single catalog query powering both the plain listing and full-text
+// search, with the full facet set applied uniformly. The match + ordering run
+// in Postgres (so paging and the total count stay consistent under every facet
+// combination), then the page's rows are re-fetched through Prisma preserving
+// that order so they serialize exactly like everywhere else. A non-null
+// `tsquery` adds the relevance match on top of the facets.
+async function queryCatalog({ tsquery, filters, sort, currentPage }) {
+  const query = tsquery ? Prisma.sql`to_tsquery('english', ${tsquery})` : null;
   const offset = (currentPage - 1) * PRODUCTS_PAGE_SIZE;
 
-  // Relevance is the default sort; price sorts re-order the matched set instead.
-  const orderBy =
-    sort === "price-asc"
-      ? Prisma.sql`"Product".price ASC`
-      : sort === "price-desc"
-        ? Prisma.sql`"Product".price DESC`
-        : Prisma.sql`ts_rank("Product"."searchVector", ${query}) DESC, "Product"."createdAt" DESC`;
+  const searchClause = query ? Prisma.sql`AND "Product"."searchVector" @@ ${query}` : Prisma.empty;
+  const filterClause = buildFilterSql(filters);
+  const orderBy = buildOrderSql(sort, query);
 
   const matchClause = Prisma.sql`
     FROM "Product"
     LEFT JOIN "Category" ON "Category".id = "Product"."categoryId"
     WHERE "Product"."isActive" = true
-      AND "Product"."searchVector" @@ ${query}
-      ${categoryFilter}`;
+      ${searchClause}
+      ${filterClause}`;
 
   const [idRows, countRows] = await Promise.all([
     prisma.$queryRaw`
@@ -134,8 +190,8 @@ async function searchCatalogRanked({ tsquery, category, sort, currentPage }) {
   const ids = idRows.map((row) => row.id);
   const total = countRows[0]?.count ?? 0;
 
-  // Pull the full rows for this page, then restore the ranked order ($queryRaw
-  // returned them ranked, but `findMany` with `id IN (...)` does not preserve it).
+  // Pull the full rows for this page, then restore the DB order ($queryRaw
+  // returned them ordered, but `findMany` with `id IN (...)` does not preserve it).
   const rows = ids.length
     ? await prisma.product.findMany({
         where: { id: { in: ids } },
@@ -155,38 +211,32 @@ async function searchCatalogRanked({ tsquery, category, sort, currentPage }) {
 
 // One page of the catalog plus the totals the UI needs: `total` drives the
 // "N results" summary and `hasMore` tells the infinite-scroll list whether to
-// keep fetching. A non-empty `search` routes to the ranked full-text path;
-// otherwise it's the plain (optionally category-filtered) listing.
+// keep fetching. A non-empty `search` layers relevance ranking on top of the
+// facets; every facet (price/rating/discount/stock/best-seller/category) is
+// honoured in both cases.
 export async function getCatalogPage({
   search = "",
   category = "",
   sort = "newest",
   page = 1,
+  minPrice,
+  maxPrice,
+  minRating,
+  minDiscount,
+  inStock,
+  featured,
 } = {}) {
   const currentPage = Math.max(1, Number(page) || 1);
-
+  const filters = normalizeFilters({
+    category,
+    minPrice,
+    maxPrice,
+    minRating,
+    minDiscount,
+    inStock,
+    featured,
+  });
   const tsquery = buildTsQuery(search);
-  if (tsquery) {
-    return searchCatalogRanked({ tsquery, category, sort, currentPage });
-  }
 
-  const where = buildCatalogWhere({ category });
-
-  const [rows, total] = await Promise.all([
-    prisma.product.findMany({
-      where,
-      include: CATALOG_INCLUDE,
-      orderBy: buildCatalogOrderBy(sort),
-      skip: (currentPage - 1) * PRODUCTS_PAGE_SIZE,
-      take: PRODUCTS_PAGE_SIZE,
-    }),
-    prisma.product.count({ where }),
-  ]);
-
-  return {
-    products: rows.map(serializeCatalogProduct),
-    total,
-    page: currentPage,
-    hasMore: currentPage * PRODUCTS_PAGE_SIZE < total,
-  };
+  return queryCatalog({ tsquery, filters, sort, currentPage });
 }

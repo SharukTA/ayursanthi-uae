@@ -4,7 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
-import { Menu, X, Search, ChevronRight, Home as HomeIcon } from "lucide-react";
+import {
+  Menu,
+  X,
+  Search,
+  ChevronRight,
+  ChevronDown,
+  Home as HomeIcon,
+} from "lucide-react";
 import { CartBadge } from "@/components/CartBadge";
 import { HeaderAuth, MobileHeaderAuth } from "@/components/HeaderAuth";
 import { AccountMenu } from "@/components/AccountMenu";
@@ -283,33 +290,55 @@ export function SiteHeader({ transparent = false }) {
       </div>
 
       {/* ===== Tablet/desktop header — single row ===== */}
-      <div className="mx-auto hidden max-w-7xl items-center gap-3 px-4 py-1.5 sm:flex sm:gap-4 sm:px-6 lg:px-8">
-        {/* Brand Logo only — no wordmark */}
-        <Link href="/" className="flex shrink-0 items-center group">
-          <Logo3D size={88} />
+      <div className="mx-auto hidden max-w-7xl items-center gap-3 px-4 py-1 sm:flex sm:gap-3 sm:px-6 lg:px-8">
+        {/* Brand Logo only — no wordmark. `scale` enlarges the logo visually
+            without growing its layout footprint, so the row stays compact and
+            nothing else shifts. Negative left margin nudges it further left. */}
+        <Link href="/" className="group -ml-6 flex shrink-0 items-center sm:-ml-10 lg:-ml-14">
+          <Logo3D size={64} scale={1.35} />
         </Link>
 
-        {/* Search bar — centered, Amazon-style */}
+        {/* Search bar — stretches to fill the middle, Amazon/Flipkart-style with
+            an "All categories" scope dropdown and a solid submit button. */}
         <form
           action="/products"
           method="GET"
-          className="mx-auto flex min-w-0 max-w-2xl flex-1 items-center"
+          className="mx-auto flex min-w-0 max-w-4xl flex-1 items-center"
         >
-          <div className="flex w-full items-center gap-2 overflow-hidden rounded-full bg-white px-4 shadow-sm ring-1 ring-white/20 transition focus-within:ring-2 focus-within:ring-white/70">
-            <button
-              type="submit"
-              className="flex shrink-0 items-center justify-center text-[#565959] transition hover:text-[#0f1111]"
-              aria-label="Search"
-            >
-              <Search className="size-4.5" />
-            </button>
+          <div className="flex w-full items-stretch overflow-hidden rounded-full bg-white shadow-sm ring-1 ring-white/20 transition focus-within:ring-2 focus-within:ring-white/70">
+            {/* Category scope — search within a single category. Submitted as the
+                `category` slug that /products already understands. Hidden on the
+                narrowest desktop widths (below md) to protect the input width. */}
+            <div className="relative hidden shrink-0 items-center border-r border-[#e0e3e3] md:flex">
+              <select
+                name="category"
+                aria-label="Search in category"
+                defaultValue=""
+                className="search-bare h-full max-w-[150px] cursor-pointer appearance-none bg-[#f3f3f3] py-1.5 pl-4 pr-7 text-xs font-semibold text-[#565959] outline-none transition hover:bg-[#e6e9e9]"
+              >
+                <option value="">All</option>
+                {categories.map((cat) => (
+                  <option key={cat.id} value={cat.slug}>
+                    {cat.name}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-2 size-3.5 text-[#565959]" />
+            </div>
             <input
               type="text"
               name="search"
               placeholder="Search ayursanthi.com"
               aria-label="Search products"
-              className="search-bare w-full min-w-0 bg-transparent py-2.5 text-sm text-[#0f1111] outline-none placeholder:text-[#565959]"
+              className="search-bare w-full min-w-0 bg-transparent px-4 py-2 text-sm text-[#0f1111] outline-none placeholder:text-[#565959]"
             />
+            <button
+              type="submit"
+              className="flex shrink-0 items-center justify-center bg-[#232f3e] px-5 text-white transition hover:bg-[#131921]"
+              aria-label="Search"
+            >
+              <Search className="size-5" />
+            </button>
           </div>
         </form>
 

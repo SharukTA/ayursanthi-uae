@@ -15,7 +15,7 @@ export default async function DashboardLayout({ children }) {
   }
 
   return (
-    <main className="min-h-screen bg-slate-50 text-white flex flex-col">
+    <main className="min-h-screen bg-slate-50 text-[#0f1111] flex flex-col">
       <SiteHeader />
 
       <div className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6 lg:px-8">

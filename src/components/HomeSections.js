@@ -82,7 +82,7 @@ function SectionHeader({ section, center = false }) {
 // Amazon-style density: sections sit close together so more of the catalog is
 // visible per screen. Keep the vertical rhythm here — every section type uses
 // this shell, so this is the one knob that controls homepage spacing.
-const SECTION_SHELL = "mx-auto max-w-7xl px-4 py-4 sm:px-6 sm:py-6 lg:px-8";
+const SECTION_SHELL = "mx-auto max-w-7xl px-4 py-1.5 sm:px-6 sm:py-6 lg:px-8";
 
 // ── VIDEO_CAROUSEL ───────────────────────────────────────────────────────────
 function VideoCarouselSection({ section }) {
@@ -442,7 +442,7 @@ function StatsBarSection({ section, stats = {} }) {
   const loop = [...entries, ...entries];
 
   return (
-    <section className="border-y border-emerald-100 bg-emerald-50/50 py-6 overflow-hidden sm:py-8">
+    <section className="border-y border-emerald-100 bg-emerald-50/50 py-3 overflow-hidden sm:py-8">
       <div className="flex w-max animate-[marquee_30s_linear_infinite] gap-12 whitespace-nowrap [animation-play-state:running] hover:[animation-play-state:paused] focus-within:[animation-play-state:paused] active:[animation-play-state:paused]">
         {loop.map((entry, idx) => {
           const Icon = entry.Icon;

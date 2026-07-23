@@ -68,7 +68,7 @@ export default function ChangePasswordPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageReveal>
-        <h1 className="text-2xl font-bold text-white">Change Password</h1>
+        <h1 className="text-2xl font-bold text-[#0f1111]">Change Password</h1>
         <p className="mt-1 text-sm text-[#3f4545]">
           Keep your account secure with a strong, unique password.
         </p>

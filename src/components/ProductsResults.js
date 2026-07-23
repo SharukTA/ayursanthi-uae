@@ -3,19 +3,26 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, RotateCw } from "lucide-react";
 import { Stagger, StaggerItem } from "@/components/Animated";
-import { ProductListRow } from "@/components/ProductCard";
+import { ProductCard, ProductListRow } from "@/components/ProductCard";
 
 // Infinite-scroll catalog list. The server renders the first page and hands it
 // in via `initialProducts`; from there this component fetches /api/catalog for
 // each subsequent page. An IntersectionObserver auto-loads as the user nears the
 // bottom, and a bottom-right "Load more" button doubles as the loading
 // indicator and a manual / retry affordance (Amazon-style).
+//
+// `view` switches between the Amazon-style horizontal list rows and a
+// Flipkart-style responsive card grid; both consume the identical serialized
+// product shape. All active facets are forwarded so every "load more" page is
+// filtered exactly like the server-rendered first page.
 export function ProductsResults({
   initialProducts,
   initialHasMore,
   search = "",
   category = "",
   sort = "newest",
+  view = "list",
+  filters = {},
 }) {
   const [products, setProducts] = useState(initialProducts);
   const [page, setPage] = useState(1);
@@ -38,6 +45,10 @@ export function ProductsResults({
       if (search) qs.set("search", search);
       if (category) qs.set("category", category);
       if (sort) qs.set("sort", sort);
+      // Forward the active facets so paged results match the first page.
+      for (const [key, value] of Object.entries(filters)) {
+        if (value !== "" && value != null && value !== false) qs.set(key, String(value));
+      }
       qs.set("page", String(next));
 
       const res = await fetch(`/api/catalog?${qs.toString()}`);
@@ -52,7 +63,7 @@ export function ProductsResults({
     } finally {
       setLoading(false);
     }
-  }, [loading, hasMore, page, search, category, sort]);
+  }, [loading, hasMore, page, search, category, sort, filters]);
 
   // Auto-load when the sentinel scrolls into view. `rootMargin` pre-fetches the
   // next page before the user actually hits the bottom for a seamless feel.
@@ -73,15 +84,30 @@ export function ProductsResults({
 
   return (
     <>
-      <Stagger className="flex flex-col gap-3 sm:gap-4">
+      <Stagger
+        className={
+          view === "grid"
+            ? "grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 xl:grid-cols-4"
+            : "flex flex-col gap-3 sm:gap-4"
+        }
+      >
         {products.map((product) => (
-          <StaggerItem key={product.id}>
-            <ProductListRow
-              product={product}
-              categoryName={product.categoryName}
-              rating={product.rating}
-              reviewCount={product.reviewCount}
-            />
+          <StaggerItem key={product.id} className={view === "grid" ? "h-full" : undefined}>
+            {view === "grid" ? (
+              <ProductCard
+                product={product}
+                categoryName={product.categoryName}
+                rating={product.rating}
+                reviewCount={product.reviewCount}
+              />
+            ) : (
+              <ProductListRow
+                product={product}
+                categoryName={product.categoryName}
+                rating={product.rating}
+                reviewCount={product.reviewCount}
+              />
+            )}
           </StaggerItem>
         ))}
       </Stagger>

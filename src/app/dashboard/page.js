@@ -42,7 +42,7 @@ export default function DashboardPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[320px]">
-        <p className="text-sm text-white font-medium animate-pulse">Loading your dashboard...</p>
+        <p className="text-sm text-[#0f1111] font-medium animate-pulse">Loading your dashboard...</p>
       </div>
     );
   }
@@ -101,7 +101,7 @@ export default function DashboardPage() {
   return (
     <div className="flex flex-col gap-8">
       <PageReveal>
-        <h1 className="text-2xl font-bold text-white">My Dashboard</h1>
+        <h1 className="text-2xl font-bold text-[#0f1111]">My Dashboard</h1>
         <p className="mt-1 text-sm text-[#3f4545]">
           Overview of your orders and account activity.
         </p>

@@ -8,6 +8,7 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { Button } from "@/components/ui/button";
 import { ProductCard, summarizeReviews } from "@/components/ProductCard";
 import { PageSections } from "@/components/HomeSections";
+import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { getPageSections } from "@/lib/page-sections";
 
 export async function generateMetadata({ params }) {
@@ -85,6 +86,14 @@ export default async function CategoryDetailPage({ params }) {
 
       {/* Category Products grid */}
       <section className="mx-auto max-w-7xl px-4 py-4 sm:px-6 sm:py-6 lg:px-8 flex-1 w-full">
+        <Breadcrumbs
+          items={[
+            { label: "Home", href: "/" },
+            { label: "Categories", href: "/categories" },
+            { label: category.name },
+          ]}
+        />
+
         {category.products.length === 0 ? (
           <div className="text-center py-20 rounded-md border border-dashed border-border bg-white">
             <p className="text-sm text-slate-500 font-semibold">No products are currently in this collection.</p>

@@ -69,7 +69,7 @@ export default function ProfilePage() {
   if (loading) {
     return (
       <div className="flex min-h-[320px] items-center justify-center">
-        <p className="animate-pulse text-sm font-medium text-white">Loading profile...</p>
+        <p className="animate-pulse text-sm font-medium text-[#0f1111]">Loading profile...</p>
       </div>
     );
   }
@@ -92,7 +92,7 @@ export default function ProfilePage() {
   return (
     <div className="flex flex-col gap-6">
       <PageReveal>
-        <h1 className="text-2xl font-bold text-white">My Profile</h1>
+        <h1 className="text-2xl font-bold text-[#0f1111]">My Profile</h1>
         <p className="mt-1 text-sm text-[#3f4545]">View and manage your personal information.</p>
       </PageReveal>
 
@@ -117,7 +117,7 @@ export default function ProfilePage() {
             <Button
               onClick={() => setEditing(true)}
               variant="outline"
-              className="h-9 rounded text-xs bg-[#232f3e] text-white border-[#adb1b8] hover:bg-[#131921] hover:text-white"
+              className="h-9 rounded text-xs"
             >
               Edit Profile
             </Button>
@@ -218,7 +218,7 @@ export default function ProfilePage() {
         <p className="mb-4 text-xs text-[#3f4545]">
           Keep your account secure by using a strong, unique password.
         </p>
-        <Button asChild variant="outline" className="h-9 rounded text-xs bg-[#232f3e] text-white border-[#adb1b8] hover:bg-[#131921] hover:text-white">
+        <Button asChild variant="outline" className="h-9 rounded text-xs">
           <Link href="/dashboard/change-password">Change Password</Link>
         </Button>
       </FadeIn>

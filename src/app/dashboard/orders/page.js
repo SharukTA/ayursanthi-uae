@@ -38,7 +38,7 @@ export default function OrdersPage() {
   if (loading) {
     return (
       <div className="flex min-h-[320px] items-center justify-center">
-        <p className="animate-pulse text-sm font-medium text-white">Loading orders...</p>
+        <p className="animate-pulse text-sm font-medium text-[#0f1111]">Loading orders...</p>
       </div>
     );
   }
@@ -46,7 +46,7 @@ export default function OrdersPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageReveal>
-        <h1 className="text-2xl font-bold text-white">My Orders</h1>
+        <h1 className="text-2xl font-bold text-[#0f1111]">My Orders</h1>
         <p className="mt-1 text-sm text-[#3f4545]">
           View and track all your purchase history.
         </p>

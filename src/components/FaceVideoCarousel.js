@@ -63,7 +63,7 @@ function getDominantColor(video) {
 // `onDominantColor` (optional) is called with the "r, g, b" string of the active
 // video's dominant colour whenever the visible slide changes — the hero uses it
 // to tint the mobile backdrop, Amazon-style.
-export function FaceVideoCarousel({ items = [], onDominantColor }) {
+export function FaceVideoCarousel({ items = [], onDominantColor, heroLayout = false }) {
   const faceVideos = items;
   const [emblaRef, emblaApi] = useEmblaCarousel(
     { loop: true, align: "center", containScroll: "trimSnaps" },
@@ -136,12 +136,61 @@ export function FaceVideoCarousel({ items = [], onDominantColor }) {
   // No videos added by the admin yet — render nothing.
   if (faceVideos.length === 0) return null;
 
+  // The slide currently centre-stage — drives the left copy panel in heroLayout
+  // so the writing stays in sync as the carousel autoplays through the videos.
+  const activeItem = faceVideos[selectedIndex] || faceVideos[0];
+
   return (
     /* On lg the whole carousel is a flex column that fills the hero row: the
        track takes the leftover height (min-h-0 so it can shrink) and the dots sit
-       under it. Below lg the card keeps its 16:9 aspect and heights are natural. */
-    <div className="relative flex w-full flex-col lg:h-full">
-      <div className="relative lg:min-h-0 lg:flex-1">
+       under it. Below lg the card keeps its 16:9 aspect and heights are natural.
+       In `heroLayout` (homepage hero, lg only) it becomes a two-column row: the
+       active video's copy on the left, the video-only carousel on the right. */
+    <div
+      className={`relative flex w-full flex-col lg:h-full ${
+        heroLayout ? "lg:flex-row lg:items-center lg:gap-10" : ""
+      }`}
+    >
+      {/* Left copy panel — homepage hero, laptop only. The card itself carries no
+          text on lg (video only); every word lives here instead. */}
+      {heroLayout ? (
+        <div className="hidden min-w-0 lg:flex lg:w-[38%] lg:shrink-0 lg:flex-col lg:justify-center">
+          {activeItem?.label ? (
+            <p className="text-sm font-bold uppercase tracking-[0.2em] text-[#565959]">
+              {activeItem.label}
+            </p>
+          ) : null}
+          {activeItem?.name ? (
+            <h2 className="mt-3 text-4xl font-black leading-[1.1] text-[#0f1111]">
+              {activeItem.name}
+            </h2>
+          ) : null}
+          {activeItem?.price ? (
+            <p className="mt-4 inline-flex items-center gap-1.5 text-2xl font-bold text-[#0f1111]">
+              <BadgeIndianRupee className="size-6 text-emerald-600" />
+              {activeItem.price}
+            </p>
+          ) : null}
+          <div className="mt-7">
+            <Button
+              asChild
+              className="h-12 rounded-full bg-emerald-600 px-8 text-base text-white hover:bg-emerald-500"
+            >
+              <Link href={activeItem?.href || "/products"}>
+                Shop now <ArrowRight className="size-4" />
+              </Link>
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Carousel column */}
+      <div
+        className={`relative flex w-full flex-col lg:h-full ${
+          heroLayout ? "lg:min-w-0 lg:flex-1" : ""
+        }`}
+      >
+        <div className="relative lg:min-h-0 lg:flex-1">
         <div className="overflow-hidden rounded-2xl lg:h-full" ref={emblaRef}>
           <div className="flex lg:h-full">
             {faceVideos.map((item, index) => (
@@ -176,19 +225,34 @@ export function FaceVideoCarousel({ items = [], onDominantColor }) {
                   aria-hidden="true"
                   onLoadedData={() => captureColor(index)}
                 />
-                {/* Readability gradient */}
-                <div className="absolute inset-0 bg-linear-to-t from-black/80 via-black/25 to-black/10" />
+                {/* Readability gradient — on lg hero the card is video-only, so
+                    the scrim (which only exists to carry the overlaid copy) is
+                    dropped there. */}
+                <div
+                  className={`absolute inset-0 bg-linear-to-t from-black/80 via-black/25 to-black/10 ${
+                    heroLayout ? "lg:hidden" : ""
+                  }`}
+                />
 
                 {/* Price chip */}
                 {item.price ? (
-                  <span className="absolute left-4 top-4 inline-flex items-center gap-1.5 rounded-full bg-white/95 px-3 py-1.5 text-sm font-bold text-[#0f1111] shadow-lg backdrop-blur">
+                  <span
+                    className={`absolute left-4 top-4 inline-flex items-center gap-1.5 rounded-full bg-white/95 px-3 py-1.5 text-sm font-bold text-[#0f1111] shadow-lg backdrop-blur ${
+                      heroLayout ? "lg:hidden" : ""
+                    }`}
+                  >
                     <BadgeIndianRupee className="size-4" />
                     {item.price}
                   </span>
                 ) : null}
 
-                {/* Product info overlay */}
-                <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-4 p-5 sm:p-6">
+                {/* Product info overlay — hidden on the lg hero, where the copy
+                    moves to the left panel and the card shows video only. */}
+                <div
+                  className={`absolute inset-x-0 bottom-0 flex items-end justify-between gap-4 p-5 sm:p-6 ${
+                    heroLayout ? "lg:hidden" : ""
+                  }`}
+                >
                   <div>
                     {item.label ? (
                       <p className="text-xs font-bold uppercase tracking-wider text-white/70">
@@ -220,23 +284,24 @@ export function FaceVideoCarousel({ items = [], onDominantColor }) {
         </div>
       </div>
 
-      {/* Position dots below — only shown when there's more than one video. */}
-      {canScroll ? (
-        <div className="mt-5 flex items-center justify-center gap-2">
-          {scrollSnaps.map((_, idx) => (
-            <button
-              key={idx}
-              onClick={() => scrollTo(idx)}
-              aria-label={`Go to video ${idx + 1}`}
-              className={`h-1.5 rounded-full transition-all ${
-                idx === selectedIndex
-                  ? "w-8 bg-[#232f3e] shadow-md"
-                  : "w-3 bg-[#232f3e]/30 hover:bg-[#232f3e]/60"
-              }`}
-            />
-          ))}
-        </div>
-      ) : null}
+        {/* Position dots below — only shown when there's more than one video. */}
+        {canScroll ? (
+          <div className="mt-5 flex items-center justify-center gap-2">
+            {scrollSnaps.map((_, idx) => (
+              <button
+                key={idx}
+                onClick={() => scrollTo(idx)}
+                aria-label={`Go to video ${idx + 1}`}
+                className={`h-1.5 rounded-full transition-all ${
+                  idx === selectedIndex
+                    ? "w-8 bg-[#232f3e] shadow-md"
+                    : "w-3 bg-[#232f3e]/30 hover:bg-[#232f3e]/60"
+                }`}
+              />
+            ))}
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }

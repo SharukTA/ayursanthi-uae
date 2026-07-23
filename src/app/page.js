@@ -1,7 +1,9 @@
 import { SiteFooter } from "@/components/SiteFooter";
 import { HomeTop } from "@/components/HomeTop";
 import { HomeSections } from "@/components/HomeSections";
+import { HeroDealCards } from "@/components/HeroDealCards";
 import { getPageSections } from "@/lib/page-sections";
+import { getCatalogPage } from "@/lib/catalog";
 
 // Re-query the homepage at most once per 5 minutes (ISR) so it stays fast while
 // reflecting admin changes reasonably quickly.
@@ -12,6 +14,12 @@ export default async function Home() {
   // from the shared helper, scoped to the HOME placement so product/category/
   // checkout sections never leak onto the homepage.
   const { sections, stats } = await getPageSections("HOME");
+
+  // Newest products for the laptop-only strip that overlaps the hero's bottom
+  // edge. `total` decides whether the "Show more" button (→ /products) appears.
+  const { products: latestProducts, total: latestTotal } = await getCatalogPage({
+    sort: "newest",
+  });
 
   // The hero's left panel is driven by the first VIDEO_CAROUSEL section; that
   // section is rendered in the hero, not again in the body.
@@ -41,6 +49,10 @@ export default async function Home() {
       {/* Navbar + hero. Grouped in one client component so the navbar can render
           transparent over the hero's video-colour gradient. */}
       <HomeTop videos={heroVideos} />
+
+      {/* Laptop-only deal-style strip overlapping the hero's bottom edge. Renders
+          nothing on mobile (unchanged phone homepage). */}
+      <HeroDealCards products={latestProducts} total={latestTotal} />
 
       {/* Everything below the hero is admin-managed via the Content Builder
           (/admin/home). Sections render in the order and with the content the

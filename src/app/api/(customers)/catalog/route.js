@@ -13,6 +13,14 @@ export async function GET(request) {
     category: searchParams.get("category") || "",
     sort: searchParams.get("sort") || "newest",
     page: searchParams.get("page") || 1,
+    // Facet filters (Amazon/Flipkart-style). Absent params normalize to "no
+    // filter", so the endpoint keeps working for callers that omit them.
+    minPrice: searchParams.get("minPrice"),
+    maxPrice: searchParams.get("maxPrice"),
+    minRating: searchParams.get("minRating"),
+    minDiscount: searchParams.get("minDiscount"),
+    inStock: searchParams.get("inStock"),
+    featured: searchParams.get("featured"),
   });
 
   return Response.json(data);
