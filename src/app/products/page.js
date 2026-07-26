@@ -117,13 +117,18 @@ export default async function ProductsPage({ searchParams }) {
 
   // Sort control reused in the mobile bar and the desktop results header.
   const sortDropdown = (
-    <details className="group relative shrink-0 [&_summary::-webkit-details-marker]:hidden">
-      <summary className="flex cursor-pointer list-none items-center gap-2 rounded-full border border-border px-4 py-1.5 text-xs font-semibold text-[#0f1111] transition hover:bg-emerald-50">
-        <ArrowUpDown className="size-3.5" />
-        Sort: {currentSortLabel}
-        <span className="text-[10px] transition-transform group-open:rotate-180">▾</span>
+    // `min-w-0` + a truncating label: on a narrow phone the mobile control bar
+    // holds Filters + view toggle + this button, and a non-shrinking pill with
+    // the longest label ("Sort: Avg. Customer Review") pushed itself out past
+    // the bar's rounded edge. It now shrinks and ellipsises instead.
+    <details className="group relative min-w-0 [&_summary::-webkit-details-marker]:hidden">
+      <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-[#0f1111] transition hover:bg-emerald-50 sm:gap-2 sm:px-4">
+        <ArrowUpDown className="size-3.5 shrink-0" />
+        <span className="truncate">Sort: {currentSortLabel}</span>
+        <span className="shrink-0 text-[10px] transition-transform group-open:rotate-180">▾</span>
       </summary>
-      <div className="absolute right-0 z-20 mt-2 w-56 overflow-hidden rounded-md border border-border bg-white p-1 shadow-lg">
+      {/* Capped to the viewport so the panel never hangs off-screen either. */}
+      <div className="absolute right-0 z-20 mt-2 w-56 max-w-[calc(100vw-2rem)] overflow-hidden rounded-md border border-border bg-white p-1 shadow-lg">
         {sortOptions.map((opt) => (
           <Link
             key={opt.value}
@@ -207,7 +212,9 @@ export default async function ProductsPage({ searchParams }) {
                 inStock={inStock}
                 featured={featured}
               />
-              <div className="flex items-center gap-2">
+              {/* `min-w-0` lets the sort pill shrink inside this bar instead of
+                  overflowing it on narrow phones. */}
+              <div className="flex min-w-0 items-center gap-2">
                 {viewToggle}
                 {sortDropdown}
               </div>

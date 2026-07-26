@@ -68,6 +68,9 @@ export function ProductActions({ product, pdfHref }) {
   const buildLineItem = () => ({
     productId: product.id,
     name: product.name,
+    // Pack size travels with the line so the cart can tell two sizes of the same
+    // product apart. Display only — never used in any calculation.
+    netQuantity: product.netQuantity || null,
     price: Number(product.price),
     // Carried so the cart/checkout can preview GST and delivery accurately; the
     // server still recomputes both from the DB before charging anything.

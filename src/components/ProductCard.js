@@ -8,10 +8,11 @@ import { ProductMedia } from "@/components/ProductMedia";
 // Two layouts, chosen with the `layout` prop:
 //   "overlay" (default) — the photo fills the card and the title / rating /
 //     price float on top of a dark gradient scrim. Used by the category grids,
-//     related products, the featured carousel and the hero deal cards.
+//     related products and the featured carousel.
 //   "stacked" — Amazon's catalog card: the photo sits on top and every piece of
 //     text lives in a white block underneath, so nothing is ever drawn over the
-//     product image. Used by the /products grid view.
+//     product image. Used by the /products grid view and the home page's
+//     "New Arrivals" strip.
 //
 // The rating is NEVER hardcoded — callers pass the aggregate of the product's
 // real ProductReview rows (average + count) via `summarizeReviews` below.
@@ -142,6 +143,14 @@ export function ProductCard({
           <h3 className="mt-0.5 line-clamp-2 text-sm font-bold leading-5 text-[#0f1111] group-hover:underline">
             {product.name}
           </h3>
+
+          {/* Pack size — without it two sizes of the same item are two
+              indistinguishable cards. */}
+          {product.netQuantity ? (
+            <p className="mt-1 text-[11px] font-semibold text-[#565959]">
+              {product.netQuantity}
+            </p>
+          ) : null}
 
           <div className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1">
             {reviewCount > 0 ? (
@@ -314,7 +323,10 @@ export function ProductListRow({ product, categoryName, rating = 0, reviewCount 
   const href = `/products/${product.slug}`;
   const lowStock = product.stock > 0 && product.stock <= 5;
   const outOfStock = product.stock === 0;
-  const blurb = product.shortDescription?.trim() || product.description?.trim() || "";
+  // Only the admin-authored short description belongs on a list row — the full
+  // description is a multi-paragraph body meant for the product page, and
+  // falling back to it made rows wildly uneven in height.
+  const blurb = product.shortDescription?.trim() || "";
 
   return (
     // Container + stretched link rather than one big <Link>, so the "Shop now"
@@ -396,9 +408,15 @@ export function ProductListRow({ product, categoryName, rating = 0, reviewCount 
           )}
         </div>
 
-        {/* Short description — hidden on the smallest screens to keep rows compact */}
+        {/* Short description — hidden on the smallest screens to keep rows
+            compact. The show/hide lives on a wrapper because `line-clamp-2`
+            itself sets `display: -webkit-box`; putting both on one element
+            makes the two `display` rules fight, so the copy renders unclamped
+            (or leaks onto mobile) depending on stylesheet order. */}
         {blurb ? (
-          <p className="mt-1.5 hidden line-clamp-2 text-xs text-slate-500 sm:block">{blurb}</p>
+          <div className="mt-1.5 hidden sm:block">
+            <p className="line-clamp-2 text-xs text-slate-500">{blurb}</p>
+          </div>
         ) : null}
 
         {/* Price + CTA pinned to the bottom of the row */}

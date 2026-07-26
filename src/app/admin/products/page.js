@@ -59,6 +59,12 @@ export default function AdminProductsPage() {
   // threshold. Blank = free shipping for this product.
   const [shippingFee, setShippingFee] = useState("");
   const [offerLabel, setOfferLabel] = useState("");
+  // Pack size the shopper reads ("250 g", "60 capsules") — product identity, not
+  // inventory. `stock` below stays a count of whole sellable packs.
+  const [netQuantity, setNetQuantity] = useState("");
+  // Comma-separated headline ingredients, shown as their own section on the
+  // product page and folded into search. See Product.keyIngredients.
+  const [keyIngredients, setKeyIngredients] = useState("");
   const [stock, setStock] = useState("");
   // Ordered gallery of media rows: { url, altText, mediaType: "IMAGE" | "VIDEO" }.
   // Row order is the display order on the product page.
@@ -85,6 +91,8 @@ export default function AdminProductsPage() {
     setGstRate("0");
     setShippingFee("");
     setOfferLabel("");
+    setNetQuantity("");
+    setKeyIngredients("");
     setStock("");
     setMedia([]);
     setAttributes([]);
@@ -107,6 +115,8 @@ export default function AdminProductsPage() {
         : ""
     );
     setOfferLabel(prod.offerLabel || "");
+    setNetQuantity(prod.netQuantity || "");
+    setKeyIngredients(prod.keyIngredients || "");
     setStock(prod.stock != null ? String(prod.stock) : "");
     setMedia(
       (prod.images || []).map((img) => ({
@@ -308,6 +318,8 @@ export default function AdminProductsPage() {
         gstRate: Number(gstRate) || 0,
         shippingFee: shippingFee ? Number(shippingFee) : 0,
         offerLabel: editingId ? offerLabel.trim() : offerLabel.trim() || undefined,
+        netQuantity: editingId ? netQuantity.trim() : netQuantity.trim() || undefined,
+        keyIngredients: editingId ? keyIngredients.trim() : keyIngredients.trim() || undefined,
         stock: stock ? Number(stock) : 0,
         shortDescription: editingId ? shortDescription.trim() : shortDescription.trim() || undefined,
         description: editingId ? description.trim() : description.trim() || undefined,
@@ -573,6 +585,26 @@ export default function AdminProductsPage() {
                     placeholder="100"
                     className="w-full min-w-0 min-h-10 rounded border border-input bg-white px-3 text-xs font-normal outline-none transition focus:border-emerald-700"
                   />
+                  <span className="text-[10px] font-normal text-slate-500">
+                    How many packs are on the shelf — never grams. Pack size goes
+                    in Net Quantity.
+                  </span>
+                </label>
+
+                <label className="grid gap-2 min-w-0 text-xs font-semibold text-slate-800">
+                  Net Quantity
+                  <input
+                    type="text"
+                    value={netQuantity}
+                    onChange={(e) => setNetQuantity(e.target.value)}
+                    disabled={submitting}
+                    placeholder="e.g. 250 g / 60 capsules / 100 ml"
+                    className="w-full min-w-0 min-h-10 rounded border border-input bg-white px-3 text-xs font-normal outline-none transition focus:border-emerald-700"
+                  />
+                  <span className="text-[10px] font-normal text-slate-500">
+                    Shown on the card, cart line & product page. Sell two sizes as
+                    two products, each with its own SKU and stock.
+                  </span>
                 </label>
 
                 {/* Media gallery builder — ordered list of images & videos.
@@ -692,7 +724,7 @@ export default function AdminProductsPage() {
 
                   {attributes.length === 0 ? (
                     <p className="rounded border border-dashed border-slate-200 px-3 py-4 text-center text-[11px] font-normal text-slate-500">
-                      No specs yet. Add rows like &quot;Net Weight → 200 g&quot;, &quot;Ingredients → ...&quot;.
+                      No specs yet. Add rows like &quot;Item Form → Powder&quot;, &quot;Shelf Life → 24 months&quot;.
                     </p>
                   ) : (
                     <div className="grid gap-2">
@@ -728,6 +760,26 @@ export default function AdminProductsPage() {
                     </div>
                   )}
                 </div>
+
+                {/* Key ingredients — a dedicated field rather than a spec row:
+                    it renders as its own section on the product page, feeds
+                    search, and is a disclosure requirement for supplements. */}
+                <label className="grid gap-2 min-w-0 text-xs font-semibold text-slate-800 sm:col-span-2">
+                  Key Ingredients
+                  <textarea
+                    rows={2}
+                    value={keyIngredients}
+                    onChange={(e) => setKeyIngredients(e.target.value)}
+                    disabled={submitting}
+                    placeholder="Ashwagandha Root, Shatavari, Brahmi, Cow Ghee"
+                    className="w-full min-w-0 rounded border border-input bg-white p-3 text-xs font-normal outline-none transition focus:border-emerald-700 resize-none text-slate-700"
+                  />
+                  <span className="text-[11px] font-normal text-slate-500">
+                    Separate with commas. Shown as its own section on the product
+                    page and searchable, so a shopper looking for one ingredient
+                    finds this product even when it isn&apos;t in the name.
+                  </span>
+                </label>
 
                 <label className="grid gap-2 min-w-0 text-xs font-semibold text-slate-800 sm:col-span-2">
                   Short Description

@@ -198,6 +198,14 @@ export default function CartPage() {
                             <h3 className="text-sm font-bold text-[#0f1111] group-hover:underline">
                               {item.name}
                             </h3>
+                            {/* Pack size — snapshotted onto the line so two
+                                sizes of the same product stay distinguishable.
+                                Absent on lines added before this field existed. */}
+                            {item.netQuantity ? (
+                              <p className="mt-0.5 text-xs font-medium text-[#565959]">
+                                {item.netQuantity}
+                              </p>
+                            ) : null}
                             <p className="mt-1 text-xs text-[#0f1111] font-extrabold">
                               Rs. {item.price.toLocaleString()}
                             </p>

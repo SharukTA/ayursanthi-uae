@@ -96,6 +96,8 @@ enum HomeSectionType {
   PROMO_ADS        // Promotional ad banners
   REVIEWS          // Customer testimonials
   STATS_BAR        // Marquee strip of live metrics + static trust promises
+  BEST_SELLERS     // Top products by units actually sold (paid orders only)
+  RECENTLY_VIEWED  // Per-shopper "continue shopping" strip, read from the browser
 }
 
 // Which public page a CMS section is rendered on. The homepage, product detail,
@@ -118,11 +120,17 @@ model User {
   passwordHash String
   role         UserRole        @default(CUSTOMER)
 
+  // Amazon's "Turn off Browsing History" switch. While false we neither record
+  // new views nor show the shopper their history back — existing rows are kept
+  // (removing them is a separate, explicit action) but nothing reads them.
+  browsingHistoryEnabled Boolean @default(true)
+
   addresses    Address[]
   cartItems    CartItem[]
   orders       Order[]
   returns      ReturnRequest[]
   reviews      ProductReview[]
+  productViews ProductView[]
   passwordResetOtps PasswordResetOtp[]
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
@@ -199,6 +207,18 @@ model Product {
   // Optional free-text promo badge shown on the product card (e.g. "Up to 4% off").
   // Null/empty => no badge is rendered. Admin-managed in /admin/products.
   offerLabel       String?
+  // Pack size as the shopper reads it: "250 g", "60 capsules", "100 ml". This is
+  // product identity, NOT inventory — `stock` always counts whole sellable packs.
+  // Kept as a first-class column (rather than just a ProductAttribute row) because
+  // the card, cart line and PDF all need it without loading `attributes`, and two
+  // sizes of the same item are two Products that would otherwise look identical.
+  netQuantity      String?
+  // Comma-separated headline ingredients ("Ashwagandha Root, Shatavari, Brahmi").
+  // Rendered as its own section on the product page — Amazon treats ingredients as
+  // a first-class field for consumables/cosmetics, and UAE (Dubai Municipality /
+  // ESMA) requires the disclosure on supplements. Also folded into searchVector so
+  // an ingredient query finds products that don't name it in the title.
+  keyIngredients   String?
   // Admin-managed extra search terms: synonyms, benefits, use-cases and
   // ingredients that shoppers might type but that aren't in the product name
   // (e.g. "libido, stamina, vitality, aphrodisiac" for an Ashwagandha product).
@@ -206,7 +226,8 @@ model Product {
   // right product even though those exact words appear nowhere in its name.
   searchKeywords   String?
   // Postgres full-text index column. GENERATED ALWAYS (see the migration) from
-  // name (weight A) + searchKeywords (A) + shortDescription (B) + description (C),
+  // name (weight A) + searchKeywords (A) + keyIngredients (A) +
+  // shortDescription (B) + description (C),
   // so it stays in sync automatically on every write. Queried via ts_rank for
   // relevance-ranked search; never written to from application code. Declared as
   // Unsupported so Prisma tracks it without trying to manage its generation rule.
@@ -220,6 +241,7 @@ model Product {
   orderItems       OrderItem[]
   reviews          ProductReview[]
   homeItems        HomeSectionItem[]
+  views            ProductView[]
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
 
@@ -443,6 +465,29 @@ model HomeSectionItem {
   updatedAt DateTime    @updatedAt
 
   @@index([sectionId, position])
+}
+
+// One signed-in shopper's view of one product — the account-side browsing
+// history behind the "Continue shopping" strip and the Browsing History page.
+//
+// Deliberately one row PER USER PER PRODUCT (not per visit): re-viewing a
+// product bumps `viewedAt` instead of appending, which is what makes the strip
+// "most recent first, no duplicates" without any grouping at read time and caps
+// a shopper's rows at the catalog size.
+//
+// Signed-out browsing is NOT stored here — it stays in the visitor's own browser
+// (see lib/recently-viewed.js) and is folded into the account only when they
+// sign in. So a row here always belongs to a known, signed-in person.
+model ProductView {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  viewedAt  DateTime @default(now())
+
+  @@unique([userId, productId])
+  @@index([userId, viewedAt])
 }
 
 // Simple key/value store for editable site-wide settings (contact phone, email,

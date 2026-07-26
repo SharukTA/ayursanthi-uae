@@ -60,6 +60,19 @@ export function cleanString(value) {
   return trimmed.length ? trimmed : null;
 }
 
+// Normalise an admin-supplied ingredient list to a canonical
+// "A, B, C" string: split on commas/newlines, trim, drop blanks, re-join. Keeps
+// the stored value tidy however the admin pasted it, so the pills on the product
+// page never render an empty entry from a trailing comma.
+export function cleanIngredientList(value) {
+  const parts = String(value || "")
+    .split(/[,\n]/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  return parts.length ? parts.join(", ") : null;
+}
+
 export function readBoolean(value, fallback = false) {
   if (typeof value === "boolean") {
     return value;
@@ -113,6 +126,8 @@ export const HOME_SECTION_TYPES = [
   "PROMO_ADS",
   "REVIEWS",
   "STATS_BAR",
+  "BEST_SELLERS",
+  "RECENTLY_VIEWED",
 ];
 
 // Valid HomeSection.placement values — keep in sync with the SectionPlacement

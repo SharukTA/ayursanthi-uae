@@ -31,22 +31,33 @@ const FALLBACK_IMAGE =
 // `-movflags +faststart`.
 const POSTER_FRAGMENT = "#t=0.1";
 
-// Shown in place of media whose file cannot be loaded at all (deleted from
+// Shown in place of an image whose file cannot be loaded at all (deleted from
 // storage, 404, offline). Rendering a neutral tile is deliberate: swapping in
 // another remote image would just risk a second failure, and a broken-image icon
 // reads to a customer as a broken shop.
-function BrokenMedia({ kind, compact = false }) {
-  const Icon = kind === "VIDEO" ? VideoOff : ImageOff;
+//
+// Videos deliberately do NOT come through here — see the note on `posterFailed`.
+function BrokenImage({ compact = false }) {
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-[#f7fafa] text-[#565959]">
-      <Icon className={compact ? "size-4" : "size-8"} />
+      <ImageOff className={compact ? "size-4" : "size-8"} />
       {!compact ? (
-        <span className="text-[11px] font-semibold">
-          {kind === "VIDEO" ? "Video unavailable" : "Image unavailable"}
-        </span>
+        <span className="text-[11px] font-semibold">Image unavailable</span>
       ) : null}
     </div>
   );
+}
+
+// Adds an index to one of the Set-valued states below exactly once, returning
+// the previous Set untouched when it is already present so an element that keeps
+// retrying can't spin the component.
+function addOnce(setter, index) {
+  setter((prev) => {
+    if (prev.has(index)) return prev;
+    const next = new Set(prev);
+    next.add(index);
+    return next;
+  });
 }
 
 export function ProductGallery({ media = [], productName = "" }) {
@@ -63,10 +74,24 @@ export function ProductGallery({ media = [], productName = "" }) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   // The video item currently expanded in the fullscreen lightbox, or null.
   const [modalVideo, setModalVideo] = useState(null);
-  // Indices whose file failed to load, so we can show a placeholder instead of a
-  // black box. A Set keyed by index — items are positional and never reordered
-  // within a render.
+  // Image indices whose file failed to load, so we can show a placeholder
+  // instead of a broken-image icon. A Set keyed by index — items are positional
+  // and never reordered within a render.
   const [failed, setFailed] = useState(() => new Set());
+  // Video indices whose POSTER FRAME could not be decoded. This is not the same
+  // thing as a broken video, and conflating the two is what made healthy clips
+  // read as "Video unavailable":
+  //
+  // The poster is a `preload="metadata"` + `#t=0.1` trick — the browser pulls
+  // the header, aborts the connection, then re-requests a range to seek. Chrome
+  // rides that out, but a browser that surfaces the abort, or one that declines
+  // to preload metadata at all (Safari/iOS, Chrome on a metered connection),
+  // fires `error` on the element for a file that plays perfectly.
+  //
+  // So a poster failure only costs us the thumbnail: the tile stays clickable
+  // and the lightbox still fetches the clip fresh. Only the lightbox — the one
+  // place we actually try to play the file — may declare a video unplayable.
+  const [posterFailed, setPosterFailed] = useState(() => new Set());
   // True once the lightbox video itself fails, so the modal can say so rather
   // than sitting on an empty black rectangle.
   const [modalFailed, setModalFailed] = useState(false);
@@ -74,14 +99,11 @@ export function ProductGallery({ media = [], productName = "" }) {
 
   const scrollTo = useCallback((idx) => emblaApi?.scrollTo(idx), [emblaApi]);
 
-  const markFailed = useCallback((index) => {
-    setFailed((prev) => {
-      if (prev.has(index)) return prev; // already known — don't re-render
-      const next = new Set(prev);
-      next.add(index);
-      return next;
-    });
-  }, []);
+  const markFailed = useCallback((index) => addOnce(setFailed, index), []);
+  const markPosterFailed = useCallback(
+    (index) => addOnce(setPosterFailed, index),
+    []
+  );
 
   useEffect(() => {
     if (!emblaApi) return;
@@ -132,41 +154,51 @@ export function ProductGallery({ media = [], productName = "" }) {
           <div className="flex">
             {items.map((item, index) => {
               const isVideo = item.mediaType === "VIDEO";
-              const isBroken = failed.has(index);
+              const isBroken = !isVideo && failed.has(index);
 
               return (
                 <div key={index} className="min-w-0 flex-[0_0_100%]">
                   <div
                     className={`relative flex aspect-square w-full items-center justify-center ${
-                      isVideo && !isBroken ? "bg-black" : "bg-white"
+                      isVideo ? "bg-black" : "bg-white"
                     }`}
                   >
                     {isBroken ? (
-                      <BrokenMedia kind={item.mediaType} />
+                      <BrokenImage />
                     ) : isVideo ? (
-                      <button
-                        type="button"
-                        onClick={() => openVideo(item)}
-                        aria-label={`Play video${productName ? ` for ${productName}` : ""}`}
-                        className="group absolute inset-0"
-                      >
-                        <video
-                          ref={(el) => (videoRefs.current[index] = el)}
-                          // Poster frame only. The full clip is fetched by the
-                          // lightbox below, after the buyer asks for it.
-                          src={`${item.url}${POSTER_FRAGMENT}`}
-                          muted
-                          playsInline
-                          preload="metadata"
-                          onError={() => markFailed(index)}
-                          className="pointer-events-none size-full object-contain"
-                        />
-                        <span className="absolute inset-0 flex items-center justify-center">
-                          <span className="flex size-16 items-center justify-center rounded-full bg-black/60 text-white ring-1 ring-white/30 transition group-hover:bg-black/80">
+                      // Only the play badge opens the lightbox — the rest of the
+                      // slide stays inert so the buyer can still swipe through
+                      // the gallery from on top of a video.
+                      <div className="absolute inset-0">
+                        {posterFailed.has(index) ? null : (
+                          <video
+                            ref={(el) => {
+                              videoRefs.current[index] = el;
+                            }}
+                            // Poster frame only. The full clip is fetched by the
+                            // lightbox below, after the buyer asks for it.
+                            src={`${item.url}${POSTER_FRAGMENT}`}
+                            muted
+                            playsInline
+                            preload="metadata"
+                            onError={() => markPosterFailed(index)}
+                            className="pointer-events-none size-full object-contain"
+                          />
+                        )}
+                        {/* Sits above the poster, and is all that's left when
+                            the poster couldn't be decoded — the black tile plus
+                            this badge still reads as "a video you can play". */}
+                        <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                          <button
+                            type="button"
+                            onClick={() => openVideo(item)}
+                            aria-label={`Play video${productName ? ` for ${productName}` : ""}`}
+                            className="pointer-events-auto flex size-16 items-center justify-center rounded-full bg-black/60 text-white ring-1 ring-white/30 transition hover:bg-black/80"
+                          >
                             <Play className="size-7 fill-white text-white" />
-                          </span>
+                          </button>
                         </span>
-                      </button>
+                      </div>
                     ) : (
                       <ImageFill
                         src={item.url}
@@ -197,33 +229,39 @@ export function ProductGallery({ media = [], productName = "" }) {
         <div className="flex gap-2 overflow-x-auto pb-1">
           {items.map((item, index) => {
             const isVideo = item.mediaType === "VIDEO";
-            const isBroken = failed.has(index);
+            const isBroken = !isVideo && failed.has(index);
 
             return (
               <button
                 key={index}
                 type="button"
-                onClick={() => (isVideo ? openVideo(item) : scrollTo(index))}
+                // Every thumbnail — video included — just moves the main viewer
+                // to that slide. Playback starts only from the play badge there.
+                onClick={() => scrollTo(index)}
                 disabled={isBroken}
                 aria-label={`View ${isVideo ? "video" : "image"} ${index + 1}`}
-                className={`relative size-16 shrink-0 overflow-hidden rounded border bg-white transition sm:size-20 ${
+                className={`relative size-16 shrink-0 overflow-hidden rounded border transition sm:size-20 ${
+                  isVideo ? "bg-black" : "bg-white"
+                } ${
                   index === selectedIndex
                     ? "border-emerald-600 ring-2 ring-emerald-600/30"
                     : "border-slate-200 hover:border-slate-300"
                 } ${isBroken ? "cursor-not-allowed opacity-60" : ""}`}
               >
                 {isBroken ? (
-                  <BrokenMedia kind={item.mediaType} compact />
+                  <BrokenImage compact />
                 ) : isVideo ? (
                   <>
-                    <video
-                      src={`${item.url}${POSTER_FRAGMENT}`}
-                      muted
-                      playsInline
-                      preload="metadata"
-                      onError={() => markFailed(index)}
-                      className="size-full object-cover"
-                    />
+                    {posterFailed.has(index) ? null : (
+                      <video
+                        src={`${item.url}${POSTER_FRAGMENT}`}
+                        muted
+                        playsInline
+                        preload="metadata"
+                        onError={() => markPosterFailed(index)}
+                        className="size-full object-cover"
+                      />
+                    )}
                     <span className="absolute inset-0 flex items-center justify-center bg-black/30">
                       <Play className="size-5 fill-white text-white" />
                     </span>

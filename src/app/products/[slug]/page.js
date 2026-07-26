@@ -16,8 +16,10 @@ import { ReviewForm } from "@/components/ReviewForm";
 import { ProductReviews } from "@/components/ProductReviews";
 import { ProductDescription, AboutThisItem } from "@/components/ProductDescription";
 import { PageSections } from "@/components/HomeSections";
+import { RecentlyViewedTracker } from "@/components/RecentlyViewedTracker";
 import { getPageSections } from "@/lib/page-sections";
 import { CARD_MEDIA_TAKE, pickCardMedia } from "@/lib/media";
+import { splitIngredients } from "@/lib/utils";
 
 export async function generateMetadata({ params }) {
   const { slug } = await params;
@@ -64,6 +66,9 @@ export default async function ProductDetailPage({ params }) {
 
   // Aggregate of the product's real customer reviews, shown next to the title.
   const { rating: avgRating, count: reviewCount } = summarizeReviews(product.reviews);
+
+  // Stored as one comma-separated string; rendered as individual pills.
+  const ingredients = splitIngredients(product.keyIngredients);
 
   // Determine what the current viewer can do in the review form below:
   //  - isLoggedIn  : show the form vs. a sign-in prompt
@@ -114,6 +119,10 @@ export default async function ProductDetailPage({ params }) {
 
   return (
     <main className="min-h-screen bg-slate-50 text-white flex flex-col">
+      {/* Records this view in the visitor's own browser so a "Continue shopping"
+          (RECENTLY_VIEWED) block can offer the product back to them later.
+          Renders nothing; nothing is stored server-side. */}
+      <RecentlyViewedTracker productId={product.id} />
       <SiteHeader />
 
       {/* Product Detail Grid */}
@@ -167,6 +176,15 @@ export default async function ProductDetailPage({ params }) {
                     : "No ratings yet"}
                 </span>
               </a>
+              {/* Pack size sits right under the title, the way Amazon prints
+                  "Size: 250 g" — it is what separates two otherwise identical
+                  listings of the same item. */}
+              {product.netQuantity ? (
+                <p className="mt-2 text-sm font-semibold text-[#0f1111]">
+                  Net Quantity:{" "}
+                  <span className="font-bold">{product.netQuantity}</span>
+                </p>
+              ) : null}
               <p className="mt-2 text-xs font-medium text-[#565959]">
                 SKU: <span className="font-mono">{product.sku}</span>
               </p>
@@ -258,6 +276,32 @@ export default async function ProductDetailPage({ params }) {
             </div>
           </FadeIn>
         </div>
+
+        {/* Key ingredients — its own section above the spec table, mirroring the
+            way Amazon surfaces ingredients for consumables rather than burying
+            them in technical details. */}
+        {ingredients.length > 0 && (
+          <div className="mt-10 border-t border-border pt-8 sm:mt-14 sm:pt-10">
+            <AnimatedHeading
+              as="h2"
+              text="Key Ingredients"
+              className="text-xl font-bold text-[#0f1111]"
+              highlightWords={["Ingredients"]}
+              highlightClassName=""
+            />
+            <ul className="mt-6 flex flex-wrap gap-2">
+              {ingredients.map((ingredient) => (
+                <li
+                  key={ingredient}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-sm font-semibold text-emerald-900"
+                >
+                  <Leaf className="size-3.5 shrink-0" />
+                  {ingredient}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {/* Specifications table (admin-managed key/value rows) */}
         {product.attributes.length > 0 && (

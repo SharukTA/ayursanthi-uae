@@ -50,8 +50,8 @@ export default async function Home() {
           transparent over the hero's video-colour gradient. */}
       <HomeTop videos={heroVideos} />
 
-      {/* Laptop-only deal-style strip overlapping the hero's bottom edge. Renders
-          nothing on mobile (unchanged phone homepage). */}
+      {/* "New Arrivals" deal-style strip. Overlaps the hero's bottom edge on
+          laptop; stacks two-up under it on phones. */}
       <HeroDealCards products={latestProducts} total={latestTotal} />
 
       {/* Everything below the hero is admin-managed via the Content Builder

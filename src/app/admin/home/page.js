@@ -67,6 +67,26 @@ const SECTION_TYPES = [
     fields: [],
   },
   {
+    value: "BEST_SELLERS",
+    label: "Best Sellers (top selling)",
+    help: "Your top products by units actually sold. Filled automatically from paid orders — you can't pick the products. Just set the heading.",
+    auto: true,
+    source: "real sales",
+    autoNote:
+      "Ranked automatically by how many units each product has actually sold, counting paid orders only. You can't add, remove or reorder the cards — that's what makes the 'Best Sellers' label true. Until the store has its first paid order this block stays hidden on the site, rather than showing products nobody has bought.",
+    fields: [],
+  },
+  {
+    value: "RECENTLY_VIEWED",
+    label: "Continue Shopping (recently viewed)",
+    help: "Shows each shopper the products they looked at recently, Amazon-style. Personal to every visitor. Just set the heading.",
+    auto: true,
+    source: "each shopper's history",
+    autoNote:
+      "Every visitor sees their OWN recently-viewed products here — so this block looks different for each shopper and shows nothing to a first-time visitor. Signed-in shoppers keep their history on their account, so it follows them to any device they sign in on; signed-out visitors keep theirs in their own browser until they sign in. Shoppers can review, delete or switch off their history from Your Account › Browsing History. There is nothing to add or edit; just set the heading above.",
+    fields: [],
+  },
+  {
     value: "PROMO_ADS",
     label: "Promo Banners (Spotlight)",
     help: "Two-up promotional banners. Image + title + description.",

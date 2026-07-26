@@ -9,6 +9,7 @@ import {
   StyleSheet,
 } from "@react-pdf/renderer";
 import { parseRichText } from "@/components/RichText";
+import { splitIngredients } from "@/lib/utils";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Printable product sheet. Rendered on the server (see the /pdf route) into a
@@ -42,6 +43,9 @@ const s = StyleSheet.create({
   mrp: { fontSize: 10, color: MUTED, textDecoration: "line-through" },
   offer: { fontSize: 9, fontFamily: "Helvetica-Bold", color: "#92400e", backgroundColor: "#fef3c7", paddingHorizontal: 4, paddingVertical: 2, borderRadius: 3 },
   short: { fontSize: 10, color: BODY, lineHeight: 1.5, marginBottom: 14 },
+  netQty: { fontSize: 10, fontFamily: "Helvetica-Bold", color: INK, marginBottom: 10 },
+  ingredientRow: { flexDirection: "row", flexWrap: "wrap", gap: 5, marginBottom: 6 },
+  ingredientPill: { fontSize: 9, fontFamily: "Helvetica-Bold", color: "#064e3b", backgroundColor: "#ecfdf5", border: `1 solid #a7f3d0`, borderRadius: 8, paddingHorizontal: 7, paddingVertical: 3 },
   gallery: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 18 },
   galleryImg: { width: 150, height: 150, objectFit: "cover", borderRadius: 4, border: `1 solid ${LINE}` },
   sectionTitle: { fontSize: 13, fontFamily: "Helvetica-Bold", color: INK, marginBottom: 8, marginTop: 8 },
@@ -57,7 +61,6 @@ const s = StyleSheet.create({
   bulletText: { flex: 1, fontSize: 10, color: BODY, lineHeight: 1.5 },
   descImgRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginVertical: 6 },
   descImg: { width: 130, height: 130, objectFit: "cover", borderRadius: 4, border: `1 solid ${LINE}` },
-  descCaption: { fontSize: 8, color: MUTED, width: 130, marginTop: 2 },
   footer: { position: "absolute", bottom: 24, left: 40, right: 40, textAlign: "center", fontSize: 8, color: MUTED, borderTopWidth: 1, borderTopColor: LINE, paddingTop: 8 },
 });
 
@@ -127,8 +130,9 @@ function Description({ body, images }) {
             <View key={idx} style={s.descImgRow}>
               {block.items.map((im, i) => (
                 <View key={i}>
+                  {/* No caption — the markdown alt text is just the uploaded
+                      file's name, not authored copy. */}
                   <PdfImage url={im.url} images={images} style={s.descImg} />
-                  {im.alt ? <Text style={s.descCaption}>{im.alt}</Text> : null}
                 </View>
               ))}
             </View>
@@ -151,6 +155,8 @@ export function ProductPdfDocument({ product, images }) {
     price,
     mrp,
     offerLabel,
+    netQuantity,
+    keyIngredients,
     shortDescription,
     description,
     attributes = [],
@@ -164,6 +170,7 @@ export function ProductPdfDocument({ product, images }) {
       ? Math.round(((Number(mrp) - Number(price)) / Number(mrp)) * 100)
       : null;
   const badge = offerLabel?.trim() || (discount ? `${discount}% OFF` : null);
+  const ingredients = splitIngredients(keyIngredients);
   const printedOn = new Date().toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" });
 
   return (
@@ -192,6 +199,10 @@ export function ProductPdfDocument({ product, images }) {
           {badge ? <Text style={s.offer}>{badge}</Text> : null}
         </View>
 
+        {netQuantity ? (
+          <Text style={s.netQty}>Net Quantity: {netQuantity}</Text>
+        ) : null}
+
         {shortDescription ? <Text style={s.short}>{shortDescription}</Text> : null}
 
         {galleryUrls.length > 0 ? (
@@ -199,6 +210,20 @@ export function ProductPdfDocument({ product, images }) {
             {galleryUrls.map((url, i) => (
               <PdfImage key={i} url={url} images={images} style={s.galleryImg} />
             ))}
+          </View>
+        ) : null}
+
+        {ingredients.length > 0 ? (
+          <View wrap={false}>
+            <Text style={s.sectionTitle}>Key Ingredients</Text>
+            <View style={s.sectionRule} />
+            <View style={s.ingredientRow}>
+              {ingredients.map((ingredient, i) => (
+                <Text key={i} style={s.ingredientPill}>
+                  {ingredient}
+                </Text>
+              ))}
+            </View>
           </View>
         ) : null}
 

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import {
+  cleanIngredientList,
   cleanString,
   jsonError,
   prismaErrorResponse,
@@ -166,6 +167,14 @@ export async function PATCH(request, { params }) {
       data.offerLabel = cleanString(body.offerLabel);
     }
 
+    if ("netQuantity" in body) {
+      data.netQuantity = cleanString(body.netQuantity);
+    }
+
+    if ("keyIngredients" in body) {
+      data.keyIngredients = cleanIngredientList(body.keyIngredients);
+    }
+
     if ("stock" in body) {
       data.stock = readInteger(body.stock, 0);
     }
@@ -181,8 +190,12 @@ export async function PATCH(request, { params }) {
     const images = normalizeImages(body.images);
     const attributes = normalizeAttributes(body.attributes);
 
-    const product = await prisma.$transaction(async (tx) => {
-      const updatedProduct = await tx.product.update({
+    // The transaction covers only the writes — replacing media and specs must be
+    // all-or-nothing, or a failure halfway through would leave the product with
+    // its old rows deleted and no new ones. The response is re-read afterwards
+    // (see below) so the heaviest query stays out of the transaction's budget.
+    await prisma.$transaction(async (tx) => {
+      await tx.product.update({
         where: { id },
         data,
       });
@@ -216,25 +229,28 @@ export async function PATCH(request, { params }) {
           });
         }
       }
+    });
 
-      return tx.product.findUnique({
-        where: { id: updatedProduct.id },
-        include: {
-          category: {
-            select: {
-              id: true,
-              name: true,
-              slug: true,
-            },
-          },
-          images: {
-            orderBy: { sortOrder: "asc" },
-          },
-          attributes: {
-            orderBy: { sortOrder: "asc" },
+    // Read back the committed row to shape the response. Deliberately outside
+    // the transaction: it is the most expensive query here (three relations) and
+    // nothing about the write depends on it.
+    const product = await prisma.product.findUnique({
+      where: { id },
+      include: {
+        category: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
           },
         },
-      });
+        images: {
+          orderBy: { sortOrder: "asc" },
+        },
+        attributes: {
+          orderBy: { sortOrder: "asc" },
+        },
+      },
     });
 
     return Response.json({ product });

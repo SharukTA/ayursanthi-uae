@@ -72,8 +72,10 @@ export function AboutThisItem({ body }) {
   );
 }
 
-// A large image with an optional caption underneath. `wide` fills the column
-// width (banners / side images); the default keeps a pleasant 4:3 crop.
+// A large image. `wide` fills the column width (banners / side images); the
+// default keeps a pleasant 4:3 crop. The markdown alt text is the uploaded
+// file's name, so it stays on the <img> for screen readers and is never printed
+// as a visible caption.
 function Figure({ img, className = "", ratio = "aspect-[4/3]" }) {
   return (
     <figure className={className}>
@@ -84,11 +86,6 @@ function Figure({ img, className = "", ratio = "aspect-[4/3]" }) {
         loading="lazy"
         className={`w-full ${ratio} rounded-lg border border-slate-200 bg-slate-50 object-cover`}
       />
-      {img.alt ? (
-        <figcaption className={`mt-2 text-xs font-medium leading-5 text-[#565959]`}>
-          {img.alt}
-        </figcaption>
-      ) : null}
     </figure>
   );
 }

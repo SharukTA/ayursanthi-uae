@@ -8,7 +8,6 @@ import {
   ShieldCheck,
   LayoutGrid,
 } from "lucide-react";
-import { FadeIn } from "@/components/Animated";
 import { RatingStars } from "@/components/ProductCard";
 import { ShopNowButton } from "@/components/ShopNowButton";
 import { Tilt3D } from "@/components/Tilt3D";
@@ -17,6 +16,8 @@ import { FeaturedCarousel } from "@/components/FeaturedCarousel";
 import { SectionCarousel } from "@/components/SectionCarousel";
 import { ImageFill } from "@/components/ProductMedia";
 import { CardVideo } from "@/components/CardVideo";
+import { SectionHeader, SECTION_SHELL } from "@/components/SectionHeader";
+import { RecentlyViewedSection } from "@/components/RecentlyViewedSection";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HomeSections — the public renderer for the admin-managed homepage CMS.
@@ -43,48 +44,8 @@ function itemHref(item) {
   return null;
 }
 
-// A consistent eyebrow / heading / subtitle block. Renders only the parts the
-// admin filled in.
-//
-// The page background is white across the whole site (only the navbar and
-// footer carry the brand teal), so every section header uses the literal brand
-// teal directly. A previous `dark` palette used light-on-dark utilities
-// (text-white / text-slate-200 / text-emerald-200) for sections that no longer
-// sit on a dark background; the globals.css flip rule can't reach those (no
-// !important), so they rendered invisible on the white page.
-function SectionHeader({ section, center = false }) {
-  const { eyebrow, title, subtitle } = section;
-  if (!eyebrow && !title && !subtitle) return null;
-
-  const eyebrowColor = "text-[#565959]";
-  const titleColor = "text-[#0f1111]";
-  const subtitleColor = "text-[#565959]";
-
-  return (
-    <FadeIn className={center ? "text-center" : ""}>
-      {eyebrow ? (
-        <p className={`text-sm font-bold uppercase tracking-wider ${eyebrowColor}`}>
-          {eyebrow}
-        </p>
-      ) : null}
-      {title ? (
-        <h2 className={`mt-1 text-xl font-bold sm:text-2xl ${titleColor}`}>
-          {title}
-        </h2>
-      ) : null}
-      {subtitle ? (
-        <p className={`mt-1 max-w-xl text-sm ${subtitleColor} ${center ? "mx-auto" : ""}`}>
-          {subtitle}
-        </p>
-      ) : null}
-    </FadeIn>
-  );
-}
-
-// Amazon-style density: sections sit close together so more of the catalog is
-// visible per screen. Keep the vertical rhythm here — every section type uses
-// this shell, so this is the one knob that controls homepage spacing.
-const SECTION_SHELL = "mx-auto max-w-7xl px-4 py-1.5 sm:px-6 sm:py-6 lg:px-8";
+// SectionHeader + SECTION_SHELL now live in components/SectionHeader.js so the
+// client-rendered personalised sections can share them.
 
 // ── VIDEO_CAROUSEL ───────────────────────────────────────────────────────────
 function VideoCarouselSection({ section }) {
@@ -291,17 +252,30 @@ function PromoAdsSection({ section }) {
       <SectionHeader section={section} />
 
       <div className="mt-4">
-        <SectionCarousel slideClassName="flex-[0_0_85%] sm:flex-[0_0_50%]">
+        {/* Near-full-width on phones (the remaining sliver still shows the next
+            card, so it stays readable as a carousel); two up from sm. */}
+        <SectionCarousel slideClassName="flex-[0_0_96%] sm:flex-[0_0_50%]">
         {ads.map((item) => {
           const href = itemHref(item) || "/products";
           const card = (
-            <div className="group relative flex aspect-[16/9] h-full flex-col justify-end overflow-hidden rounded-2xl border border-border bg-gradient-to-b from-[#f7fafa] to-white shadow-sm transition-all duration-300 hover:shadow-2xl">
+            // Portrait 4:5 on phones, because that is the shape the artwork
+            // actually is: promo images are uploaded at 1122x1402, the same as
+            // product photos. The image is painted with `object-cover`, so a
+            // landscape card (this was 16:9, then 4:3) scaled a tall photo to
+            // fill a wide box and cropped most of the top and bottom away —
+            // making the card taller only ever cropped it harder. Matched to the
+            // upload ratio it fills the card exactly: nothing cropped, no
+            // letterboxing, and the card is far bigger on a phone.
+            //
+            // If promo artwork ever moves to landscape, this ratio has to move
+            // with it — the two are a pair.
+            <div className="group relative flex aspect-[4/5] h-full flex-col justify-end overflow-hidden rounded-2xl border border-border bg-gradient-to-b from-[#f7fafa] to-white shadow-sm transition-all duration-300 hover:shadow-2xl sm:aspect-video">
               {/* Image fills the whole card, mirroring the category card */}
               {item.imageUrl ? (
                 <ImageFill
                   src={item.imageUrl}
                   alt={item.title || ""}
-                  sizes="(max-width: 640px) 85vw, 50vw"
+                  sizes="(max-width: 640px) 96vw, 50vw"
                   className="transition-transform duration-500 group-hover:scale-[1.06]"
                 />
               ) : (
@@ -490,6 +464,13 @@ const RENDERERS = {
   PROMO_ADS: PromoAdsSection,
   REVIEWS: ReviewsSection,
   STATS_BAR: StatsBarSection,
+  // Same carousel of ProductCards as PRODUCT_CAROUSEL — only the data layer
+  // differs (ranked by real paid sales instead of the whole catalog), so there
+  // is nothing to duplicate here.
+  BEST_SELLERS: ProductCarouselSection,
+  // Rendered in the browser: its cards come from the visitor's own history, and
+  // this page is ISR-cached across all visitors. See RecentlyViewedSection.
+  RECENTLY_VIEWED: RecentlyViewedSection,
 };
 
 export function HomeSections({ sections = [], stats = {} }) {

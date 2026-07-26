@@ -6,6 +6,15 @@ import Autoplay from "embla-carousel-autoplay";
 import { motion } from "motion/react";
 import { ProductCard } from "@/components/ProductCard";
 
+// The carousel behind every CMS product section (PRODUCT_CAROUSEL, BEST_SELLERS,
+// RECENTLY_VIEWED).
+//
+// Cards are the same stacked card the "New Arrivals" strip and the /products
+// grid use — photo on top, all text in a white block underneath — so the
+// homepage reads as one system instead of switching card styles halfway down.
+// The slide widths mirror New Arrivals' grid (two up on phones, four from lg),
+// which also keeps a 4:5 photo plus its text block from running absurdly tall on
+// a narrow screen.
 export function FeaturedCarousel({ products = [] }) {
   const [emblaRef, emblaApi] = useEmblaCarousel(
     { loop: true, align: "start", containScroll: "trimSnaps" },
@@ -41,7 +50,8 @@ export function FeaturedCarousel({ products = [] }) {
     <div className="relative">
       <div className="relative">
         <div className="overflow-hidden" ref={emblaRef}>
-          <div className="flex -ml-5">
+          {/* Gutters match New Arrivals' gap ladder (12 / 16 / 20px). */}
+          <div className="flex -ml-3 sm:-ml-4 lg:-ml-5">
             {products.map((product, index) => (
             <motion.div
               key={product.id || product.slug || product.name}
@@ -49,12 +59,23 @@ export function FeaturedCarousel({ products = [] }) {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, margin: "-40px" }}
               transition={{ delay: index * 0.08, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-              className="min-w-0 flex-[0_0_70%] pl-5 sm:flex-[0_0_40%] lg:flex-[0_0_25%]"
+              className="min-w-0 flex-[0_0_50%] pl-3 sm:flex-[0_0_33.333%] sm:pl-4 lg:flex-[0_0_25%] lg:pl-5"
             >
               <ProductCard
                 product={product}
+                // Sections built by the CMS carry `category: { name }`; catalog
+                // callers carry a flat `categoryName`. Pass the flat one and let
+                // ProductCard fall back, so both shapes label correctly.
+                categoryName={product.categoryName}
                 rating={product.rating}
                 reviewCount={product.reviewCount}
+                // The New Arrivals / catalog card: photo on top, text on white
+                // underneath. The overlay layout drew the title and price across
+                // the lower half of the photo, hiding the product itself.
+                layout="stacked"
+                // 4:5 matches the shape stills are uploaded in, so the photo sits
+                // flush with both card edges instead of pillarboxing.
+                aspect="aspect-[4/5]"
               />
             </motion.div>
           ))}

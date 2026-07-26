@@ -60,11 +60,15 @@ export async function getCommunityStats() {
   }
 }
 
-// Dynamic section types (CATEGORY_GRID, PRODUCT_CAROUSEL, REVIEWS) do NOT store
-// their own items; the cards are pulled live — CATEGORY_GRID/PRODUCT_CAROUSEL
-// from the catalog the admin manages (/admin/categories, /admin/products), and
-// REVIEWS from real customer-submitted ProductReview rows. The admin creates the
-// section + heading in the Content Builder, but never edits the cards.
+// Dynamic section types (CATEGORY_GRID, PRODUCT_CAROUSEL, REVIEWS,
+// BEST_SELLERS) do NOT store their own items; the cards are pulled live —
+// CATEGORY_GRID/PRODUCT_CAROUSEL from the catalog the admin manages
+// (/admin/categories, /admin/products), REVIEWS from real customer-submitted
+// ProductReview rows, and BEST_SELLERS from actual paid sales. The admin creates
+// the section + heading in the Content Builder, but never edits the cards.
+//
+// RECENTLY_VIEWED is dynamic too but personalised, so it is the one type with no
+// server-side fetcher here — see components/RecentlyViewedSection.js.
 
 // All active categories, as CATEGORY_GRID items.
 async function getCategoryItems() {
@@ -90,66 +94,125 @@ async function getCategoryItems() {
   }
 }
 
+// Everything a product-carousel card needs. Shared by every section that
+// renders ProductCards (PRODUCT_CAROUSEL, BEST_SELLERS) and by the
+// /api/recently-viewed endpoint, so a card looks identical wherever it came from.
+export const SECTION_PRODUCT_SELECT = {
+  id: true,
+  name: true,
+  slug: true,
+  price: true,
+  mrp: true,
+  offerLabel: true,
+  netQuantity: true,
+  stock: true,
+  isFeatured: true,
+  category: { select: { name: true } },
+  // Several rows, not one: `pickCardMedia` looks past a video sorted first
+  // to find the still the card should show, so a deals/product carousel
+  // never pulls a multi-MB clip to paint a thumbnail.
+  images: {
+    orderBy: { sortOrder: "asc" },
+    take: CARD_MEDIA_TAKE,
+    select: CARD_MEDIA_SELECT,
+  },
+  // Real customer ratings — averaged per product for the card star bar.
+  reviews: { select: { rating: true } },
+};
+
+// A product row (selected with SECTION_PRODUCT_SELECT) → the generic section-item
+// shape the renderers read. Decimals become plain numbers so the result can cross
+// the server → client boundary untouched.
+export function toProductItem(p) {
+  const reviewCount = p.reviews.length;
+  const rating = reviewCount
+    ? p.reviews.reduce((sum, r) => sum + r.rating, 0) / reviewCount
+    : 0;
+  // One entry, still-preferred — the shape every card already reads.
+  const cardMedia = pickCardMedia(p.images);
+  return {
+    id: p.id,
+    title: null,
+    subtitle: null,
+    body: null,
+    imageUrl: cardMedia[0]?.url || "",
+    videoUrl: null,
+    badge: null,
+    href: `/products/${p.slug}`,
+    product: {
+      id: p.id,
+      name: p.name,
+      slug: p.slug,
+      price: p.price != null ? Number(p.price) : null,
+      mrp: p.mrp != null ? Number(p.mrp) : null,
+      offerLabel: p.offerLabel || null,
+      netQuantity: p.netQuantity || null,
+      stock: p.stock,
+      isFeatured: p.isFeatured,
+      category: p.category ? { name: p.category.name } : null,
+      images: cardMedia,
+      rating,
+      reviewCount,
+    },
+  };
+}
+
 // All active products, as PRODUCT_CAROUSEL items (featured first).
 async function getProductItems() {
   try {
     const products = await prisma.product.findMany({
       where: { isActive: true },
       orderBy: [{ isFeatured: "desc" }, { createdAt: "desc" }],
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        price: true,
-        mrp: true,
-        offerLabel: true,
-        stock: true,
-        isFeatured: true,
-        category: { select: { name: true } },
-        // Several rows, not one: `pickCardMedia` looks past a video sorted first
-        // to find the still the card should show, so a deals/product carousel
-        // never pulls a multi-MB clip to paint a thumbnail.
-        images: {
-          orderBy: { sortOrder: "asc" },
-          take: CARD_MEDIA_TAKE,
-          select: CARD_MEDIA_SELECT,
-        },
-        // Real customer ratings — averaged per product for the card star bar.
-        reviews: { select: { rating: true } },
+      select: SECTION_PRODUCT_SELECT,
+    });
+    return products.map(toProductItem);
+  } catch {
+    return [];
+  }
+}
+
+// How many cards a BEST_SELLERS block shows. The carousel pages through them, so
+// this is a "deep enough to scroll, shallow enough to stay a highlight" number.
+const BEST_SELLERS_LIMIT = 12;
+
+// Top products by units actually sold, as BEST_SELLERS items.
+//
+// "Sold" means a line on an order whose payment landed — PAID only, so pending
+// and failed checkouts can never inflate the ranking. Ranked by total units
+// (summed quantity) rather than order count, matching what "best selling" means
+// to a shopper.
+//
+// Deliberately NOT backfilled with featured/newest products when the store has
+// no sales yet: an empty block renders nothing, whereas a padded one would put a
+// "Best Sellers" heading over products nobody has bought.
+async function getBestSellerItems() {
+  try {
+    const ranked = await prisma.orderItem.groupBy({
+      by: ["productId"],
+      where: {
+        order: { paymentStatus: "PAID" },
+        // Skip work on rows whose product is gone or hidden; the findMany below
+        // filters again, but this keeps retired products out of the ranking so
+        // they don't consume slots that live products should get.
+        product: { isActive: true },
       },
+      _sum: { quantity: true },
+      orderBy: { _sum: { quantity: "desc" } },
+      take: BEST_SELLERS_LIMIT,
     });
-    return products.map((p) => {
-      const reviewCount = p.reviews.length;
-      const rating = reviewCount
-        ? p.reviews.reduce((sum, r) => sum + r.rating, 0) / reviewCount
-        : 0;
-      // One entry, still-preferred — the shape every card already reads.
-      const cardMedia = pickCardMedia(p.images);
-      return {
-        id: p.id,
-        title: null,
-        subtitle: null,
-        body: null,
-        imageUrl: cardMedia[0]?.url || "",
-        videoUrl: null,
-        badge: null,
-        href: `/products/${p.slug}`,
-        product: {
-          id: p.id,
-          name: p.name,
-          slug: p.slug,
-          price: p.price != null ? Number(p.price) : null,
-          mrp: p.mrp != null ? Number(p.mrp) : null,
-          offerLabel: p.offerLabel || null,
-          stock: p.stock,
-          isFeatured: p.isFeatured,
-          category: p.category ? { name: p.category.name } : null,
-          images: cardMedia,
-          rating,
-          reviewCount,
-        },
-      };
+
+    const ids = ranked.map((row) => row.productId);
+    if (ids.length === 0) return [];
+
+    const products = await prisma.product.findMany({
+      where: { id: { in: ids }, isActive: true },
+      select: SECTION_PRODUCT_SELECT,
     });
+
+    // `findMany` with `id IN (...)` does not preserve order — restore the
+    // sales ranking (same pattern as lib/catalog.js).
+    const byId = new Map(products.map((p) => [p.id, p]));
+    return ids.map((id) => byId.get(id)).filter(Boolean).map(toProductItem);
   } catch {
     return [];
   }
@@ -216,11 +279,13 @@ async function serializeSections(sections) {
   const needsCategories = sections.some((s) => s.type === "CATEGORY_GRID");
   const needsProducts = sections.some((s) => s.type === "PRODUCT_CAROUSEL");
   const needsReviews = sections.some((s) => s.type === "REVIEWS");
+  const needsBestSellers = sections.some((s) => s.type === "BEST_SELLERS");
 
-  const [categoryItems, productItems, reviewItems] = await Promise.all([
+  const [categoryItems, productItems, reviewItems, bestSellerItems] = await Promise.all([
     needsCategories ? getCategoryItems() : Promise.resolve([]),
     needsProducts ? getProductItems() : Promise.resolve([]),
     needsReviews ? getReviewItems() : Promise.resolve([]),
+    needsBestSellers ? getBestSellerItems() : Promise.resolve([]),
   ]);
 
   return sections.map((section) => {
@@ -233,6 +298,12 @@ async function serializeSections(sections) {
     if (section.type === "REVIEWS") {
       return { ...section, items: reviewItems };
     }
+    if (section.type === "BEST_SELLERS") {
+      return { ...section, items: bestSellerItems };
+    }
+    // RECENTLY_VIEWED is personalised, so it has no server-side items at all —
+    // the client renderer assembles it from the visitor's own browser history.
+    // It falls through to the generic branch below and stays empty.
     return {
       ...section,
       items: section.items.map((item) => ({

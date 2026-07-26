@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import {
+  cleanIngredientList,
   cleanString,
   jsonError,
   prismaErrorResponse,
@@ -126,6 +127,8 @@ export async function POST(request) {
         gstRate: readGstRate(body.gstRate),
         shippingFee: readMoney(body.shippingFee) ?? 0,
         offerLabel: cleanString(body.offerLabel),
+        netQuantity: cleanString(body.netQuantity),
+        keyIngredients: cleanIngredientList(body.keyIngredients),
         stock: readInteger(body.stock, 0),
         isFeatured: readBoolean(body.isFeatured, false),
         isActive: readBoolean(body.isActive, true),

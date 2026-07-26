@@ -51,6 +51,8 @@ export async function GET(_request, { params }) {
         price: Number(product.price),
         mrp: product.mrp ? Number(product.mrp) : null,
         offerLabel: product.offerLabel,
+        netQuantity: product.netQuantity,
+        keyIngredients: product.keyIngredients,
         shortDescription: product.shortDescription,
         description: product.description,
         attributes: product.attributes.map((a) => ({ label: a.label, value: a.value })),

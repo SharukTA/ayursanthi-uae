@@ -18,6 +18,7 @@ import {
   Package,
   FileText,
   Settings,
+  History,
 } from "lucide-react";
 import { useSession } from "@/components/SessionProvider";
 
@@ -27,6 +28,7 @@ const customerNavItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, exact: true },
   { href: "/dashboard/profile", label: "My Profile", icon: User },
   { href: "/dashboard/orders", label: "My Orders", icon: ShoppingBag },
+  { href: "/dashboard/browsing-history", label: "Browsing History", icon: History },
   { href: "/dashboard/change-password", label: "Change Password", icon: KeyRound },
 ];
 
