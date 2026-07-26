@@ -1,7 +1,6 @@
 import { Inter, Geist_Mono } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import { LenisProvider } from "@/components/LenisProvider";
-import { ScrollProgress } from "@/components/ScrollProgress";
 import { SessionProvider } from "@/components/SessionProvider";
 import { getSession } from "@/lib/auth";
 import "./globals.css";
@@ -45,7 +44,6 @@ export default async function RootLayout({ children }) {
       <body className="min-h-full flex flex-col">
         <SessionProvider initialSession={initialSession}>
           <LenisProvider>
-            <ScrollProgress />
             {children}
           </LenisProvider>
           <Toaster />

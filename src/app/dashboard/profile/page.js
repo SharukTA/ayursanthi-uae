@@ -16,6 +16,8 @@ import {
 import Link from "next/link";
 import { FadeIn, PageReveal } from "@/components/Animated";
 import { Button } from "@/components/ui/button";
+import { PhoneField } from "@/components/PhoneField";
+import { validateName, validatePhone } from "@/lib/validation";
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -25,6 +27,7 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [errors, setErrors] = useState({});
 
   useEffect(() => {
     fetch("/api/user/profile")
@@ -38,6 +41,20 @@ export default function ProfilePage() {
   }, []);
 
   const handleSave = async () => {
+    // Validate before hitting the API — same rules the server enforces. Phone
+    // is optional; a blank value is fine.
+    const fieldErrors = {};
+    const nameError = validateName(name);
+    if (nameError) fieldErrors.name = nameError;
+    const phoneError = validatePhone(phone);
+    if (phoneError) fieldErrors.phone = phoneError;
+    if (Object.keys(fieldErrors).length > 0) {
+      setErrors(fieldErrors);
+      toast.error(Object.values(fieldErrors)[0]);
+      return;
+    }
+    setErrors({});
+
     setSaving(true);
     const toastId = toast.loading("Saving profile...");
     try {
@@ -47,8 +64,14 @@ export default function ProfilePage() {
         body: JSON.stringify({ name, phone }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message);
+      if (!res.ok) {
+        // Surface field-level errors (e.g. duplicate phone) next to the input.
+        if (data.errors && typeof data.errors === "object") setErrors(data.errors);
+        throw new Error(data.message);
+      }
       setProfile((p) => ({ ...p, name: data.user.name, phone: data.user.phone }));
+      // Reflect the server's normalised phone back into the field.
+      setPhone(data.user.phone || "");
       toast.success("Profile updated successfully.", { id: toastId });
       setEditing(false);
       window.dispatchEvent(new Event("authUpdate"));
@@ -64,6 +87,7 @@ export default function ProfilePage() {
     setEditing(false);
     setName(profile?.name || "");
     setPhone(profile?.phone || "");
+    setErrors({});
   };
 
   if (loading) {
@@ -92,8 +116,13 @@ export default function ProfilePage() {
   return (
     <div className="flex flex-col gap-6">
       <PageReveal>
-        <h1 className="text-2xl font-bold text-[#0f1111]">My Profile</h1>
-        <p className="mt-1 text-sm text-[#3f4545]">View and manage your personal information.</p>
+        <h1 className="text-[28px] font-bold leading-none text-[#0f1111]">Your Profile</h1>
+        <p className="mt-2 text-sm text-[#3f4545]">
+          <Link href="/dashboard" className="text-[#007185] transition hover:text-[#c7511f] hover:underline">
+            Your Account
+          </Link>{" "}
+          › Your Profile
+        </p>
       </PageReveal>
 
       {/* Main profile card */}
@@ -127,26 +156,46 @@ export default function ProfilePage() {
         {/* Fields grid */}
         <div className="grid gap-6 sm:grid-cols-2">
           {infoField("Full Name", User, profile?.name,
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              disabled={saving}
-              className="min-h-10 rounded border border-[#d5d9d9] bg-white px-3 text-sm text-[#0f1111] placeholder:text-[#565959] outline-none focus:border-[#007185] focus:ring-4 focus:ring-[#007185]/25 disabled:opacity-60"
-            />
+            <div className="grid gap-1">
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => {
+                  setName(e.target.value);
+                  setErrors((prev) => (prev.name ? { ...prev, name: undefined } : prev));
+                }}
+                disabled={saving}
+                aria-invalid={errors.name ? "true" : undefined}
+                className={`min-h-10 rounded border bg-white px-3 text-sm text-[#0f1111] placeholder:text-[#565959] outline-none focus:ring-4 disabled:opacity-60 ${
+                  errors.name
+                    ? "border-red-500 focus:border-red-500 focus:ring-red-500/15"
+                    : "border-[#d5d9d9] focus:border-[#007185] focus:ring-[#007185]/25"
+                }`}
+              />
+              {errors.name && <span className="text-xs text-red-600">{errors.name}</span>}
+            </div>
           )}
 
           {infoField("Email Address", Mail, profile?.email, null)}
 
           {infoField("Phone Number", Phone, profile?.phone || "—",
-            <input
-              type="tel"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              disabled={saving}
-              placeholder="Enter phone number"
-              className="min-h-10 rounded border border-[#d5d9d9] bg-white px-3 text-sm text-[#0f1111] placeholder:text-[#565959] outline-none focus:border-[#007185] focus:ring-4 focus:ring-[#007185]/25 disabled:opacity-60"
-            />
+            <div className="grid gap-1">
+              <PhoneField
+                value={phone}
+                onChange={(v) => {
+                  setPhone(v);
+                  setErrors((prev) => (prev.phone ? { ...prev, phone: undefined } : prev));
+                }}
+                disabled={saving}
+                error={!!errors.phone}
+                defaultCountry="IN"
+                placeholder="Phone number"
+                borderClassName="border-[#d5d9d9]"
+                className="min-h-10 bg-white text-[#0f1111] focus-within:border-[#007185] focus-within:ring-4 focus-within:ring-[#007185]/25"
+                inputClassName="px-3 text-sm placeholder:text-[#565959]"
+              />
+              {errors.phone && <span className="text-xs text-red-600">{errors.phone}</span>}
+            </div>
           )}
 
           {infoField(

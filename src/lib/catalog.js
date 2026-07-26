@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { summarizeReviews } from "@/components/ProductCard";
+import { CARD_MEDIA_TAKE, pickCardMedia } from "@/lib/media";
 
 // How many catalog rows each page (initial server render + every "load more"
 // fetch) returns. Kept small so the first paint is light and infinite scroll
@@ -137,12 +138,10 @@ export function serializeCatalogProduct(product) {
     offerLabel: product.offerLabel,
     stock: product.stock,
     isFeatured: product.isFeatured,
-    // Carry mediaType alongside the URL: the card renders a real <video> for a
-    // video primary, but a video URL silently fails as a CSS background-image,
-    // so dropping mediaType here would make video-first products show blank.
-    images: product.images?.[0]?.url
-      ? [{ url: product.images[0].url, mediaType: product.images[0].mediaType }]
-      : [],
+    // A still is preferred over a clip here even when the admin sorted a video
+    // first — see `pickCardMedia`. mediaType is carried through so the card can
+    // tell the two apart, since a video-only product still needs a <video>.
+    images: pickCardMedia(product.images),
     categoryName: product.category?.name ?? "",
     rating,
     reviewCount: count,
@@ -154,7 +153,9 @@ export function serializeCatalogProduct(product) {
 // ranked-search paths so cards render identically however they were fetched.
 const CATALOG_INCLUDE = {
   category: { select: { name: true, slug: true } },
-  images: { orderBy: { sortOrder: "asc" }, take: 1 },
+  // More than one row: `pickCardMedia` needs to look past a video sorted first
+  // to find the still a card should actually show.
+  images: { orderBy: { sortOrder: "asc" }, take: CARD_MEDIA_TAKE },
   reviews: { select: { rating: true } },
 };
 

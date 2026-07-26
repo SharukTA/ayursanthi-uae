@@ -4,6 +4,7 @@ import {
   jsonError,
   prismaErrorResponse,
   readBoolean,
+  readGstRate,
   readInteger,
   readMoney,
   requireAdmin,
@@ -151,6 +152,14 @@ export async function PATCH(request, { params }) {
 
     if ("mrp" in body) {
       data.mrp = readMoney(body.mrp);
+    }
+
+    if ("gstRate" in body) {
+      data.gstRate = readGstRate(body.gstRate);
+    }
+
+    if ("shippingFee" in body) {
+      data.shippingFee = readMoney(body.shippingFee) ?? 0;
     }
 
     if ("offerLabel" in body) {

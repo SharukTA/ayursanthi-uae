@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/prisma";
+import { gstFromInclusive, normalizeGstRate, round2 } from "@/lib/pricing";
+import { getFreeShippingThreshold } from "@/lib/settings";
 
 /**
  * Places a Cash-on-Delivery order.
@@ -24,7 +26,11 @@ export async function placeCodOrder({ userId, cart, shippingAddress }) {
   }
 
   // Recompute every amount from DB prices — never trust what the client sent.
+  // Prices are GST-INCLUSIVE, so `tax` is the portion already inside each line
+  // (split out for the invoice), not an extra charge. See lib/pricing.js.
   let subtotal = 0;
+  let tax = 0;
+  let shippingRaw = 0;
   const items = [];
   for (const item of cart) {
     const quantity = Number(item.quantity);
@@ -41,21 +47,32 @@ export async function placeCodOrder({ userId, cart, shippingAddress }) {
     }
 
     const price = Number(product.price);
-    const lineTotal = parseFloat((price * quantity).toFixed(2));
-    subtotal += lineTotal;
+    const gstRate = normalizeGstRate(product.gstRate);
+    const lineTotal = round2(price * quantity);
+    const lineTax = gstFromInclusive(lineTotal, gstRate);
+
+    subtotal = round2(subtotal + lineTotal);
+    tax = round2(tax + lineTax);
+    // Per-product delivery fee, charged once per line (not per unit).
+    shippingRaw = round2(shippingRaw + Number(product.shippingFee ?? 0));
+
     items.push({
       productId: product.id,
       productName: product.name,
       quantity,
       price,
       total: lineTotal,
+      gstRate,
+      tax: lineTax,
     });
   }
 
-  subtotal = parseFloat(subtotal.toFixed(2));
-  const tax = parseFloat((subtotal * 0.18).toFixed(2));
-  const shipping = subtotal >= 1000 ? 0.0 : 99.0;
-  const total = parseFloat((subtotal + tax + shipping).toFixed(2));
+  // Delivery is waived once the goods subtotal clears the admin-set free-shipping
+  // bar (defaults to Rs. 1000 when unset — see lib/settings.js).
+  const freeShippingThreshold = await getFreeShippingThreshold();
+  const shipping = subtotal >= freeShippingThreshold ? 0 : round2(shippingRaw);
+  // Tax lives inside the subtotal already, so the total is only goods + delivery.
+  const total = round2(subtotal + shipping);
 
   const order = await prisma.$transaction(async (tx) => {
     // Re-read stock inside the transaction so a concurrent checkout that drained
@@ -95,6 +112,8 @@ export async function placeCodOrder({ userId, cart, shippingAddress }) {
             quantity: it.quantity,
             price: it.price,
             total: it.total,
+            gstRate: it.gstRate,
+            tax: it.tax,
           })),
         },
         payments: {

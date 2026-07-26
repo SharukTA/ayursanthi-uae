@@ -1,12 +1,17 @@
 import Link from "next/link";
 import { Star, Sparkles } from "lucide-react";
 import { ShopNowButton } from "@/components/ShopNowButton";
+import { ProductMedia } from "@/components/ProductMedia";
 
 // Shared, Amazon-style product card used across the catalog and category grids.
 //
-// Layout: the product photo fills the card as a fully-contained background, and
-// the title / rating / price / offer badges float on top — a dark gradient scrim
-// at the bottom keeps the overlaid text readable over any image.
+// Two layouts, chosen with the `layout` prop:
+//   "overlay" (default) — the photo fills the card and the title / rating /
+//     price float on top of a dark gradient scrim. Used by the category grids,
+//     related products, the featured carousel and the hero deal cards.
+//   "stacked" — Amazon's catalog card: the photo sits on top and every piece of
+//     text lives in a white block underneath, so nothing is ever drawn over the
+//     product image. Used by the /products grid view.
 //
 // The rating is NEVER hardcoded — callers pass the aggregate of the product's
 // real ProductReview rows (average + count) via `summarizeReviews` below.
@@ -60,14 +65,19 @@ export function ProductCard({
   // Card shape. Defaults to a square (1:1) tile so a single product upload fits
   // uncropped across every surface — grid, list thumbnail and carousel all share
   // this ratio. Callers can still override for a taller/shorter box if needed.
+  // Under `layout="stacked"` this sizes the photo alone, not the whole card —
+  // the text block below adds its own height.
   aspect = "aspect-square",
+  layout = "overlay",
 }) {
-  // Primary media: an image is painted as a background, but a video (when the
-  // admin ordered one first) must render in a real <video> element — a video
-  // URL silently fails as a CSS background-image.
-  const primaryMedia = product.images?.[0];
-  const isVideo = primaryMedia?.mediaType === "VIDEO";
-  const imageUrl = primaryMedia?.url || FALLBACK_IMG;
+  // Primary media, rendered by <ProductMedia> so stills go through the image
+  // optimizer and clips stay unloaded until hover. The data layer already
+  // prefers a still over a video here (see `pickCardMedia`), so a card only ever
+  // gets a video for a product that has no photo at all.
+  const primaryMedia = product.images?.[0] ?? {
+    url: FALLBACK_IMG,
+    mediaType: "IMAGE",
+  };
   const price = Number(product.price);
   const mrp = product.mrp != null ? Number(product.mrp) : null;
   const hasDeal = mrp != null && mrp > price;
@@ -77,31 +87,124 @@ export function ProductCard({
   const lowStock = product.stock > 0 && product.stock <= 5;
   const outOfStock = product.stock === 0;
 
+  // ── Amazon-style stacked card: photo on top, all text on white underneath ──
+  if (layout === "stacked") {
+    return (
+      // `h-full` + a flex column so every card in a grid row ends up the same
+      // height with its CTA aligned, however long the titles are.
+      <div
+        data-media-hover-root
+        className="group relative flex h-full flex-col overflow-hidden rounded-xl border border-border bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl"
+      >
+        {/* Stretched link — keeps the whole card clickable while leaving the
+            "Shop now" CTA a real <button>. See the overlay layout below. */}
+        <Link href={href} className="absolute inset-0 z-10" aria-label={product.name} />
+
+        {/* Photo. Stills are contained so the product is never cropped; video is
+            shot 9:16 and would letterbox, so it fills the frame instead — the
+            same rule the list row uses. */}
+        <div className={`relative ${aspect} w-full shrink-0 overflow-hidden bg-[#f7fafa]`}>
+          <ProductMedia
+            media={primaryMedia}
+            alt={product.name}
+            // Stills are contained so the product is never cropped; a clip is
+            // shot 9:16 and would letterbox, so it fills the frame instead.
+            fit={primaryMedia.mediaType === "VIDEO" ? "cover" : "contain"}
+            // Two-up on phones, three-up on tablets, four-up on desktop.
+            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+            className="transition-transform duration-500 group-hover:scale-105"
+          />
+          {/* Badges float over the photo, top-left */}
+          <div className="pointer-events-none absolute inset-x-0 top-0 flex flex-col items-start gap-1.5 p-2">
+            {product.isFeatured ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-[#ffffff]/90 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#0f1111] shadow-sm backdrop-blur">
+                <Sparkles className="size-3" />
+                Best Seller
+              </span>
+            ) : null}
+            {/* Admin-entered promo badge (e.g. "Up to 4% off"). Hidden when blank. */}
+            {offerLabel ? (
+              <span className="rounded-full bg-[#e11d48] px-2 py-0.5 text-[10px] font-extrabold text-[#ffffff] shadow-md">
+                {offerLabel}
+              </span>
+            ) : null}
+          </div>
+        </div>
+
+        {/* White text block — nothing here sits over the photo. */}
+        <div className="flex flex-1 flex-col p-2.5 sm:p-3">
+          {category ? (
+            <p className="text-[10px] font-bold uppercase tracking-wider text-[#565959]">
+              {category}
+            </p>
+          ) : null}
+
+          <h3 className="mt-0.5 line-clamp-2 text-sm font-bold leading-5 text-[#0f1111] group-hover:underline">
+            {product.name}
+          </h3>
+
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1">
+            {reviewCount > 0 ? (
+              <>
+                <span className="text-xs font-bold text-slate-700">{rating.toFixed(1)}</span>
+                <RatingStars rating={rating} size="size-3.5" />
+                <span className="text-[11px] font-medium text-slate-500">
+                  ({reviewCount.toLocaleString("en-IN")})
+                </span>
+              </>
+            ) : (
+              <>
+                <RatingStars rating={0} size="size-3.5" />
+                <span className="text-[11px] font-medium text-slate-500">No ratings yet</span>
+              </>
+            )}
+          </div>
+
+          {/* Price + CTA pinned to the bottom so they line up across the row. */}
+          <div className="mt-auto pt-2">
+            <div className="flex flex-wrap items-baseline gap-x-2">
+              <span className="text-base font-extrabold text-[#0f1111] sm:text-lg">
+                Rs. {price.toLocaleString("en-IN")}
+              </span>
+              {hasDeal ? (
+                <span className="text-xs font-medium text-slate-500 line-through">
+                  Rs. {mrp.toLocaleString("en-IN")}
+                </span>
+              ) : null}
+            </div>
+
+            {outOfStock ? (
+              <p className="mt-1 text-[11px] font-bold text-[#e11d48]">Out of stock</p>
+            ) : lowStock ? (
+              <p className="mt-1 text-[11px] font-bold text-[#e11d48]">
+                Only {product.stock} left
+              </p>
+            ) : null}
+
+            <ShopNowButton href={href} size="sm" className="mt-2 w-full" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     // The card is a plain container rather than one big <Link> so the "Shop now"
     // CTA can be a real <button> (a button nested in an <a> is invalid HTML).
     // Whole-card clicking is preserved by the stretched <Link> overlay below.
     <div
+      data-media-hover-root
       className={`group relative block ${aspect} overflow-hidden rounded-2xl border border-border bg-gradient-to-b from-[#f7fafa] to-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl`}
     >
-      {/* Product media fills the whole card, mirroring the category card. A
-          video plays muted/looped inline; an image is painted as a background. */}
-      {isVideo ? (
-        <video
-          src={imageUrl}
-          muted
-          loop
-          autoPlay
-          playsInline
-          preload="metadata"
-          className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.06]"
-        />
-      ) : (
-        <div
-          className="absolute inset-0 bg-cover bg-center transition-transform duration-500 group-hover:scale-[1.06]"
-          style={{ backgroundImage: `url('${imageUrl}')` }}
-        />
-      )}
+      {/* Product media fills the whole card, mirroring the category card. A clip
+          stays unloaded until hover; a still goes through the image optimizer. */}
+      <ProductMedia
+        media={primaryMedia}
+        alt={product.name}
+        fit="cover"
+        sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+        className="transition-transform duration-500 group-hover:scale-[1.06]"
+      />
 
       {/* Stretched link — keeps the entire card clickable (and middle-clickable
           / openable in a new tab) now that the card itself is no longer an <a>.
@@ -130,8 +233,10 @@ export function ProductCard({
         </div>
       </div>
 
-      {/* Bottom gradient scrim with the overlaid title / rating / price */}
-      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#0f1111]/95 via-[#0f1111]/65 to-transparent p-4 pt-14">
+      {/* Bottom gradient scrim with the overlaid title / rating / price.
+          Padding tightens on mobile so the footer keeps every line — including
+          the CTA — inside the card on a narrow two-column grid. */}
+      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#0f1111]/95 via-[#0f1111]/65 to-transparent p-3 pt-12 sm:p-4 sm:pt-14">
         {category ? (
           <p className="text-[10px] font-bold uppercase tracking-wider text-[#ffffff]/70">
             {category}
@@ -160,10 +265,12 @@ export function ProductCard({
           )}
         </div>
 
-        {/* Price + CTA */}
-        <div className="mt-2.5 flex items-end justify-between gap-2">
-          <div className="flex items-baseline gap-2">
-            <span className="text-lg font-extrabold text-[#ffffff]">
+        {/* Price + CTA. On mobile the CTA drops onto its own full-width line
+            (Amazon's mobile pattern) — side-by-side it would be squeezed by a
+            long price and its trailing chevron clipped by the card edge. */}
+        <div className="mt-2.5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div className="flex flex-wrap items-baseline gap-x-2">
+            <span className="text-base font-extrabold text-[#ffffff] sm:text-lg">
               Rs. {price.toLocaleString("en-IN")}
             </span>
             {hasDeal ? (
@@ -172,7 +279,7 @@ export function ProductCard({
               </span>
             ) : null}
           </div>
-          <ShopNowButton href={href} size="sm" />
+          <ShopNowButton href={href} size="sm" className="w-full sm:w-auto" />
         </div>
 
         {outOfStock ? (
@@ -195,9 +302,10 @@ export function ProductCard({
 // headings/strong and `#565959` for muted body copy; we never use
 // `text-white/xx` here since the row sits on a white card.
 export function ProductListRow({ product, categoryName, rating = 0, reviewCount = 0 }) {
-  const primaryMedia = product.images?.[0];
-  const isVideo = primaryMedia?.mediaType === "VIDEO";
-  const imageUrl = primaryMedia?.url || FALLBACK_IMG;
+  const primaryMedia = product.images?.[0] ?? {
+    url: FALLBACK_IMG,
+    mediaType: "IMAGE",
+  };
   const price = Number(product.price);
   const mrp = product.mrp != null ? Number(product.mrp) : null;
   const hasDeal = mrp != null && mrp > price;
@@ -211,31 +319,33 @@ export function ProductListRow({ product, categoryName, rating = 0, reviewCount 
   return (
     // Container + stretched link rather than one big <Link>, so the "Shop now"
     // CTA can be a real <button>. See ProductCard above.
-    <div className="group relative flex gap-3 rounded-xl border border-border bg-white p-3 shadow-sm transition-shadow duration-300 hover:shadow-lg sm:gap-5 sm:p-4">
+    <div
+      data-media-hover-root
+      className="group relative flex gap-3 rounded-xl border border-border bg-white p-3 shadow-sm transition-shadow duration-300 hover:shadow-lg sm:gap-5 sm:p-4"
+    >
       <Link
         href={href}
         className="absolute inset-0 z-10 rounded-xl"
         aria-label={product.name}
       />
 
-      {/* Product photo on the left */}
-      <div className="relative w-28 shrink-0 overflow-hidden rounded-lg bg-[#f7fafa] sm:w-44">
-        {isVideo ? (
-          <video
-            src={imageUrl}
-            muted
-            loop
-            autoPlay
-            playsInline
-            preload="metadata"
-            className="aspect-square w-full object-cover transition-transform duration-500 group-hover:scale-105"
-          />
-        ) : (
-          <div
-            className="aspect-square bg-cover bg-center transition-transform duration-500 group-hover:scale-105"
-            style={{ backgroundImage: `url('${imageUrl}')` }}
-          />
-        )}
+      {/* Product media on the left. The tile is 4:5 to match the shape product
+          photos are uploaded in (1122x1402), so a still fills it edge to edge
+          with no letterboxing, and `bg-contain` guarantees an odd-shaped upload
+          is still shown whole rather than cropped.
+          Video is the exception: clips are shot 9:16 (1080x1920), which would
+          leave a blank band down both sides if contained, so it is cropped to
+          fill the tile the way any video thumbnail is. */}
+      <div className="relative aspect-[4/5] w-40 shrink-0 self-start overflow-hidden rounded-lg bg-[#f7fafa] sm:w-44">
+        <ProductMedia
+          media={primaryMedia}
+          alt={product.name}
+          fit={primaryMedia.mediaType === "VIDEO" ? "cover" : "contain"}
+          // Fixed-width tile (160px, 176px from sm up) — no need to ever fetch
+          // more than a 2x variant of that.
+          sizes="176px"
+          className="transition-transform duration-500 group-hover:scale-105"
+        />
         {/* Badges floating over the photo */}
         <div className="absolute inset-x-0 top-0 flex flex-col items-start gap-1.5 p-2">
           {product.isFeatured ? (
@@ -260,23 +370,27 @@ export function ProductListRow({ product, categoryName, rating = 0, reviewCount 
           </p>
         ) : null}
 
-        <h3 className="mt-0.5 line-clamp-2 text-sm font-bold leading-5 text-[#0f1111] group-hover:underline sm:text-base">
+        {/* Three lines on mobile: the 4:5 photo makes the row taller than the
+            text stack, and the narrower column needs the extra line anyway. */}
+        <h3 className="mt-0.5 line-clamp-3 text-sm font-bold leading-5 text-[#0f1111] group-hover:underline sm:line-clamp-2 sm:text-base">
           {product.name}
         </h3>
 
-        {/* Real customer rating */}
-        <div className="mt-1.5 flex items-center gap-1.5">
+        {/* Real customer rating. Stars shrink a notch on mobile — the wider
+            photo leaves a narrow text column, and five size-4 stars plus the
+            score and count would otherwise run past its edge. */}
+        <div className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1">
           {reviewCount > 0 ? (
             <>
               <span className="text-xs font-bold text-slate-700">{rating.toFixed(1)}</span>
-              <RatingStars rating={rating} />
+              <RatingStars rating={rating} size="size-3.5 sm:size-4" />
               <span className="text-[11px] font-medium text-slate-500">
                 ({reviewCount.toLocaleString("en-IN")})
               </span>
             </>
           ) : (
             <>
-              <RatingStars rating={0} />
+              <RatingStars rating={0} size="size-3.5 sm:size-4" />
               <span className="text-[11px] font-medium text-slate-500">No ratings yet</span>
             </>
           )}
@@ -289,8 +403,9 @@ export function ProductListRow({ product, categoryName, rating = 0, reviewCount 
 
         {/* Price + CTA pinned to the bottom of the row */}
         <div className="mt-auto pt-2.5">
-          <div className="flex items-baseline gap-2">
-            <span className="text-lg font-extrabold text-[#0f1111]">
+          {/* Wraps rather than overflows if a long price sits next to its MRP. */}
+          <div className="flex flex-wrap items-baseline gap-x-2">
+            <span className="text-base font-extrabold text-[#0f1111] sm:text-lg">
               Rs. {price.toLocaleString("en-IN")}
             </span>
             {hasDeal ? (
@@ -300,7 +415,10 @@ export function ProductListRow({ product, categoryName, rating = 0, reviewCount 
             ) : null}
           </div>
 
-          <div className="mt-2 flex items-center justify-between gap-2">
+          {/* Stock line then CTA. On mobile the right-hand column is narrow, so
+              the CTA takes its own full-width line rather than competing with
+              the stock label and getting its chevron clipped. */}
+          <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             {outOfStock ? (
               <span className="text-[11px] font-bold text-[#e11d48]">Out of stock</span>
             ) : lowStock ? (
@@ -310,7 +428,7 @@ export function ProductListRow({ product, categoryName, rating = 0, reviewCount 
             ) : (
               <span className="text-[11px] font-semibold text-slate-500">In stock</span>
             )}
-            <ShopNowButton href={href} size="sm" />
+            <ShopNowButton href={href} size="sm" className="w-full sm:w-auto" />
           </div>
         </div>
       </div>

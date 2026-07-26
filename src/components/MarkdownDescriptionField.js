@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { toast } from "sonner";
-import { upload } from "@vercel/blob/client";
+import { uploadMedia } from "@/lib/storage/client";
 import { Heading2, Heading3, List, ImagePlus, Eye, Pencil, Loader2 } from "lucide-react";
 import { RichText } from "@/components/RichText";
 
@@ -55,13 +55,8 @@ export function MarkdownDescriptionField({ value, onChange, disabled }) {
     setUploading(true);
     const toastId = toast.loading("Uploading image...");
     try {
-      const blob = await upload(file.name, file, {
-        access: "public",
-        handleUploadUrl: "/api/admin/upload",
-        multipart: true,
-        contentType: file.type,
-      });
-      insertAtCaret(`![${file.name.replace(/\.[^.]+$/, "")}](${blob.url})\n`, "");
+      const url = await uploadMedia(file);
+      insertAtCaret(`![${file.name.replace(/\.[^.]+$/, "")}](${url})\n`, "");
       toast.success("Image added to description.", { id: toastId });
     } catch (error) {
       toast.error(error.message || "Upload failed.", { id: toastId });

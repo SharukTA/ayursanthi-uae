@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { getSiteSettings, PUBLIC_SETTING_KEYS } from "@/lib/settings";
+import { getSiteSettings, PUBLIC_SETTING_KEYS, validateSettings } from "@/lib/settings";
 import { jsonError, prismaErrorResponse, requireAdmin } from "@/lib/admin-api";
 
 export const runtime = "nodejs";
@@ -25,6 +25,11 @@ export async function PUT(request) {
 
     if (!incoming || typeof incoming !== "object") {
       return jsonError("A settings object is required.");
+    }
+
+    const validationError = validateSettings(incoming);
+    if (validationError) {
+      return jsonError(validationError);
     }
 
     const entries = Object.entries(incoming).filter(([key]) =>

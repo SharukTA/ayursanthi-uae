@@ -2,7 +2,7 @@
 
 import { useId, useState } from "react";
 import { toast } from "sonner";
-import { upload } from "@vercel/blob/client";
+import { uploadMedia } from "@/lib/storage/client";
 import { Upload, Loader2, ImageIcon } from "lucide-react";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -25,14 +25,9 @@ export function ImageUrlField({ label, placeholder, value, onChange, disabled })
     setUploading(true);
     const toastId = toast.loading("Uploading image...");
     try {
-      // Upload straight to Vercel Blob from the browser; /api/admin/upload only
-      // issues the (admin-gated) token, so there's no serverless body limit.
-      const blob = await upload(file.name, file, {
-        access: "public",
-        handleUploadUrl: "/api/admin/upload",
-        contentType: file.type,
-      });
-      onChange(blob.url);
+      // Uploads straight to object storage from the browser; /api/admin/upload
+      // only issues the (admin-gated) target, so there's no serverless body limit.
+      onChange(await uploadMedia(file));
       toast.success("Image uploaded.", { id: toastId });
     } catch (error) {
       toast.error(error.message || "Upload failed.", { id: toastId });

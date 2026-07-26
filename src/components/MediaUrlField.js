@@ -2,7 +2,7 @@
 
 import { useId, useState } from "react";
 import { toast } from "sonner";
-import { upload } from "@vercel/blob/client";
+import { uploadMedia } from "@/lib/storage/client";
 import { Upload, Loader2, ImageIcon, Video } from "lucide-react";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -13,7 +13,25 @@ import { Upload, Loader2, ImageIcon, Video } from "lucide-react";
 // which already accepts both images and video containers.
 // ─────────────────────────────────────────────────────────────────────────────
 const IMAGE_ACCEPT = "image/jpeg,image/png,image/webp,image/gif,image/avif,image/svg+xml";
-const VIDEO_ACCEPT = "video/mp4,video/webm,video/ogg,video/quicktime";
+// .mov is excluded on purpose — see the note in /api/admin/upload. It plays only
+// in Safari, so an admin on a Mac/iPhone would see a working preview while every
+// Chrome and Firefox visitor got a black box.
+const VIDEO_ACCEPT = "video/mp4,video/webm,video/ogg";
+
+// `accept` on a file input is only a hint — the picker lets you choose "All
+// files" and select anything. This is the real check, and it runs before a single
+// byte is uploaded so a rejected file costs no bandwidth.
+function rejectionReason(file, isVideo) {
+  const allowed = (isVideo ? VIDEO_ACCEPT : IMAGE_ACCEPT).split(",");
+  if (allowed.includes(file.type)) return null;
+
+  if (isVideo && (file.type === "video/quicktime" || /\.mov$/i.test(file.name))) {
+    return "QuickTime (.mov) videos don't play in Chrome or Firefox. Convert to MP4 first — scripts/compress-videos.mjs does this and shrinks the file too.";
+  }
+  return isVideo
+    ? "Unsupported video format. Use MP4 (recommended), WebM or Ogg."
+    : "Unsupported image format. Use JPEG, PNG, WebP, GIF, AVIF or SVG.";
+}
 
 export function MediaUrlField({ label, placeholder, value, onChange, disabled, mediaType = "IMAGE" }) {
   const inputId = useId();
@@ -25,18 +43,21 @@ export function MediaUrlField({ label, placeholder, value, onChange, disabled, m
     e.target.value = ""; // allow re-picking the same file later
     if (!file) return;
 
+    // Catch unplayable formats here rather than letting them reach storage,
+    // where the failure is invisible until a customer loads the page.
+    const rejection = rejectionReason(file, isVideo);
+    if (rejection) {
+      toast.error(rejection, { duration: 8000 });
+      return;
+    }
+
     setUploading(true);
     const toastId = toast.loading(isVideo ? "Uploading video..." : "Uploading image...");
     try {
-      // Upload straight to Vercel Blob from the browser; /api/admin/upload only
-      // issues the (admin-gated) token. multipart handles large video files.
-      const blob = await upload(file.name, file, {
-        access: "public",
-        handleUploadUrl: "/api/admin/upload",
-        multipart: true,
-        contentType: file.type,
-      });
-      onChange(blob.url);
+      // Uploads straight to object storage from the browser; /api/admin/upload
+      // only issues the (admin-gated) target, so large videos never pass through
+      // a route handler.
+      onChange(await uploadMedia(file));
       toast.success(isVideo ? "Video uploaded." : "Image uploaded.", { id: toastId });
     } catch (error) {
       toast.error(error.message || "Upload failed.", { id: toastId });

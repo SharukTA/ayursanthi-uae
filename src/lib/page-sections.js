@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { CARD_MEDIA_SELECT, CARD_MEDIA_TAKE, pickCardMedia } from "@/lib/media";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared CMS-section data layer.
@@ -105,9 +106,14 @@ async function getProductItems() {
         stock: true,
         isFeatured: true,
         category: { select: { name: true } },
-        // Pull the first media item with its type so the card can render a
-        // video when the admin ordered a video ahead of the images.
-        images: { orderBy: { sortOrder: "asc" }, take: 1, select: { url: true, mediaType: true } },
+        // Several rows, not one: `pickCardMedia` looks past a video sorted first
+        // to find the still the card should show, so a deals/product carousel
+        // never pulls a multi-MB clip to paint a thumbnail.
+        images: {
+          orderBy: { sortOrder: "asc" },
+          take: CARD_MEDIA_TAKE,
+          select: CARD_MEDIA_SELECT,
+        },
         // Real customer ratings — averaged per product for the card star bar.
         reviews: { select: { rating: true } },
       },
@@ -117,12 +123,14 @@ async function getProductItems() {
       const rating = reviewCount
         ? p.reviews.reduce((sum, r) => sum + r.rating, 0) / reviewCount
         : 0;
+      // One entry, still-preferred — the shape every card already reads.
+      const cardMedia = pickCardMedia(p.images);
       return {
         id: p.id,
         title: null,
         subtitle: null,
         body: null,
-        imageUrl: p.images[0]?.url || "",
+        imageUrl: cardMedia[0]?.url || "",
         videoUrl: null,
         badge: null,
         href: `/products/${p.slug}`,
@@ -136,7 +144,7 @@ async function getProductItems() {
           stock: p.stock,
           isFeatured: p.isFeatured,
           category: p.category ? { name: p.category.name } : null,
-          images: p.images.map((img) => ({ url: img.url, mediaType: img.mediaType })),
+          images: cardMedia,
           rating,
           reviewCount,
         },
@@ -165,28 +173,37 @@ async function getReviewItems() {
           select: {
             name: true,
             slug: true,
-            images: { orderBy: { sortOrder: "asc" }, take: 1, select: { url: true, mediaType: true } },
+            images: {
+              orderBy: { sortOrder: "asc" },
+              take: CARD_MEDIA_TAKE,
+              select: CARD_MEDIA_SELECT,
+            },
           },
         },
       },
     });
-    return reviews.map((r) => ({
-      id: r.id,
-      title: r.user?.name || "Verified buyer",
-      subtitle: null,
-      body: r.comment,
-      // The reviewed product's primary media — shown as the card thumbnail. A
-      // video-first product needs a real <video>, so carry the type through.
-      imageUrl: r.product?.images?.[0]?.url || "",
-      imageMediaType: r.product?.images?.[0]?.mediaType || null,
-      videoUrl: null,
-      badge: null,
-      href: r.product?.slug ? `/products/${r.product.slug}` : null,
-      product: null,
-      // Extra fields the ReviewsSection renderer uses for real reviews.
-      rating: r.rating,
-      productName: r.product?.name || null,
-    }));
+    return reviews.map((r) => {
+      // Still-preferred: this thumbnail renders at 36-48px, so pulling a video
+      // for it was the single most wasteful request on the home page.
+      const cardMedia = pickCardMedia(r.product?.images);
+      return {
+        id: r.id,
+        title: r.user?.name || "Verified buyer",
+        subtitle: null,
+        body: r.comment,
+        // The reviewed product's primary media — shown as the card thumbnail. A
+        // video-only product needs a real <video>, so carry the type through.
+        imageUrl: cardMedia[0]?.url || "",
+        imageMediaType: cardMedia[0]?.mediaType || null,
+        videoUrl: null,
+        badge: null,
+        href: r.product?.slug ? `/products/${r.product.slug}` : null,
+        product: null,
+        // Extra fields the ReviewsSection renderer uses for real reviews.
+        rating: r.rating,
+        productName: r.product?.name || null,
+      };
+    });
   } catch {
     return [];
   }

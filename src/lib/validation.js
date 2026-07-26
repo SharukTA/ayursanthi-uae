@@ -7,24 +7,33 @@
 // not RFC 5322-exhaustive — the goal is to catch typos, not parse every legal
 // address. Real deliverability is confirmed by the welcome email.
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+export const EMAIL_MAX_LENGTH = 254; // RFC 5321 maximum address length.
 
-// Indian mobile numbers: 10 digits starting 6-9, optionally prefixed with
-// +91 / 91 / 0. We normalise to the bare 10-digit form before checking.
-const PHONE_RE = /^[6-9]\d{9}$/;
+// International phone numbers (E.164): an optional leading "+" country-code
+// prefix followed by 7–15 digits. 15 is the ITU E.164 maximum (country code +
+// national number) and 7 is a safe floor for the shortest national numbers.
+// The store ships worldwide, so we stay country-agnostic and do NOT enforce
+// per-country lengths or assume a trunk "0" — same permissive approach Amazon
+// takes behind its country-code picker.
+const PHONE_RE = /^\+?\d{7,15}$/;
 
 export const PASSWORD_MIN_LENGTH = 8;
 export const NAME_MAX_LENGTH = 80;
 
 /**
- * Strip a phone number down to the national 10-digit form, dropping spaces,
- * dashes, parentheses and a leading +91 / 91 / 0 country/trunk prefix.
- * Returns the cleaned string (may still be invalid — validate separately).
+ * Normalise a phone number to a compact international form: an optional leading
+ * "+" (country-code prefix) followed by digits, with spaces, dashes,
+ * parentheses and dots removed. We deliberately do NOT strip a country code or
+ * a leading trunk "0" — with worldwide shipping there's no single country to
+ * assume, so the number is kept as entered, just tidied. Returns the cleaned
+ * string (may still be invalid — validate separately).
  */
 export function normalizePhone(phone) {
   if (!phone) return "";
-  let digits = String(phone).replace(/[\s\-()]/g, "");
-  digits = digits.replace(/^\+?91/, "").replace(/^0+/, "");
-  return digits;
+  const raw = String(phone).trim();
+  const hasPlus = raw.startsWith("+");
+  const digits = raw.replace(/\D/g, "");
+  return hasPlus ? `+${digits}` : digits;
 }
 
 export function validateName(name) {
@@ -38,19 +47,21 @@ export function validateName(name) {
 export function validateEmail(email) {
   const trimmed = String(email || "").trim();
   if (!trimmed) return "Please enter your email address.";
+  if (trimmed.length > EMAIL_MAX_LENGTH) return "Please enter a valid email address.";
   if (!EMAIL_RE.test(trimmed)) return "Please enter a valid email address.";
   return null;
 }
 
 /**
  * Phone is optional. Pass { required: true } to make a blank value an error.
+ * Accepts international numbers from any country (see PHONE_RE).
  */
 export function validatePhone(phone, { required = false } = {}) {
   const raw = String(phone || "").trim();
-  if (!raw) return required ? "Please enter your mobile number." : null;
+  if (!raw) return required ? "Please enter your phone number." : null;
   const normalized = normalizePhone(raw);
   if (!PHONE_RE.test(normalized)) {
-    return "Please enter a valid 10-digit mobile number.";
+    return "Please enter a valid phone number, including the country code.";
   }
   return null;
 }

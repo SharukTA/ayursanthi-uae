@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { jsonError, ORDER_STATUSES, prismaErrorResponse, requireAdmin } from "@/lib/admin-api";
+import { cancelOrder } from "@/lib/order-actions";
+import { canTransitionOrderStatus } from "@/lib/returns";
 
 export const runtime = "nodejs";
 
@@ -9,8 +11,11 @@ export const runtime = "nodejs";
 //
 // Payment follows fulfillment, because Cash on Delivery is the only payment
 // method: the courier collects the cash at the door, so DELIVERED *is* the
-// moment the order becomes paid. CANCELLED means the cash was never collected.
-// Anything else leaves paymentStatus untouched.
+// moment the order becomes paid. Anything else leaves paymentStatus untouched.
+//
+// CANCELLED is not a plain status write: it has to put stock back and settle (or
+// refund) the money, so it goes through the same cancelOrder() the customer's
+// own cancel button uses.
 export async function PATCH(request, { params }) {
   const { error } = await requireAdmin();
   if (error) return error;
@@ -31,19 +36,55 @@ export async function PATCH(request, { params }) {
       return jsonError("Order not found.", 404);
     }
 
-    // Only ever move payment *off* PENDING. An order that already settled keeps
-    // its recorded outcome — cancelling a paid order is a refund, not a failure,
-    // and must not be silently rewritten to FAILED here.
-    let paymentStatus = null;
-    if (existing.paymentStatus === "PENDING") {
-      if (status === "DELIVERED") paymentStatus = "PAID";
-      else if (status === "CANCELLED") paymentStatus = "FAILED";
+    // Forward-only ladder: a status can only advance, never step back, and a
+    // DELIVERED or CANCELLED order is frozen. The admin dropdown greys out the
+    // illegal moves, but this is the check that actually enforces it — a
+    // hand-crafted PATCH cannot walk CONFIRMED back to PENDING or reopen a
+    // cancelled order.
+    if (!canTransitionOrderStatus(existing.status, status)) {
+      return jsonError(
+        `An order that is ${existing.status} cannot be changed to ${status}.`,
+        409
+      );
     }
+
+    if (status === "CANCELLED") {
+      const result = await cancelOrder({
+        orderId: id,
+        actor: "ADMIN",
+        reason: String(body.reason || "").trim() || "Cancelled by the store",
+      });
+
+      if (result.status !== "cancelled") {
+        return jsonError(result.message || "Could not cancel this order.", 409);
+      }
+
+      const order = await prisma.order.findUnique({
+        where: { id },
+        include: {
+          user: { select: { id: true, name: true, email: true, phone: true } },
+          items: true,
+        },
+      });
+
+      return Response.json({ order });
+    }
+
+    // Only ever move payment *off* PENDING. An order that already settled keeps
+    // its recorded outcome — a refunded order must not be rewritten to PAID by a
+    // later status change.
+    const paymentStatus =
+      existing.paymentStatus === "PENDING" && status === "DELIVERED" ? "PAID" : null;
 
     const order = await prisma.$transaction(async (tx) => {
       const updated = await tx.order.update({
         where: { id },
-        data: { status, ...(paymentStatus ? { paymentStatus } : {}) },
+        data: {
+          status,
+          ...(paymentStatus ? { paymentStatus } : {}),
+          // Stamped once: this is what starts the customer's return window.
+          ...(status === "DELIVERED" && !existing.deliveredAt ? { deliveredAt: new Date() } : {}),
+        },
         include: {
           user: { select: { id: true, name: true, email: true, phone: true } },
           items: true,

@@ -40,7 +40,8 @@ export async function POST(request) {
       !shippingAddress.line1 ||
       !shippingAddress.city ||
       !shippingAddress.state ||
-      !shippingAddress.postalCode
+      !shippingAddress.postalCode ||
+      !shippingAddress.country
     ) {
       return Response.json(
         { message: "Please provide all required shipping address fields." },

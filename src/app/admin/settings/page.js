@@ -4,11 +4,12 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Settings, ArrowLeft, Loader2, Save, Phone, Share2 } from "lucide-react";
+import { Settings, ArrowLeft, Loader2, Save, Phone, Share2, Truck } from "lucide-react";
 import { FadeIn, PageReveal } from "@/components/Animated";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { Button } from "@/components/ui/button";
+import { validateSettings } from "@/lib/settings-shared";
 
 // Field groups for the settings form. `key` must match a key in lib/settings.js.
 const GROUPS = [
@@ -22,6 +23,19 @@ const GROUPS = [
       { key: "contact_address", label: "Address", placeholder: "Kochi, Kerala, India" },
       { key: "contact_hours", label: "Working hours", placeholder: "Mon-Sat, 9AM - 6PM" },
       { key: "contact_dispatch", label: "Fulfillment note", placeholder: "98% Same-day dispatch" },
+    ],
+  },
+  {
+    title: "Delivery",
+    icon: Truck,
+    fields: [
+      {
+        key: "free_shipping_threshold",
+        label: "Free-shipping threshold (INR)",
+        placeholder: "1000",
+        type: "number",
+        hint: "Orders with a goods subtotal (incl. GST) at or above this amount ship free. Below it, the per-product shipping fees apply.",
+      },
     ],
   },
   {
@@ -71,6 +85,15 @@ export default function AdminSettingsPage() {
 
   async function handleSave(e) {
     e.preventDefault();
+
+    // Catch bad numeric settings (e.g. a non-numeric or negative threshold)
+    // before the round-trip. The API enforces the same rule server-side.
+    const validationError = validateSettings(values);
+    if (validationError) {
+      toast.error(validationError);
+      return;
+    }
+
     setSaving(true);
     const toastId = toast.loading("Saving settings...");
     try {
@@ -118,7 +141,7 @@ export default function AdminSettingsPage() {
               Site Settings
             </h1>
             <p className="mt-1 text-sm text-slate-300">
-              Contact details and social links shown on the Contact page and footer.
+              Contact details, social links, and delivery rules used across the store.
             </p>
           </PageReveal>
         </div>
@@ -139,13 +162,18 @@ export default function AdminSettingsPage() {
                     <label key={field.key} className="grid gap-2 text-xs font-semibold text-slate-800">
                       {field.label}
                       <input
-                        type="text"
+                        type={field.type || "text"}
+                        min={field.type === "number" ? 0 : undefined}
+                        step={field.type === "number" ? "1" : undefined}
                         value={values[field.key] ?? ""}
                         onChange={(e) => update(field.key, e.target.value)}
                         disabled={saving}
                         placeholder={field.placeholder}
                         className="w-full min-h-10 rounded border border-input bg-white px-3 text-xs font-normal text-slate-900 outline-none transition focus:border-emerald-700"
                       />
+                      {field.hint ? (
+                        <span className="text-[10px] font-normal text-slate-500">{field.hint}</span>
+                      ) : null}
                     </label>
                   ))}
                 </div>

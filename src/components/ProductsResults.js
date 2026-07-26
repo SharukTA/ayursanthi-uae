@@ -99,6 +99,12 @@ export function ProductsResults({
                 categoryName={product.categoryName}
                 rating={product.rating}
                 reviewCount={product.reviewCount}
+                // Amazon's catalog card: photo on top, text in a white block
+                // below, so nothing is drawn over the product image. The photo
+                // is 4:5 to match the shape stills are uploaded in, which keeps
+                // it flush to the card edges with no letterboxing.
+                layout="stacked"
+                aspect="aspect-[4/5]"
               />
             ) : (
               <ProductListRow

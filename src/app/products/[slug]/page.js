@@ -17,6 +17,7 @@ import { ProductReviews } from "@/components/ProductReviews";
 import { ProductDescription, AboutThisItem } from "@/components/ProductDescription";
 import { PageSections } from "@/components/HomeSections";
 import { getPageSections } from "@/lib/page-sections";
+import { CARD_MEDIA_TAKE, pickCardMedia } from "@/lib/media";
 
 export async function generateMetadata({ params }) {
   const { slug } = await params;
@@ -95,9 +96,11 @@ export default async function ProductDetailPage({ params }) {
     take: 3,
     include: {
       category: { select: { name: true } },
+      // Related products render as ProductCards, so pull enough rows for
+      // `pickCardMedia` to find a still rather than handing a card a video.
       images: {
         orderBy: { sortOrder: "asc" },
-        take: 1,
+        take: CARD_MEDIA_TAKE,
       },
       reviews: {
         select: { rating: true },
@@ -190,6 +193,11 @@ export default async function ProductDetailPage({ params }) {
                 </span>
               )}
             </div>
+            {/* Amazon shows a tax-inclusive price, so prices never grow at
+                checkout — the GST is already inside this number. */}
+            <p className="mt-1.5 text-xs font-medium text-[#565959]">
+              Inclusive of all taxes
+            </p>
 
             {/* Short description */}
             <p className="mt-6 text-sm leading-6 text-[#3f4545]">
@@ -215,6 +223,7 @@ export default async function ProductDetailPage({ params }) {
                 ...product,
                 price: Number(product.price),
                 mrp: product.mrp ? Number(product.mrp) : null,
+                shippingFee: Number(product.shippingFee ?? 0),
               }}
               pdfHref={`/products/${product.slug}/pdf`}
             />
@@ -307,7 +316,9 @@ export default async function ProductDetailPage({ params }) {
                 return (
                   <ProductCard
                     key={rel.id}
-                    product={rel}
+                    // Still-preferred thumbnail; the raw row is ordered by
+                    // sortOrder and may lead with a video.
+                    product={{ ...rel, images: pickCardMedia(rel.images) }}
                     categoryName={rel.category?.name}
                     rating={rating}
                     reviewCount={count}

@@ -4,14 +4,39 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   ShoppingBag,
-  IndianRupee,
   ArrowRight,
   Clock,
   Package,
   AlertTriangle,
   RefreshCw,
+  User,
+  KeyRound,
 } from "lucide-react";
 import { FadeIn, PageReveal, Stagger, StaggerItem } from "@/components/Animated";
+
+// Amazon's "Your Account" hub is a grid of large cards, each an icon + title +
+// one-line description, linking to a section. These are the customer-facing
+// destinations this app actually has.
+const ACCOUNT_CARDS = [
+  {
+    href: "/dashboard/orders",
+    icon: ShoppingBag,
+    title: "Your Orders",
+    desc: "Track, return, cancel an order, or buy things again",
+  },
+  {
+    href: "/dashboard/change-password",
+    icon: KeyRound,
+    title: "Login & Security",
+    desc: "Change your password and keep your account secure",
+  },
+  {
+    href: "/dashboard/profile",
+    icon: User,
+    title: "Your Profile",
+    desc: "Edit your name, phone, and personal details",
+  },
+];
 
 export default function DashboardPage() {
   const [data, setData] = useState(null);
@@ -42,7 +67,7 @@ export default function DashboardPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[320px]">
-        <p className="text-sm text-[#0f1111] font-medium animate-pulse">Loading your dashboard...</p>
+        <p className="text-sm text-[#0f1111] font-medium animate-pulse">Loading your account...</p>
       </div>
     );
   }
@@ -54,7 +79,7 @@ export default function DashboardPage() {
           <AlertTriangle className="size-6" />
         </span>
         <div>
-          <h2 className="text-base font-bold text-rose-900">Unable to load dashboard</h2>
+          <h2 className="text-base font-bold text-rose-900">Unable to load your account</h2>
           <p className="mt-1 text-sm text-rose-700">
             {error || "Could not fetch your data. Please try again."}
           </p>
@@ -70,23 +95,6 @@ export default function DashboardPage() {
     );
   }
 
-  const stats = [
-    {
-      label: "Total Orders",
-      value: data.totalOrders,
-      icon: ShoppingBag,
-      color: "bg-indigo-100 text-indigo-800",
-      href: "/dashboard/orders",
-    },
-    {
-      label: "Total Spent",
-      value: `Rs. ${Number(data.totalSpent).toLocaleString()}`,
-      icon: IndianRupee,
-      color: "bg-emerald-100 text-emerald-800",
-      href: "/dashboard/orders",
-    },
-  ];
-
   const statusColor = (status) => {
     switch (status) {
       case "DELIVERED": return "bg-emerald-50 text-emerald-800";
@@ -101,95 +109,94 @@ export default function DashboardPage() {
   return (
     <div className="flex flex-col gap-8">
       <PageReveal>
-        <h1 className="text-2xl font-bold text-[#0f1111]">My Dashboard</h1>
-        <p className="mt-1 text-sm text-[#3f4545]">
-          Overview of your orders and account activity.
-        </p>
+        <h1 className="text-[28px] font-bold leading-none text-[#0f1111]">Your Account</h1>
       </PageReveal>
 
-      {/* Stats grid */}
-      <Stagger className="grid gap-4 sm:grid-cols-2">
-        {stats.map((stat) => {
-          const Icon = stat.icon;
+      {/* Account hub cards — Amazon's "Your Account" grid */}
+      <Stagger className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {ACCOUNT_CARDS.map((card) => {
+          const Icon = card.icon;
           return (
-            <StaggerItem key={stat.label}>
+            <StaggerItem key={card.href}>
               <Link
-                href={stat.href}
-                className="group flex items-center justify-between rounded-md border border-border bg-white p-5 shadow-sm transition hover:border-[#adb1b8] hover:shadow-md"
+                href={card.href}
+                className="group flex h-full items-start gap-4 rounded-lg border border-[#d5d9d9] bg-white p-5 shadow-sm transition hover:border-[#adb1b8] hover:shadow-md"
               >
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-[#565959]">
-                    {stat.label}
-                  </p>
-                  <p className="mt-2 text-xl font-extrabold text-[#0f1111]">{stat.value}</p>
-                </div>
-                <span className="flex size-11 shrink-0 items-center justify-center rounded-md bg-[#232f3e] text-white">
-                  <Icon className="size-5" />
+                <span className="flex size-14 shrink-0 items-center justify-center rounded-full bg-[#f0f2f2] text-[#232f3e] ring-1 ring-[#d5d9d9] transition group-hover:bg-[#eaeded]">
+                  <Icon className="size-6" />
                 </span>
+                <div className="min-w-0">
+                  <p className="text-[16px] font-bold text-[#0f1111] group-hover:text-[#c7511f]">
+                    {card.title}
+                  </p>
+                  <p className="mt-1 text-[13px] leading-5 text-[#565959]">{card.desc}</p>
+                </div>
               </Link>
             </StaggerItem>
           );
         })}
       </Stagger>
 
-      <div className="grid gap-6">
-        {/* Recent Orders */}
-        <FadeIn className="rounded-md border border-border bg-white p-5 shadow-sm">
-          <div className="mb-4 flex items-center justify-between border-b border-[#d5d9d9] pb-3">
-            <h2 className="flex items-center gap-2 text-sm font-bold text-[#0f1111]">
-              <Clock className="size-4 text-[#0f1111]" />
-              Recent Orders
-            </h2>
-            <Link
-              href="/dashboard/orders"
-              className="flex items-center gap-1 text-xs font-semibold text-[#0f1111] hover:underline"
-            >
-              View all <ArrowRight className="size-3" />
-            </Link>
-          </div>
+      {/* Recent orders panel */}
+      <FadeIn className="rounded-lg border border-[#d5d9d9] bg-white p-5 shadow-sm">
+        <div className="mb-4 flex items-center justify-between border-b border-[#d5d9d9] pb-3">
+          <h2 className="flex items-center gap-2 text-[15px] font-bold text-[#0f1111]">
+            <Clock className="size-4 text-[#0f1111]" />
+            Recent Orders
+          </h2>
+          <Link
+            href="/dashboard/orders"
+            className="flex items-center gap-1 text-[13px] font-semibold text-[#007185] transition hover:text-[#c7511f] hover:underline"
+          >
+            View all <ArrowRight className="size-3" />
+          </Link>
+        </div>
 
-          {data.recentOrders.length === 0 ? (
-            <div className="py-8 text-center">
-              <Package className="mx-auto size-10 text-[#aab7b8]" />
-              <p className="mt-3 text-xs text-[#565959]">
-                No orders yet.{" "}
-                <Link href="/products" className="font-semibold text-[#0f1111] hover:underline">
-                  Shop now
-                </Link>
-              </p>
-            </div>
-          ) : (
-            <div className="divide-y divide-[#d5d9d9]">
-              {data.recentOrders.map((order) => (
-                <div key={order.id} className="flex items-center justify-between py-3">
-                  <div>
-                    <p className="font-mono text-xs font-bold text-[#0f1111]">
-                      {order.orderNumber}
-                    </p>
-                    <p className="mt-0.5 text-[10px] text-[#565959]">
-                      {new Date(order.createdAt).toLocaleDateString("en-IN", {
-                        year: "numeric",
-                        month: "short",
-                        day: "numeric",
-                      })}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xs font-extrabold text-[#0f1111]">
-                      Rs. {Number(order.total).toLocaleString()}
-                    </p>
-                    <span
-                      className={`mt-0.5 inline-block rounded px-1.5 py-0.5 text-[9px] font-bold ${statusColor(order.status)}`}
-                    >
-                      {order.status}
-                    </span>
-                  </div>
+        {data.recentOrders.length === 0 ? (
+          <div className="py-8 text-center">
+            <Package className="mx-auto size-10 text-[#aab7b8]" />
+            <p className="mt-3 text-xs text-[#565959]">
+              No orders yet.{" "}
+              <Link href="/products" className="font-semibold text-[#007185] hover:text-[#c7511f] hover:underline">
+                Shop now
+              </Link>
+            </p>
+          </div>
+        ) : (
+          <div className="divide-y divide-[#d5d9d9]">
+            {data.recentOrders.map((order) => (
+              <Link
+                key={order.id}
+                href="/dashboard/orders"
+                className="flex items-center justify-between gap-3 py-3 transition hover:bg-[#f7fafa]"
+              >
+                <div className="min-w-0">
+                  <p className="font-mono text-xs font-bold text-[#0f1111]">
+                    {order.orderNumber}
+                  </p>
+                  <p className="mt-0.5 text-[10px] text-[#565959]">
+                    {new Date(order.createdAt).toLocaleDateString("en-IN", {
+                      year: "numeric",
+                      month: "short",
+                      day: "numeric",
+                    })}
+                  </p>
                 </div>
-              ))}
-            </div>
-          )}
-        </FadeIn>
-      </div>
+                <div className="shrink-0 text-right">
+                  <p className="text-xs font-extrabold text-[#0f1111]">
+                    Rs. {Number(order.total).toLocaleString()}
+                  </p>
+                  <span
+                    className={`mt-0.5 inline-block rounded px-1.5 py-0.5 text-[9px] font-bold ${statusColor(order.status)}`}
+                  >
+                    {order.status}
+                  </span>
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
+      </FadeIn>
     </div>
   );
 }

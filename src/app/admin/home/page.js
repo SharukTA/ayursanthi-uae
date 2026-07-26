@@ -4,7 +4,7 @@ import { useEffect, useId, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { upload } from "@vercel/blob/client";
+import { uploadMedia } from "@/lib/storage/client";
 import {
   LayoutTemplate,
   Plus,
@@ -142,8 +142,8 @@ const STATS_METRIC_OPTIONS = [
 // Per-field labels + placeholders. The same generic field is reused across
 // section types but labelled to fit the context.
 const FIELD_META = {
-  videoUrl: { label: "Video URL *", type: "url", placeholder: "/My face website Video.mp4 or https://..." },
-  imageUrl: { label: "Image URL", type: "url", placeholder: "/image.png or https://..." },
+  videoUrl: { label: "Video URL *", type: "url", placeholder: "Upload a video, or paste https://..." },
+  imageUrl: { label: "Image URL", type: "url", placeholder: "Upload an image, or paste https://..." },
   title: { label: "Title / Name", type: "text", placeholder: "e.g. Kamakalpa Nabhi Oil" },
   subtitle: { label: "Subtitle / Label", type: "text", placeholder: "e.g. Deals on desires" },
   body: { label: "Description / Quote", type: "textarea", placeholder: "Longer text..." },
@@ -1122,18 +1122,23 @@ function VideoUrlField({ label, placeholder, value, onChange }) {
     e.target.value = ""; // allow re-picking the same file later
     if (!file) return;
 
+    // `accept` is only a hint — the picker still allows "All files". Catch an
+    // unplayable container here, before any bytes are uploaded.
+    if (file.type === "video/quicktime" || /\.mov$/i.test(file.name)) {
+      toast.error(
+        "QuickTime (.mov) videos don't play in Chrome or Firefox. Convert to MP4 first — scripts/compress-videos.mjs does this and shrinks the file too.",
+        { duration: 8000 }
+      );
+      return;
+    }
+
     setUploading(true);
     const toastId = toast.loading("Uploading video...");
     try {
-      // Upload straight to Vercel Blob from the browser; /api/admin/upload only
-      // issues the (admin-gated) token. multipart handles large video files.
-      const blob = await upload(file.name, file, {
-        access: "public",
-        handleUploadUrl: "/api/admin/upload",
-        multipart: true,
-        contentType: file.type,
-      });
-      onChange(blob.url);
+      // Uploads straight to object storage from the browser; /api/admin/upload
+      // only issues the (admin-gated) target, so large videos never pass through
+      // a route handler.
+      onChange(await uploadMedia(file));
       toast.success("Video uploaded.", { id: toastId });
     } catch (error) {
       toast.error(error.message || "Upload failed.", { id: toastId });
@@ -1166,7 +1171,8 @@ function VideoUrlField({ label, placeholder, value, onChange }) {
           {uploading ? "Uploading..." : "Upload from computer"}
           <input
             type="file"
-            accept="video/mp4,video/webm,video/ogg,video/quicktime"
+            // No .mov — it only plays in Safari. See /api/admin/upload.
+            accept="video/mp4,video/webm,video/ogg"
             onChange={handleFile}
             disabled={uploading}
             className="hidden"
@@ -1203,14 +1209,9 @@ function ImageUrlField({ label, placeholder, value, onChange }) {
     setUploading(true);
     const toastId = toast.loading("Uploading image...");
     try {
-      // Upload straight to Vercel Blob from the browser; /api/admin/upload only
-      // issues the (admin-gated) token, so there's no serverless body limit.
-      const blob = await upload(file.name, file, {
-        access: "public",
-        handleUploadUrl: "/api/admin/upload",
-        contentType: file.type,
-      });
-      onChange(blob.url);
+      // Uploads straight to object storage from the browser; /api/admin/upload
+      // only issues the (admin-gated) target, so there's no serverless body limit.
+      onChange(await uploadMedia(file));
       toast.success("Image uploaded.", { id: toastId });
     } catch (error) {
       toast.error(error.message || "Upload failed.", { id: toastId });

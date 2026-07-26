@@ -1,23 +1,24 @@
-import { del } from "@vercel/blob";
 import { prisma } from "@/lib/prisma";
+import { deleteByUrl, isManagedUrl } from "@/lib/storage";
 import { jsonError, prismaErrorResponse, requireAdmin } from "@/lib/admin-api";
 
 export const runtime = "nodejs";
 
-// Delete the backing Vercel Blob file for a media URL, but only for blobs we host
-// and only when no other product image still points at it. External URLs and
-// legacy /uploads/ files (served statically from the deploy) are left untouched.
+// Delete the backing file for a media URL, but only for files we host and only
+// when no other product image still points at it. `deleteByUrl` ignores anything
+// the active storage driver does not own — externally pasted URLs, and the
+// Vercel Blob URLs left over from before the R2 migration.
 async function maybeDeleteUploadedFile(url) {
-  if (!url || !url.includes("blob.vercel-storage.com")) return;
+  if (!url || !isManagedUrl(url)) return;
 
   const stillReferenced = await prisma.productImage.count({ where: { url } });
   if (stillReferenced > 0) return;
 
   try {
-    await del(url);
+    await deleteByUrl(url);
   } catch (error) {
-    // A missing blob is fine — the goal (no orphan) is already met.
-    console.error("Failed to delete uploaded media blob:", error);
+    // A missing object is fine — the goal (no orphan) is already met.
+    console.error("Failed to delete uploaded media file:", error);
   }
 }
 

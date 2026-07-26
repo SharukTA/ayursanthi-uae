@@ -1,9 +1,9 @@
 /**
  * Email module — provider-agnostic transactional email sender.
  *
- * Mirrors the design of `src/lib/sms.js`: configured entirely through
- * environment variables and HTTP (no SMTP library / extra dependency), so the
- * app stays portable and works out-of-the-box in development.
+ * Configured entirely through environment variables and HTTP (no SMTP library /
+ * extra dependency), so the app stays portable and works out-of-the-box in
+ * development.
  *
  *   EMAIL_PROVIDER   "resend" (default) | "console"
  *   EMAIL_FROM       From header, e.g. "Ayursanthi <welcome@ayursanthi.com>"

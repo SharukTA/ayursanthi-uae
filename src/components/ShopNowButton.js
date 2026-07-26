@@ -18,10 +18,12 @@ import { ChevronRight } from "lucide-react";
 export function ShopNowButton({ href, size = "md", className = "" }) {
   const router = useRouter();
 
+  // Tap targets follow Amazon's mobile CTA sizing — tall enough to hit with a
+  // thumb, and never allowed to wrap or be clipped by a cramped card footer.
   const sizing =
     size === "sm"
-      ? "gap-1 px-3 py-1.5 text-[11px]"
-      : "gap-1 px-3.5 py-2 text-xs";
+      ? "gap-1 px-3 py-2 text-[11px]"
+      : "gap-1 px-3.5 py-2.5 text-xs";
 
   return (
     <button
@@ -33,7 +35,9 @@ export function ShopNowButton({ href, size = "md", className = "" }) {
       }}
       // z-20 keeps the button above the card's stretched link overlay (z-10), so
       // clicks land here rather than on the card link underneath.
-      className={`relative z-20 inline-flex shrink-0 items-center rounded-full bg-[#ffd814] font-bold text-[#0f1111] shadow-md transition-colors hover:bg-[#f7ca00] ${sizing} ${className}`}
+      // `justify-center` + `whitespace-nowrap` so callers can stretch this to
+      // `w-full` on mobile and still get a centred, never-wrapping label.
+      className={`relative z-20 inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-full bg-[#ffd814] font-bold text-[#0f1111] shadow-md transition-colors hover:bg-[#f7ca00] ${sizing} ${className}`}
     >
       Shop now
       <ChevronRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />

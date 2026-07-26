@@ -69,6 +69,10 @@ export function ProductActions({ product, pdfHref }) {
     productId: product.id,
     name: product.name,
     price: Number(product.price),
+    // Carried so the cart/checkout can preview GST and delivery accurately; the
+    // server still recomputes both from the DB before charging anything.
+    gstRate: Number(product.gstRate) || 0,
+    shippingFee: Number(product.shippingFee) || 0,
     image: product.images?.[0]?.url || "",
     // Snapshot the media type too: a video-first product must render as a
     // <video> in the cart, not as a (silently blank) background-image.

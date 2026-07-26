@@ -20,7 +20,8 @@ import {
   Video,
   ArrowUp,
   ArrowDown,
-  ListPlus
+  ListPlus,
+  AlertTriangle
 } from "lucide-react";
 import { FadeIn, PageReveal, Stagger, StaggerItem } from "@/components/Animated";
 import { SiteHeader } from "@/components/SiteHeader";
@@ -29,6 +30,7 @@ import { Button } from "@/components/ui/button";
 import { MediaUrlField } from "@/components/MediaUrlField";
 import { MarkdownDescriptionField } from "@/components/MarkdownDescriptionField";
 import { useConfirm } from "@/components/ConfirmDialog";
+import { GST_RATES, FREE_SHIPPING_THRESHOLD } from "@/lib/pricing";
 
 export default function AdminProductsPage() {
   const router = useRouter();
@@ -39,6 +41,10 @@ export default function AdminProductsPage() {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
+  // Live free-shipping threshold (admin-editable in /admin/settings). Used only
+  // to warn that a per-product delivery fee is pointless once a product's price
+  // reaches the threshold, since any cart containing it then ships free.
+  const [freeShipThreshold, setFreeShipThreshold] = useState(FREE_SHIPPING_THRESHOLD);
 
   // Form Fields
   const [name, setName] = useState("");
@@ -46,6 +52,12 @@ export default function AdminProductsPage() {
   const [categoryId, setCategoryId] = useState("");
   const [price, setPrice] = useState("");
   const [mrp, setMrp] = useState("");
+  // Prices are GST-inclusive: this slab only splits the tax already inside the
+  // price for the invoice. Default 0% (unclassified). See lib/pricing.js.
+  const [gstRate, setGstRate] = useState("0");
+  // Per-product delivery fee, summed per order and waived above the free-shipping
+  // threshold. Blank = free shipping for this product.
+  const [shippingFee, setShippingFee] = useState("");
   const [offerLabel, setOfferLabel] = useState("");
   const [stock, setStock] = useState("");
   // Ordered gallery of media rows: { url, altText, mediaType: "IMAGE" | "VIDEO" }.
@@ -70,6 +82,8 @@ export default function AdminProductsPage() {
     setCategoryId("");
     setPrice("");
     setMrp("");
+    setGstRate("0");
+    setShippingFee("");
     setOfferLabel("");
     setStock("");
     setMedia([]);
@@ -86,6 +100,12 @@ export default function AdminProductsPage() {
     setCategoryId(prod.categoryId || "");
     setPrice(prod.price != null ? String(prod.price) : "");
     setMrp(prod.mrp != null ? String(prod.mrp) : "");
+    setGstRate(prod.gstRate != null ? String(prod.gstRate) : "0");
+    setShippingFee(
+      prod.shippingFee != null && Number(prod.shippingFee) > 0
+        ? String(prod.shippingFee)
+        : ""
+    );
     setOfferLabel(prod.offerLabel || "");
     setStock(prod.stock != null ? String(prod.stock) : "");
     setMedia(
@@ -201,6 +221,29 @@ export default function AdminProductsPage() {
     initPage();
   }, []);
 
+  // Pull the live free-shipping threshold so the shipping-fee field can warn
+  // when a product's price already clears it (making the fee dead data).
+  useEffect(() => {
+    let active = true;
+    fetch("/api/settings")
+      .then((res) => res.json())
+      .then((data) => {
+        const n = Number(data?.settings?.free_shipping_threshold);
+        if (active && Number.isFinite(n) && n >= 0) setFreeShipThreshold(n);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // True when a delivery fee is set on a product priced at/above the threshold:
+  // any cart with it clears the free-shipping bar, so the fee is never charged.
+  const shippingFeeIneffective =
+    Number(shippingFee) > 0 &&
+    Number(price) > 0 &&
+    Number(price) >= freeShipThreshold;
+
   const fetchProducts = async () => {
     try {
       const res = await fetch("/api/admin/products");
@@ -262,6 +305,8 @@ export default function AdminProductsPage() {
         categoryId,
         price: Number(price),
         mrp: mrp ? Number(mrp) : undefined,
+        gstRate: Number(gstRate) || 0,
+        shippingFee: shippingFee ? Number(shippingFee) : 0,
         offerLabel: editingId ? offerLabel.trim() : offerLabel.trim() || undefined,
         stock: stock ? Number(stock) : 0,
         shortDescription: editingId ? shortDescription.trim() : shortDescription.trim() || undefined,
@@ -451,6 +496,56 @@ export default function AdminProductsPage() {
                     placeholder="1299"
                     className="w-full min-w-0 min-h-10 rounded border border-input bg-white px-3 text-xs font-normal outline-none transition focus:border-emerald-700"
                   />
+                </label>
+
+                <label className="grid gap-2 min-w-0 text-xs font-semibold text-slate-800">
+                  GST Rate
+                  <select
+                    value={gstRate}
+                    onChange={(e) => setGstRate(e.target.value)}
+                    disabled={submitting}
+                    className="w-full min-w-0 min-h-10 rounded border border-input bg-white px-3 text-xs font-normal outline-none transition focus:border-emerald-700"
+                  >
+                    {GST_RATES.map((rate) => (
+                      <option key={rate} value={rate}>
+                        {rate}%{rate === 0 ? " (exempt)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="text-[10px] font-normal text-slate-500">
+                    Price above is GST-inclusive — this only splits the tax out on
+                    the invoice. Ayurvedic goods are often 5% or 12%.
+                  </span>
+                </label>
+
+                <label className="grid gap-2 min-w-0 text-xs font-semibold text-slate-800">
+                  Shipping Fee (INR)
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={shippingFee}
+                    onChange={(e) => setShippingFee(e.target.value)}
+                    disabled={submitting}
+                    placeholder="0 = free"
+                    className="w-full min-w-0 min-h-10 rounded border border-input bg-white px-3 text-xs font-normal outline-none transition focus:border-emerald-700"
+                  />
+                  <span className="text-[10px] font-normal text-slate-500">
+                    Per-product delivery charge. Summed per order and waived once the
+                    cart passes the free-shipping threshold.
+                  </span>
+                  {shippingFeeIneffective ? (
+                    <span className="flex items-start gap-1.5 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-[10px] font-normal leading-snug text-amber-800">
+                      <AlertTriangle className="mt-px size-3 shrink-0" />
+                      <span>
+                        This price (Rs. {Number(price).toLocaleString()}) is at or
+                        above the free-shipping threshold (Rs.{" "}
+                        {Number(freeShipThreshold).toLocaleString()}), so any order
+                        with this product ships free and this delivery fee will
+                        never be charged. Set it to 0, or lower the price.
+                      </span>
+                    </span>
+                  ) : null}
                 </label>
 
                 <label className="grid gap-2 min-w-0 text-xs font-semibold text-slate-800 sm:col-span-2">

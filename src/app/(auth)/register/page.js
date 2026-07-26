@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { Logo3D } from "@/components/Logo3D";
+import { PhoneField } from "@/components/PhoneField";
 import { validateRegistration } from "@/lib/validation";
 
 export default function RegisterPage() {
@@ -145,23 +146,19 @@ export default function RegisterPage() {
 
           <label className="mt-4 grid gap-2 text-sm font-semibold text-slate-900">
             <span>Mobile number <span className="font-normal text-slate-400">(optional)</span></span>
-            <input
-              type="tel"
+            <PhoneField
               name="phone"
               value={phone}
-              onChange={(e) => {
-                setPhone(e.target.value);
+              onChange={(v) => {
+                setPhone(v);
                 clearError("phone");
               }}
               disabled={loading}
-              inputMode="tel"
-              aria-invalid={errors.phone ? "true" : undefined}
-              placeholder="10-digit mobile number"
-              className={`min-h-12 w-full rounded-md border bg-white px-4 text-sm font-normal text-slate-900 outline-none transition focus:ring-4 disabled:opacity-60 ${
-                errors.phone
-                  ? "border-red-500 focus:border-red-500 focus:ring-red-500/15"
-                  : "border-slate-300 focus:border-[#007185] focus:ring-[#007185]/25"
-              }`}
+              error={!!errors.phone}
+              defaultCountry="IN"
+              placeholder="Mobile number"
+              className="min-h-12 w-full bg-white font-normal text-slate-900 transition focus-within:border-[#007185] focus-within:ring-4 focus-within:ring-[#007185]/25"
+              inputClassName="px-3 text-sm"
             />
             {errors.phone && <span className="text-xs font-normal text-red-600">{errors.phone}</span>}
           </label>

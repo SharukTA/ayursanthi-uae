@@ -38,7 +38,13 @@ export default function LoginPage() {
 
       toast.success("Welcome back!", { id: toastId });
       window.dispatchEvent(new Event("authUpdate"));
-      router.push("/");
+
+      // Return the user to whatever page bounced them here (proxy.js adds
+      // `?next=`). Only same-site paths are accepted — taking an arbitrary
+      // value would turn login into an open redirect to any external URL.
+      const next = new URLSearchParams(window.location.search).get("next");
+      const safeNext = next && next.startsWith("/") && !next.startsWith("//") ? next : null;
+      router.push(safeNext || (data.user?.role === "ADMIN" ? "/admin" : "/"));
       router.refresh();
     } catch (error) {
       toast.error(error.message || "Something went wrong. Please try again.", { id: toastId });

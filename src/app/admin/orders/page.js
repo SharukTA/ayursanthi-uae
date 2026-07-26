@@ -4,10 +4,11 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ShoppingBag, ArrowLeft, Loader2, Package, Search } from "lucide-react";
+import { ShoppingBag, ArrowLeft, Loader2, Package, RotateCcw, Search } from "lucide-react";
 import { FadeIn, PageReveal } from "@/components/Animated";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
+import { ORDER_STATUS_TRANSITIONS } from "@/lib/returns";
 
 const ORDER_STATUSES = [
   "PENDING",
@@ -79,12 +80,18 @@ export default function AdminOrdersPage() {
       if (!res.ok) {
         toast.error(data.message || "Failed to update status.", { id: toastId });
       } else {
-        // paymentStatus rides along: marking an order DELIVERED settles the cash,
-        // so the Payment column has to reflect that without a reload.
+        // paymentStatus rides along: marking an order DELIVERED settles the cash
+        // and cancelling a paid one refunds it, so the Payment column has to
+        // reflect that without a reload.
         setOrders((prev) =>
           prev.map((o) =>
             o.id === orderId
-              ? { ...o, status: data.order.status, paymentStatus: data.order.paymentStatus }
+              ? {
+                  ...o,
+                  status: data.order.status,
+                  paymentStatus: data.order.paymentStatus,
+                  refundedTotal: data.order.refundedTotal,
+                }
               : o
           )
         );
@@ -121,18 +128,32 @@ export default function AdminOrdersPage() {
 
       <section className="bg-slate-950 py-8 text-white">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <Link
-            href="/admin"
-            className="inline-flex items-center gap-1 text-xs font-bold text-white/70 hover:text-white"
-          >
-            <ArrowLeft className="size-3.5" /> Back to Console
-          </Link>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <Link
+              href="/admin"
+              className="inline-flex items-center gap-1 text-xs font-bold text-white/70 hover:text-white"
+            >
+              <ArrowLeft className="size-3.5" /> Back to Console
+            </Link>
+            <Link
+              href="/admin/returns"
+              style={{
+                color: "#ffffff",
+                backgroundColor: "rgba(255,255,255,0.12)",
+                border: "1px solid rgba(255,255,255,0.35)",
+              }}
+              className="inline-flex items-center gap-1 rounded px-2.5 py-1 text-xs font-bold"
+            >
+              <RotateCcw className="size-3.5" /> Returns &amp; Refunds
+            </Link>
+          </div>
           <PageReveal>
             <h1 className="mt-2 flex items-center gap-2 text-3xl font-bold tracking-tight text-white">
               <ShoppingBag className="size-7" /> Order Management
             </h1>
             <p className="mt-1 text-sm text-white/70">
               Update fulfillment status — changes appear instantly in the customer&apos;s orders page.
+              Setting an order to CANCELLED puts its stock back and refunds anything already paid.
             </p>
           </PageReveal>
         </div>
@@ -198,11 +219,20 @@ export default function AdminOrdersPage() {
                     <td className="p-4">
                       <span
                         className={`font-bold ${
-                          order.paymentStatus === "PAID" ? "text-emerald-700" : "text-amber-600"
+                          order.paymentStatus === "PAID"
+                            ? "text-emerald-700"
+                            : order.paymentStatus === "REFUNDED"
+                              ? "text-slate-700"
+                              : "text-amber-600"
                         }`}
                       >
                         {order.paymentStatus}
                       </span>
+                      {Number(order.refundedTotal) > 0 ? (
+                        <p className="mt-0.5 text-[10px] font-bold text-slate-500">
+                          Rs. {Number(order.refundedTotal).toLocaleString()} refunded
+                        </p>
+                      ) : null}
                     </td>
                     <td className="p-4">
                       <span
@@ -214,18 +244,31 @@ export default function AdminOrdersPage() {
                       </span>
                     </td>
                     <td className="p-4">
-                      <select
-                        value={order.status}
-                        disabled={savingId === order.id}
-                        onChange={(e) => updateStatus(order.id, e.target.value)}
-                        className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-800 outline-none focus:border-emerald-600 disabled:opacity-50"
-                      >
-                        {ORDER_STATUSES.map((s) => (
-                          <option key={s} value={s}>
-                            {s}
-                          </option>
-                        ))}
-                      </select>
+                      {(() => {
+                        // Only forward moves are offered. Earlier rungs are
+                        // greyed out (can't go back), and a DELIVERED/CANCELLED
+                        // order has no next rung, so the whole control locks.
+                        const nextStatuses = ORDER_STATUS_TRANSITIONS[order.status] ?? [];
+                        const isTerminal = nextStatuses.length === 0;
+                        return (
+                          <select
+                            value={order.status}
+                            disabled={savingId === order.id || isTerminal}
+                            onChange={(e) => updateStatus(order.id, e.target.value)}
+                            className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-800 outline-none focus:border-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {ORDER_STATUSES.map((s) => (
+                              <option
+                                key={s}
+                                value={s}
+                                disabled={s !== order.status && !nextStatuses.includes(s)}
+                              >
+                                {s}
+                              </option>
+                            ))}
+                          </select>
+                        );
+                      })()}
                     </td>
                   </tr>
                 ))}

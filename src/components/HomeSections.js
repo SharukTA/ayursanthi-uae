@@ -15,6 +15,8 @@ import { Tilt3D } from "@/components/Tilt3D";
 import { FaceVideoCarousel } from "@/components/FaceVideoCarousel";
 import { FeaturedCarousel } from "@/components/FeaturedCarousel";
 import { SectionCarousel } from "@/components/SectionCarousel";
+import { ImageFill } from "@/components/ProductMedia";
+import { CardVideo } from "@/components/CardVideo";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HomeSections — the public renderer for the admin-managed homepage CMS.
@@ -137,9 +139,11 @@ function DealGridSection({ section }) {
 
                 {/* Image fills the whole card, mirroring the product card */}
                 {item.imageUrl ? (
-                  <div
-                    className="absolute inset-0 bg-cover bg-center transition-transform duration-500 group-hover:scale-[1.06]"
-                    style={{ backgroundImage: `url('${item.imageUrl}')` }}
+                  <ImageFill
+                    src={item.imageUrl}
+                    alt={item.title || ""}
+                    sizes="(max-width: 640px) 70vw, (max-width: 1024px) 45vw, 30vw"
+                    className="transition-transform duration-500 group-hover:scale-[1.06]"
                   />
                 ) : (
                   <div className="absolute inset-0 bg-emerald-50" />
@@ -183,11 +187,15 @@ function CategoryIconTile({ item }) {
   const href = itemHref(item) || "/categories";
   return (
     <Link href={href} className="group flex w-16 shrink-0 flex-col items-center gap-1.5 sm:w-28 lg:w-32">
-      <div className="size-16 overflow-hidden rounded-full bg-[#f7fafa] p-1 ring-1 ring-[#d5d9d9] shadow-sm transition-shadow group-hover:shadow-md group-active:shadow-md sm:size-28 lg:size-32">
+      <div className="relative size-16 overflow-hidden rounded-full bg-[#f7fafa] p-1 ring-1 ring-[#d5d9d9] shadow-sm transition-shadow group-hover:shadow-md group-active:shadow-md sm:size-28 lg:size-32">
         {item.imageUrl ? (
-          <div
-            className="size-full rounded-full bg-cover bg-center transition-transform duration-300 group-hover:scale-105"
-            style={{ backgroundImage: `url('${item.imageUrl}')` }}
+          <ImageFill
+            src={item.imageUrl}
+            alt={item.title || ""}
+            // Tops out at 128px (lg:size-32); a 2x variant is all it can use.
+            sizes="128px"
+            quality={50}
+            className="rounded-full transition-transform duration-300 group-hover:scale-105"
           />
         ) : (
           <div className="flex size-full items-center justify-center rounded-full bg-emerald-50">
@@ -290,9 +298,11 @@ function PromoAdsSection({ section }) {
             <div className="group relative flex aspect-[16/9] h-full flex-col justify-end overflow-hidden rounded-2xl border border-border bg-gradient-to-b from-[#f7fafa] to-white shadow-sm transition-all duration-300 hover:shadow-2xl">
               {/* Image fills the whole card, mirroring the category card */}
               {item.imageUrl ? (
-                <div
-                  className="absolute inset-0 bg-cover bg-center transition-transform duration-500 group-hover:scale-[1.06]"
-                  style={{ backgroundImage: `url('${item.imageUrl}')` }}
+                <ImageFill
+                  src={item.imageUrl}
+                  alt={item.title || ""}
+                  sizes="(max-width: 640px) 85vw, 50vw"
+                  className="transition-transform duration-500 group-hover:scale-[1.06]"
                 />
               ) : (
                 <div className="absolute inset-0 bg-emerald-50" />
@@ -351,20 +361,28 @@ function ReviewsSection({ section }) {
                 {/* Header: product thumbnail + reviewer name + stars */}
                 <div className="flex items-center gap-2 sm:gap-3">
                   {item.imageUrl && item.imageMediaType === "VIDEO" ? (
-                    <video
-                      src={item.imageUrl}
-                      muted
-                      loop
-                      autoPlay
-                      playsInline
-                      preload="metadata"
-                      className="size-9 shrink-0 rounded-lg border border-border bg-slate-100 object-cover sm:size-12"
-                    />
-                  ) : item.imageUrl ? (
+                    // A video only reaches this 36-48px thumbnail when the
+                    // reviewed product has no photo at all; CardVideo keeps it
+                    // unloaded until hover rather than autoplaying megabytes.
                     <span
-                      className="size-9 shrink-0 rounded-lg border border-border bg-slate-100 bg-cover bg-center sm:size-12"
-                      style={{ backgroundImage: `url('${item.imageUrl}')` }}
-                    />
+                      data-media-hover-root
+                      className="relative size-9 shrink-0 overflow-hidden rounded-lg border border-border bg-slate-100 sm:size-12"
+                    >
+                      <CardVideo
+                        src={item.imageUrl}
+                        showBadge={false}
+                        className="absolute inset-0 size-full object-cover"
+                      />
+                    </span>
+                  ) : item.imageUrl ? (
+                    <span className="relative size-9 shrink-0 overflow-hidden rounded-lg border border-border bg-slate-100 sm:size-12">
+                      <ImageFill
+                        src={item.imageUrl}
+                        alt={item.productName || ""}
+                        sizes="48px"
+                        quality={50}
+                      />
+                    </span>
                   ) : (
                     <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-emerald-50 sm:size-12">
                       <TicketCheck className="size-4 text-emerald-700 sm:size-5" />

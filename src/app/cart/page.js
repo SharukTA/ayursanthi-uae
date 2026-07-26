@@ -10,10 +10,14 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { Button } from "@/components/ui/button";
 import { AnimatedHeading } from "@/components/AnimatedText";
 import { Tilt3D } from "@/components/Tilt3D";
+import { calculateOrderTotals, FREE_SHIPPING_THRESHOLD } from "@/lib/pricing";
 
 export default function CartPage() {
   const [cart, setCart] = useState([]);
   const [loading, setLoading] = useState(true);
+  // Live free-shipping threshold (admin-editable); falls back to the constant
+  // until the settings fetch resolves. The server enforces the real value.
+  const [freeShipThreshold, setFreeShipThreshold] = useState(FREE_SHIPPING_THRESHOLD);
 
   // Load cart from localStorage on component mount
   useEffect(() => {
@@ -25,6 +29,21 @@ export default function CartPage() {
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  // Pull the current free-shipping threshold so the summary matches checkout.
+  useEffect(() => {
+    let active = true;
+    fetch("/api/settings")
+      .then((res) => res.json())
+      .then((data) => {
+        const n = Number(data?.settings?.free_shipping_threshold);
+        if (active && Number.isFinite(n) && n >= 0) setFreeShipThreshold(n);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
   }, []);
 
   // Persist any cart change to localStorage and let the header badge refresh.
@@ -76,12 +95,15 @@ export default function CartPage() {
   };
 
   // Pricing calculations — based only on the items the customer has selected.
+  // Prices are GST-inclusive, so `tax` is the portion already inside `subtotal`;
+  // the total is goods + delivery (see lib/pricing.js). The server recomputes it
+  // all from the DB at checkout.
   const selectedItems = cart.filter(isSelected);
   const selectedCount = selectedItems.reduce((acc, item) => acc + item.quantity, 0);
-  const subtotal = selectedItems.reduce((acc, item) => acc + item.price * item.quantity, 0);
-  const tax = parseFloat((subtotal * 0.18).toFixed(2)); // 18% GST
-  const shipping = subtotal === 0 ? 0 : subtotal >= 1000 ? 0.0 : 99.0; // Free shipping over Rs. 1000
-  const total = parseFloat((subtotal + tax + shipping).toFixed(2));
+  const { subtotal, tax, shipping, total } = calculateOrderTotals(
+    selectedItems,
+    freeShipThreshold
+  );
 
   if (loading) {
     return (
@@ -155,13 +177,15 @@ export default function CartPage() {
                           title="View details (removes this item from your cart)"
                         >
                           {item.imageMediaType === "VIDEO" && item.image ? (
+                            // No autoplay: `#t=0.1` + preload="metadata" fetches
+                            // just the header and one frame for this 64px
+                            // thumbnail instead of streaming the whole clip.
                             <video
-                              src={item.image}
+                              src={`${item.image}#t=0.1`}
                               muted
-                              loop
-                              autoPlay
                               playsInline
                               preload="metadata"
+                              aria-hidden="true"
                               className="size-16 rounded border border-[#d5d9d9] bg-[#f8fafc] object-contain"
                             />
                           ) : (
@@ -241,12 +265,8 @@ export default function CartPage() {
 
                 <div className="space-y-3 text-xs font-medium text-[#3f4545]">
                   <div className="flex justify-between">
-                    <span>Subtotal</span>
+                    <span>Items (incl. GST)</span>
                     <span className="font-bold text-[#0f1111]">Rs. {subtotal.toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>GST (18%)</span>
-                    <span className="font-bold text-[#0f1111]">Rs. {tax.toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between">
                     <span>Shipping Charges</span>
@@ -264,10 +284,15 @@ export default function CartPage() {
                   <span className="text-sm">Total Amount</span>
                   <span className="text-base text-[#0f1111]">Rs. {total.toLocaleString()}</span>
                 </div>
+                {tax > 0 && (
+                  <p className="-mt-2 text-right text-[10px] font-medium text-[#565959]">
+                    Includes GST of Rs. {tax.toLocaleString()}
+                  </p>
+                )}
 
                 {shipping > 0 && (
                   <p className="text-[10px] font-medium text-[#0f1111] bg-[#f8fafc] border border-[#d5d9d9] p-2 rounded text-center">
-                    Add <b>Rs. {(1000 - subtotal).toLocaleString()}</b> more to qualify for <b>FREE SHIPPING</b>!
+                    Add <b>Rs. {(freeShipThreshold - subtotal).toLocaleString()}</b> more to qualify for <b>FREE SHIPPING</b>!
                   </p>
                 )}
 

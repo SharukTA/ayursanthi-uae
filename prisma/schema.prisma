@@ -35,6 +35,55 @@ enum PaymentStatus {
   REFUNDED
 }
 
+// Who pulled the trigger on a cancellation. Amazon shows this to the customer
+// ("Cancelled by you" vs "Cancelled by seller"), so it is worth recording.
+enum CancelledBy {
+  CUSTOMER
+  ADMIN
+}
+
+// Lifecycle of a return/replacement request, mirroring the states Amazon shows
+// on "Your Returns". REFUNDED / REPLACED / REJECTED / CANCELLED are terminal.
+enum ReturnStatus {
+  REQUESTED  // customer submitted it; waiting on the seller to approve
+  APPROVED   // approved, pickup scheduled
+  PICKED_UP  // courier collected the item from the customer
+  RECEIVED   // arrived back and passed inspection (stock is restored here)
+  REFUNDED   // money sent back — terminal for a REFUND request
+  REPLACED   // replacement dispatched — terminal for a REPLACEMENT request
+  REJECTED   // seller declined (outside window, item not as described, ...)
+  CANCELLED  // customer withdrew the request before pickup
+}
+
+// What the customer asked for. Amazon offers both on most items.
+enum ReturnResolution {
+  REFUND
+  REPLACEMENT
+}
+
+// The fixed reason list the customer picks from, exactly like Amazon's return
+// dropdown. Reasons that mean "the item is unsellable" (DAMAGED / DEFECTIVE)
+// deliberately skip the restock step — see lib/returns.js.
+enum ReturnReason {
+  DAMAGED
+  DEFECTIVE
+  WRONG_ITEM
+  MISSING_PARTS
+  NOT_AS_DESCRIBED
+  NO_LONGER_NEEDED
+  BOUGHT_BY_MISTAKE
+  BETTER_PRICE
+  OTHER
+}
+
+// Where the refund money goes. Cash on Delivery has no card to reverse, so the
+// customer supplies a destination (bank account) at return time — the same thing
+// Amazon does for its Pay-on-Delivery orders.
+enum RefundMethod {
+  BANK_TRANSFER
+  CASH_ON_PICKUP
+}
+
 // Type of a homepage block. Each value maps to a renderer component on the
 // public homepage. Adding a new visual style for the homepage means adding a
 // value here and a matching case in the HomeSections renderer — the admin can
@@ -72,6 +121,7 @@ model User {
   addresses    Address[]
   cartItems    CartItem[]
   orders       Order[]
+  returns      ReturnRequest[]
   reviews      ProductReview[]
   passwordResetOtps PasswordResetOtp[]
   createdAt    DateTime        @default(now())
@@ -138,6 +188,14 @@ model Product {
   description      String?
   price            Decimal         @db.Decimal(10, 2)
   mrp              Decimal?        @db.Decimal(10, 2)
+  // GST slab this product falls under (0/5/12/18/28). Prices are stored
+  // GST-INCLUSIVE — exactly like Amazon India — so this rate never adds money on
+  // top; it only splits out the tax already inside `price` for the invoice. See
+  // lib/pricing.js. Ayurvedic goods commonly sit at 5% or 12%, not 18%.
+  gstRate          Int             @default(0)
+  // Per-product delivery charge (seller-fulfilled shipping). Summed across the
+  // order and waived once the subtotal clears the free-shipping threshold.
+  shippingFee      Decimal         @default(0) @db.Decimal(10, 2)
   // Optional free-text promo badge shown on the product card (e.g. "Up to 4% off").
   // Null/empty => no badge is rendered. Admin-managed in /admin/products.
   offerLabel       String?
@@ -229,9 +287,21 @@ model Order {
   tax             Decimal       @default(0) @db.Decimal(10, 2)
   shipping        Decimal       @default(0) @db.Decimal(10, 2)
   total           Decimal       @db.Decimal(10, 2)
+  // Money already sent back to the customer across every cancellation/return on
+  // this order. paymentStatus only flips to REFUNDED once this reaches `total`,
+  // so a partial return leaves the order PAID with a smaller balance — the same
+  // way Amazon shows "Refunded Rs. X" against a still-delivered order.
+  refundedTotal   Decimal       @default(0) @db.Decimal(10, 2)
   addressSnapshot Json?
+  // When the courier handed the parcel over. This starts the return window, so
+  // it is stamped the moment an admin marks the order DELIVERED.
+  deliveredAt     DateTime?
+  cancelledAt     DateTime?
+  cancelledBy     CancelledBy?
+  cancelReason    String?
   items           OrderItem[]
   payments        Payment[]
+  returns         ReturnRequest[]
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 }
@@ -246,13 +316,75 @@ model OrderItem {
   quantity    Int
   price       Decimal @db.Decimal(10, 2)
   total       Decimal @db.Decimal(10, 2)
+  // GST captured at purchase time so an invoice/refund is exact even if the
+  // product's rate later changes. `tax` is the GST already embedded in `total`
+  // (prices are GST-inclusive), NOT an extra charge on top. See lib/pricing.js.
+  gstRate     Int     @default(0)
+  tax         Decimal @default(0) @db.Decimal(10, 2)
+  returnItems ReturnItem[]
+}
+
+// A customer's request to send item(s) back. One request covers any subset of an
+// order's lines (and any quantity within a line), so a five-item order can have
+// several independent returns in flight — again, the Amazon model.
+//
+// The money side lives on the order: when a request reaches REFUNDED a Payment
+// ledger row is written and Order.refundedTotal grows by `refundAmount`.
+model ReturnRequest {
+  id              String           @id @default(cuid())
+  returnNumber    String           @unique
+  orderId         String
+  order           Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User             @relation(fields: [userId], references: [id])
+  status          ReturnStatus     @default(REQUESTED)
+  resolution      ReturnResolution @default(REFUND)
+  reason          ReturnReason
+  comment         String?
+  // Item value + its share of tax (+ shipping when the whole order goes back),
+  // computed server-side in lib/returns.js — never sent by the client.
+  refundAmount    Decimal          @db.Decimal(10, 2)
+  refundMethod    RefundMethod?
+  refundDetails   Json?            // customer-supplied bank destination snapshot
+  refundReference String?          // seller's transfer reference, shown to the customer
+  adminNote       String?          // rejection reason / internal note
+  items           ReturnItem[]
+  requestedAt     DateTime         @default(now())
+  approvedAt      DateTime?
+  pickedUpAt      DateTime?
+  receivedAt      DateTime?
+  closedAt        DateTime?        // set when it lands in any terminal status
+  updatedAt       DateTime         @updatedAt
+
+  @@index([userId, requestedAt])
+  @@index([orderId])
+  @@index([status])
+}
+
+// One order line inside a return request, with the quantity being sent back and
+// the value that quantity contributes to the refund.
+model ReturnItem {
+  id            String        @id @default(cuid())
+  returnId      String
+  returnRequest ReturnRequest @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  orderItemId   String
+  orderItem     OrderItem     @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  quantity      Int
+  amount        Decimal       @db.Decimal(10, 2)
+
+  @@index([returnId])
+  @@index([orderItemId])
 }
 
 model Payment {
   id                String        @id @default(cuid())
   orderId           String
   order             Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  provider          String        // "cod" — cash collected by the courier on delivery
+  // "cod"    — cash collected by the courier on delivery
+  // "refund"  — money sent back for a cancellation or return; `amount` is the
+  //             refunded value and `status` is REFUNDED. Sign is implied by the
+  //             provider, so the ledger stays additive.
+  provider          String
   providerPaymentId String?       @unique // set only by an external gateway; null for COD
   amount            Decimal       @db.Decimal(10, 2)
   status            PaymentStatus @default(PENDING)

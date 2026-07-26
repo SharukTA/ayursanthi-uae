@@ -220,8 +220,13 @@ export function FaceVideoCarousel({ items = [], onDominantColor, heroLayout = fa
                   muted
                   loop
                   playsInline
-                  preload="metadata"
-                  autoPlay={index === 0}
+                  // Only the slide on screen is allowed to fetch anything. Every
+                  // slide used to preload metadata while slide 0 autoplayed in
+                  // full, so a single homepage visit pulled the whole carousel
+                  // out of Blob. The effect on `selectedIndex` below calls
+                  // play()/pause(), which is what actually starts the download —
+                  // so `autoPlay` here was redundant as well as expensive.
+                  preload={index === selectedIndex ? "auto" : "none"}
                   aria-hidden="true"
                   onLoadedData={() => captureColor(index)}
                 />

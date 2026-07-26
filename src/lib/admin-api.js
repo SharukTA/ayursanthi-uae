@@ -1,4 +1,6 @@
 import { getSession } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { GST_RATES, DEFAULT_GST_RATE } from "@/lib/pricing";
 
 export function jsonError(message, status = 400, details = undefined) {
   return Response.json({ message, details }, { status });
@@ -8,11 +10,28 @@ export function jsonError(message, status = 400, details = undefined) {
 //   const { error, session } = await requireAdmin();
 //   if (error) return error;
 // Returns a 403 Response in `error` when the caller is not an authenticated ADMIN.
+//
+// The role is confirmed against the DATABASE, not just the `role` claim baked
+// into the session cookie at login. The cookie is valid for 7 days, so trusting
+// it alone would let a demoted (or deleted) admin keep full write access to
+// every admin endpoint until it expired. This is the API-side counterpart of the
+// same check in app/admin/layout.js, and it is the one that actually guards the
+// data — the layout only guards the UI.
 export async function requireAdmin() {
   const session = await getSession();
-  if (!session || session.role !== "ADMIN") {
+  if (!session?.userId || session.role !== "ADMIN") {
     return { error: jsonError("Administrator access required.", 403), session: null };
   }
+
+  const user = await prisma.user.findUnique({
+    where: { id: session.userId },
+    select: { role: true },
+  });
+
+  if (user?.role !== "ADMIN") {
+    return { error: jsonError("Administrator access required.", 403), session: null };
+  }
+
   return { error: null, session };
 }
 
@@ -60,6 +79,14 @@ export function readBoolean(value, fallback = false) {
 export function readInteger(value, fallback = 0) {
   const number = Number.parseInt(value, 10);
   return Number.isFinite(number) ? number : fallback;
+}
+
+// Coerce an admin-supplied GST rate to one of the allowed Indian slabs, falling
+// back to the default (0%) for anything missing or off-slab. Prices are
+// GST-inclusive, so this only affects how tax is split out — never the price.
+export function readGstRate(value) {
+  const rate = Number(value);
+  return GST_RATES.includes(rate) ? rate : DEFAULT_GST_RATE;
 }
 
 export function readMoney(value) {

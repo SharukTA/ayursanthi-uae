@@ -36,6 +36,12 @@ export function Modal({ title, onClose, children }) {
 
   return createPortal(
     <div
+      // Body scroll-lock alone doesn't hold here: Lenis (LenisProvider) drives
+      // smooth scrolling off window-level wheel events, so it keeps scrolling the
+      // page behind the modal regardless of `overflow: hidden`. `data-lenis-prevent`
+      // makes Lenis ignore any wheel event originating inside the overlay, handing
+      // it back to native scrolling on the card body below.
+      data-lenis-prevent
       className="fixed inset-0 z-100 flex items-center justify-center overflow-y-auto p-4 sm:p-6"
       role="dialog"
       aria-modal="true"

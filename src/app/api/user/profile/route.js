@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getSession, setSession } from "@/lib/auth";
+import { validateName, validatePhone, normalizePhone } from "@/lib/validation";
 
 export const runtime = "nodejs";
 
@@ -38,18 +39,29 @@ export async function PUT(request) {
   const body = await request.json();
   const { name, phone } = body;
 
-  if (!name?.trim()) {
-    return Response.json({ message: "Name is required." }, { status: 400 });
+  // Mirror the registration rules so the profile edit can't be used to store a
+  // name/phone the sign-up form would have rejected. Phone is optional here.
+  const nameError = validateName(name);
+  if (nameError) {
+    return Response.json({ message: nameError, errors: { name: nameError } }, { status: 400 });
   }
 
-  const cleanPhone = phone ? phone.trim() || null : null;
+  const phoneError = validatePhone(phone);
+  if (phoneError) {
+    return Response.json({ message: phoneError, errors: { phone: phoneError } }, { status: 400 });
+  }
+
+  // Store the normalised international form so it matches how registration
+  // saves phones — otherwise the duplicate check below and login-by-phone miss.
+  const cleanPhone = phone && phone.trim() ? normalizePhone(phone) : null;
 
   if (cleanPhone) {
     const existing = await prisma.user.findFirst({
       where: { phone: cleanPhone, NOT: { id: session.userId } },
     });
     if (existing) {
-      return Response.json({ message: "This phone number is already in use." }, { status: 400 });
+      const message = "This phone number is already in use.";
+      return Response.json({ message, errors: { phone: message } }, { status: 400 });
     }
   }
 

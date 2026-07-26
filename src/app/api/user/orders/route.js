@@ -20,6 +20,19 @@ export async function GET() {
           },
         },
       },
+      // Returns ride along with the order so the page can work out what is still
+      // returnable (lib/returns.js) and show the status of anything in flight.
+      returns: {
+        orderBy: { requestedAt: "desc" },
+        include: { items: true },
+      },
+      // Refund rows only — the customer has no use for the COD placeholder, but
+      // "Rs. X refunded on <date>" is exactly what they look for.
+      payments: {
+        where: { provider: "refund" },
+        orderBy: { createdAt: "desc" },
+        select: { id: true, amount: true, status: true, createdAt: true, rawResponse: true },
+      },
     },
   });
 

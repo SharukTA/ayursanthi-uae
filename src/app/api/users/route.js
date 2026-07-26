@@ -1,16 +1,14 @@
 import { prisma } from "@/lib/prisma";
-import { getSession } from "@/lib/auth";
+import { requireAdmin } from "@/lib/admin-api";
 
 export const runtime = "nodejs";
 
 export async function GET() {
-  const session = await getSession();
-  if (!session) {
-    return Response.json({ message: "Unauthorized" }, { status: 401 });
-  }
-  if (session.role !== "ADMIN") {
-    return Response.json({ message: "Forbidden" }, { status: 403 });
-  }
+  // Shares the guard used by every /api/admin route, so this endpoint — which
+  // returns the whole customer list — also verifies the role against the
+  // database rather than trusting the session cookie's claim.
+  const { error } = await requireAdmin();
+  if (error) return error;
 
   const users = await prisma.user.findMany({
     orderBy: { createdAt: "desc" },

@@ -7,6 +7,7 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { Button } from "@/components/ui/button";
 import { ProductCard, summarizeReviews } from "@/components/ProductCard";
+import { CARD_MEDIA_TAKE, pickCardMedia } from "@/lib/media";
 import { PageSections } from "@/components/HomeSections";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { getPageSections } from "@/lib/page-sections";
@@ -37,9 +38,11 @@ export default async function CategoryDetailPage({ params }) {
       products: {
         where: { isActive: true },
         include: {
+          // Enough rows for `pickCardMedia` to find a still — a category grid
+          // must never pull a multi-MB clip to paint a thumbnail.
           images: {
             orderBy: { sortOrder: "asc" },
-            take: 1,
+            take: CARD_MEDIA_TAKE,
           },
           // Real customer ratings — averaged per product for the card star bar.
           reviews: {
@@ -109,7 +112,7 @@ export default async function CategoryDetailPage({ params }) {
               return (
                 <StaggerItem key={product.id} className="h-full">
                   <ProductCard
-                    product={product}
+                    product={{ ...product, images: pickCardMedia(product.images) }}
                     categoryName={category.name}
                     rating={rating}
                     reviewCount={count}

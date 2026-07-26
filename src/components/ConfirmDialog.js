@@ -93,6 +93,10 @@ function ConfirmDialog({
 
   return createPortal(
     <div
+      // Stop Lenis smooth-scroll (LenisProvider) from scrolling the page behind
+      // the dialog — body `overflow: hidden` doesn't cover its window-level wheel
+      // handling. See the same note in Modal.js.
+      data-lenis-prevent
       className="fixed inset-0 z-100 flex items-center justify-center p-4"
       role="dialog"
       aria-modal="true"
