@@ -16,6 +16,7 @@ import { FeaturedCarousel } from "@/components/FeaturedCarousel";
 import { SectionCarousel } from "@/components/SectionCarousel";
 import { ImageFill } from "@/components/ProductMedia";
 import { CardVideo } from "@/components/CardVideo";
+import { formatMoney } from "@/lib/currency";
 import { SectionHeader, SECTION_SHELL } from "@/components/SectionHeader";
 import { RecentlyViewedSection } from "@/components/RecentlyViewedSection";
 
@@ -29,12 +30,13 @@ import { RecentlyViewedSection } from "@/components/RecentlyViewedSection";
 // stores (Amazon/Flipkart) compose their homepage from configurable modules.
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Decimal/number → "Rs. 1,499" (Indian grouping). Returns null for empty values.
-function formatRs(value) {
+// Decimal/number → "AED 1,499.00". Returns null for empty values, which is what
+// tells the caller to fall back to the admin-entered badge text.
+function formatPrice(value) {
   if (value === null || value === undefined || value === "") return null;
   const number = Number(value);
   if (!Number.isFinite(number)) return null;
-  return `Rs. ${number.toLocaleString("en-IN")}`;
+  return formatMoney(number);
 }
 
 // Best link for an item: explicit href wins, else the linked product page.
@@ -56,7 +58,7 @@ function VideoCarouselSection({ section }) {
       src: item.videoUrl,
       name: item.title || "",
       label: item.subtitle || "",
-      price: item.badge || formatRs(item.product?.price),
+      price: item.badge || formatPrice(item.product?.price),
       href: itemHref(item) || "/products",
     }));
 
@@ -422,7 +424,7 @@ function StatsBarSection({ section, stats = {} }) {
         if (!item.title) return null;
         return { id: item.id, Icon, text: item.title };
       }
-      const count = Number(stats[metric] || 0).toLocaleString("en-IN");
+      const count = Number(stats[metric] || 0).toLocaleString("en-AE");
       const label = item.title ? ` ${item.title}` : "";
       return { id: item.id, Icon, text: `${count}${label}` };
     })

@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ShoppingCart, CreditCard, Plus, Minus, ShieldAlert, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { addToCart, stashBuyNowItem } from "@/lib/cart-client";
+import { formatMoney } from "@/lib/currency";
 
 export function ProductActions({ product, pdfHref }) {
   const router = useRouter();
@@ -65,6 +67,11 @@ export function ProductActions({ product, pdfHref }) {
   };
 
   // Snapshot of the current product as a cart/checkout line item.
+  //
+  // A signed-in shopper's cart stores only the product and quantity and re-reads
+  // everything else live (see lib/cart.js), so for them this snapshot is just
+  // what gets sent. It is the signed-out browser cart that actually has to keep
+  // these fields, since it has nowhere else to read them from.
   const buildLineItem = () => ({
     productId: product.id,
     name: product.name,
@@ -72,45 +79,48 @@ export function ProductActions({ product, pdfHref }) {
     // product apart. Display only — never used in any calculation.
     netQuantity: product.netQuantity || null,
     price: Number(product.price),
-    // Carried so the cart/checkout can preview GST and delivery accurately; the
-    // server still recomputes both from the DB before charging anything.
-    gstRate: Number(product.gstRate) || 0,
+    // Carried so the cart/checkout can preview delivery accurately; the server
+    // still recomputes it from the DB before charging anything.
     shippingFee: Number(product.shippingFee) || 0,
     image: product.images?.[0]?.url || "",
     // Snapshot the media type too: a video-first product must render as a
     // <video> in the cart, not as a (silently blank) background-image.
     imageMediaType: product.images?.[0]?.mediaType || null,
     slug: product.slug,
+    stock: product.stock,
     quantity: quantity,
     selected: true,
   });
 
-  const handleAddToCart = () => {
+  // Guards the button while the cart write is in flight, so an impatient
+  // double-click can't add the item twice.
+  const [adding, setAdding] = useState(false);
+
+  const handleAddToCart = async () => {
     if (product.stock <= 0) {
       toast.error("This product is currently out of stock.");
       return;
     }
+    if (adding) return;
 
+    setAdding(true);
     try {
-      const cart = JSON.parse(localStorage.getItem("ayursanthi_cart") || "[]");
-      const existingIdx = cart.findIndex((item) => item.productId === product.id);
+      // Goes to the account cart when signed in and to the browser cart when
+      // not — the caller does not have to know which (see lib/cart-client.js).
+      const { capped } = await addToCart(buildLineItem());
 
-      if (existingIdx > -1) {
-        cart[existingIdx].quantity += quantity;
-        cart[existingIdx].selected = true;
+      if (capped) {
+        toast.warning(
+          `We could only add what's available — your cart now has the maximum we can ship of ${product.name}.`
+        );
       } else {
-        cart.push(buildLineItem());
+        toast.success(`Added ${quantity} x ${product.name} to your shopping cart.`);
       }
-
-      localStorage.setItem("ayursanthi_cart", JSON.stringify(cart));
-
-      // Dispatch custom cart event to refresh cart counts in Header
-      window.dispatchEvent(new Event("cartUpdate"));
-
-      toast.success(`Added ${quantity} x ${product.name} to your shopping cart.`);
     } catch (err) {
       console.error(err);
-      toast.error("Failed to update cart storage.");
+      toast.error(err.message || "Failed to update your cart.");
+    } finally {
+      setAdding(false);
     }
   };
 
@@ -125,7 +135,7 @@ export function ProductActions({ product, pdfHref }) {
     }
 
     try {
-      localStorage.setItem("ayursanthi_buynow", JSON.stringify(buildLineItem()));
+      stashBuyNowItem(buildLineItem());
       toast.success("Opening checkout...");
       router.push("/checkout?buynow=1");
     } catch (err) {
@@ -188,11 +198,12 @@ export function ProductActions({ product, pdfHref }) {
         <Button
           type="button"
           onClick={handleAddToCart}
+          disabled={adding}
           variant="secondary"
           className="h-12 rounded-md ring-0 bg-[#FFD814] text-[#0F1111] hover:bg-[#F7CA00] text-sm font-semibold"
         >
           <ShoppingCart className="size-4 mr-2" />
-          Add to Cart
+          {adding ? "Adding..." : "Add to Cart"}
         </Button>
 
         <Button
@@ -219,7 +230,7 @@ export function ProductActions({ product, pdfHref }) {
           <div className="hidden min-w-0 flex-1 sm:block">
             <p className="truncate text-sm font-bold text-[#0f1111]">{product.name}</p>
             <p className="text-sm font-extrabold text-emerald-800">
-              Rs. {Number(product.price).toLocaleString()}
+              {formatMoney(product.price)}
             </p>
           </div>
 
@@ -241,12 +252,13 @@ export function ProductActions({ product, pdfHref }) {
             <Button
               type="button"
               onClick={handleAddToCart}
+              disabled={adding}
               variant="secondary"
               tabIndex={showStickyBar ? 0 : -1}
               className="h-11 rounded-md ring-0 bg-[#FFD814] text-[#0F1111] hover:bg-[#F7CA00] text-sm font-semibold sm:px-6"
             >
               <ShoppingCart className="size-4 mr-2" />
-              Add to Cart
+              {adding ? "Adding..." : "Add to Cart"}
             </Button>
 
             <Button

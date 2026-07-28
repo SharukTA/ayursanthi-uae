@@ -73,9 +73,8 @@ export async function createUpload({ filename, contentType }) {
 
 // Deletes the backing file for a stored URL, but only when the URL is one this
 // driver actually owns. Returns false without touching anything for external
-// URLs an admin pasted, and for URLs written by the *other* driver — including
-// the Vercel Blob URLs left in the database from before this migration, which
-// have to be cleaned up in the Blob dashboard rather than here.
+// URLs an admin pasted, and for URLs written by the *other* driver — those have
+// to be cleaned up wherever they are hosted rather than here.
 export async function deleteByUrl(url) {
   const key = driver.keyFromUrl(url);
   if (!key) return false;

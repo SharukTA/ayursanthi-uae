@@ -31,16 +31,8 @@ const nextConfig = {
     // `src/lib/media.js` mirrors this list and falls back to `unoptimized` for
     // unknown hosts rather than letting the image break. Keep the two in sync.
     remotePatterns: [
-      // Cloudflare R2 — where uploads go now.
+      // Cloudflare R2 — where every upload lives.
       ...(r2Host ? [{ protocol: "https", hostname: r2Host, pathname: "/**" }] : []),
-      // Vercel Blob. Kept so product rows written before the R2 migration keep
-      // rendering; nothing new is ever written here. Wildcarded on the store
-      // subdomain so rotating the store does not blank every legacy image.
-      {
-        protocol: "https",
-        hostname: "**.public.blob.vercel-storage.com",
-        pathname: "/**",
-      },
       // Stock fallback used by ProductCard's FALLBACK_IMG.
       {
         protocol: "https",
@@ -67,7 +59,7 @@ const nextConfig = {
 
     // Trimmed from the default list, which tops out at 3840px. Nothing on this
     // site renders a product wider than ~1200px, and every extra entry is another
-    // billable transformation plus another large variant Blob has to serve once.
+    // billable transformation plus another large variant R2 has to serve once.
     deviceSizes: [640, 750, 828, 1080, 1200, 1920],
   },
 };

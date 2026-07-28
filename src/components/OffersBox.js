@@ -1,4 +1,5 @@
 import { BadgePercent, Tag, Truck, ShieldCheck } from "lucide-react";
+import { formatMoney } from "@/lib/currency";
 
 // "Available offers" panel — the Amazon/Flipkart block that stacks the deals
 // applicable to a product. Every entry here is derived from real data (the
@@ -15,7 +16,7 @@ export function OffersBox({ price, mrp, offerLabel }) {
     offers.push({
       icon: BadgePercent,
       title: `${pct}% instant discount`,
-      body: `You save Rs. ${saved.toLocaleString("en-IN")} off the MRP of Rs. ${numericMrp.toLocaleString("en-IN")}.`,
+      body: `You save ${formatMoney(saved)} off the MRP of ${formatMoney(numericMrp)}.`,
     });
   }
 

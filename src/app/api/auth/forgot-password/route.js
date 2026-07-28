@@ -13,8 +13,12 @@ import {
 export const runtime = "nodejs";
 
 /**
- * Step 1 of the reset flow: the user submits their email/mobile and we email a
+ * Step 1 of the reset flow: the user submits their account email and we email a
  * one-time password.
+ *
+ * findUserByIdentifier() still resolves a mobile number too, but the UI asks for
+ * an email only — there is no SMS sender wired up, so the code can only ever be
+ * delivered by email.
  *
  * Deliberately enumeration-safe: the response is the SAME whether or not an
  * account exists, so this endpoint can't be used to probe which emails are
@@ -27,14 +31,14 @@ export async function POST(request) {
 
     if (!identifier || !String(identifier).trim()) {
       return Response.json(
-        { message: "Please enter your email address or mobile number." },
+        { message: "Please enter your email address." },
         { status: 400 }
       );
     }
 
     const genericOk = {
       message:
-        "If an account matches those details, we've sent a one-time password to the registered email.",
+        "If an account matches that email address, we've sent a one-time password to it.",
     };
 
     const user = await findUserByIdentifier(identifier);

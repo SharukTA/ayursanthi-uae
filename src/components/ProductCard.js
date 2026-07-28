@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Star, Sparkles } from "lucide-react";
 import { ShopNowButton } from "@/components/ShopNowButton";
 import { ProductMedia } from "@/components/ProductMedia";
+import { formatMoney } from "@/lib/currency";
 
 // Shared, Amazon-style product card used across the catalog and category grids.
 //
@@ -158,7 +159,7 @@ export function ProductCard({
                 <span className="text-xs font-bold text-slate-700">{rating.toFixed(1)}</span>
                 <RatingStars rating={rating} size="size-3.5" />
                 <span className="text-[11px] font-medium text-slate-500">
-                  ({reviewCount.toLocaleString("en-IN")})
+                  ({reviewCount.toLocaleString("en-AE")})
                 </span>
               </>
             ) : (
@@ -173,11 +174,11 @@ export function ProductCard({
           <div className="mt-auto pt-2">
             <div className="flex flex-wrap items-baseline gap-x-2">
               <span className="text-base font-extrabold text-[#0f1111] sm:text-lg">
-                Rs. {price.toLocaleString("en-IN")}
+                {formatMoney(price)}
               </span>
               {hasDeal ? (
                 <span className="text-xs font-medium text-slate-500 line-through">
-                  Rs. {mrp.toLocaleString("en-IN")}
+                  {formatMoney(mrp)}
                 </span>
               ) : null}
             </div>
@@ -263,7 +264,7 @@ export function ProductCard({
               <span className="text-xs font-bold text-[#ffffff]">{rating.toFixed(1)}</span>
               <RatingStars rating={rating} />
               <span className="text-[11px] font-medium text-[#ffffff]/70">
-                ({reviewCount.toLocaleString("en-IN")})
+                ({reviewCount.toLocaleString("en-AE")})
               </span>
             </>
           ) : (
@@ -280,11 +281,11 @@ export function ProductCard({
         <div className="mt-2.5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div className="flex flex-wrap items-baseline gap-x-2">
             <span className="text-base font-extrabold text-[#ffffff] sm:text-lg">
-              Rs. {price.toLocaleString("en-IN")}
+              {formatMoney(price)}
             </span>
             {hasDeal ? (
               <span className="text-xs font-medium text-[#ffffff]/55 line-through">
-                Rs. {mrp.toLocaleString("en-IN")}
+                {formatMoney(mrp)}
               </span>
             ) : null}
           </div>
@@ -397,7 +398,7 @@ export function ProductListRow({ product, categoryName, rating = 0, reviewCount 
               <span className="text-xs font-bold text-slate-700">{rating.toFixed(1)}</span>
               <RatingStars rating={rating} size="size-3.5 sm:size-4" />
               <span className="text-[11px] font-medium text-slate-500">
-                ({reviewCount.toLocaleString("en-IN")})
+                ({reviewCount.toLocaleString("en-AE")})
               </span>
             </>
           ) : (
@@ -424,11 +425,11 @@ export function ProductListRow({ product, categoryName, rating = 0, reviewCount 
           {/* Wraps rather than overflows if a long price sits next to its MRP. */}
           <div className="flex flex-wrap items-baseline gap-x-2">
             <span className="text-base font-extrabold text-[#0f1111] sm:text-lg">
-              Rs. {price.toLocaleString("en-IN")}
+              {formatMoney(price)}
             </span>
             {hasDeal ? (
               <span className="text-xs font-medium text-slate-500 line-through">
-                Rs. {mrp.toLocaleString("en-IN")}
+                {formatMoney(mrp)}
               </span>
             ) : null}
           </div>

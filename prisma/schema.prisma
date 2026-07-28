@@ -1,4 +1,3 @@
-
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
@@ -24,6 +23,7 @@ enum OrderStatus {
   CONFIRMED
   PROCESSING
   SHIPPED
+  OUT_FOR_DELIVERY // with the courier, arriving today — the last rung before DELIVERED
   DELIVERED
   CANCELLED
 }
@@ -45,14 +45,14 @@ enum CancelledBy {
 // Lifecycle of a return/replacement request, mirroring the states Amazon shows
 // on "Your Returns". REFUNDED / REPLACED / REJECTED / CANCELLED are terminal.
 enum ReturnStatus {
-  REQUESTED  // customer submitted it; waiting on the seller to approve
-  APPROVED   // approved, pickup scheduled
-  PICKED_UP  // courier collected the item from the customer
-  RECEIVED   // arrived back and passed inspection (stock is restored here)
-  REFUNDED   // money sent back — terminal for a REFUND request
-  REPLACED   // replacement dispatched — terminal for a REPLACEMENT request
-  REJECTED   // seller declined (outside window, item not as described, ...)
-  CANCELLED  // customer withdrew the request before pickup
+  REQUESTED // customer submitted it; waiting on the seller to approve
+  APPROVED // approved, pickup scheduled
+  PICKED_UP // courier collected the item from the customer
+  RECEIVED // arrived back and passed inspection (stock is restored here)
+  REFUNDED // money sent back — terminal for a REFUND request
+  REPLACED // replacement dispatched — terminal for a REPLACEMENT request
+  REJECTED // seller declined (outside window, item not as described, ...)
+  CANCELLED // customer withdrew the request before pickup
 }
 
 // What the customer asked for. Amazon offers both on most items.
@@ -89,15 +89,15 @@ enum RefundMethod {
 // value here and a matching case in the HomeSections renderer — the admin can
 // then create/reorder/fill that block from the Home Builder with no code change.
 enum HomeSectionType {
-  VIDEO_CAROUSEL   // Full-bleed background-video cards (e.g. My Face)
-  DEAL_GRID        // Amazon-style deal cards (usually linked to products)
-  CATEGORY_GRID    // Image cards linking to categories
+  VIDEO_CAROUSEL // Full-bleed background-video cards (e.g. My Face)
+  DEAL_GRID // Amazon-style deal cards (usually linked to products)
+  CATEGORY_GRID // Image cards linking to categories
   PRODUCT_CAROUSEL // Featured products carousel (linked to products)
-  PROMO_ADS        // Promotional ad banners
-  REVIEWS          // Customer testimonials
-  STATS_BAR        // Marquee strip of live metrics + static trust promises
-  BEST_SELLERS     // Top products by units actually sold (paid orders only)
-  RECENTLY_VIEWED  // Per-shopper "continue shopping" strip, read from the browser
+  PROMO_ADS // Promotional ad banners
+  REVIEWS // Customer testimonials
+  STATS_BAR // Marquee strip of live metrics + static trust promises
+  BEST_SELLERS // Top products by units actually sold (paid orders only)
+  RECENTLY_VIEWED // Per-shopper "continue shopping" strip, read from the browser
 }
 
 // Which public page a CMS section is rendered on. The homepage, product detail,
@@ -106,34 +106,34 @@ enum HomeSectionType {
 // the checkout layout stays fixed in code and only the FIRST active CHECKOUT
 // section is shown, as a slim banner above the (locked) checkout steps.
 enum SectionPlacement {
-  HOME      // Public homepage (default; all legacy sections)
-  PRODUCT   // Every product detail page
-  CATEGORY  // Every category detail page
-  CHECKOUT  // Single banner slot atop the locked checkout page
+  HOME // Public homepage (default; all legacy sections)
+  PRODUCT // Every product detail page
+  CATEGORY // Every category detail page
+  CHECKOUT // Single banner slot atop the locked checkout page
 }
 
 model User {
-  id           String          @id @default(cuid())
+  id           String   @id @default(cuid())
   name         String
-  email        String          @unique
-  phone        String?         @unique
+  email        String   @unique
+  phone        String?  @unique
   passwordHash String
-  role         UserRole        @default(CUSTOMER)
+  role         UserRole @default(CUSTOMER)
 
   // Amazon's "Turn off Browsing History" switch. While false we neither record
   // new views nor show the shopper their history back — existing rows are kept
   // (removing them is a separate, explicit action) but nothing reads them.
   browsingHistoryEnabled Boolean @default(true)
 
-  addresses    Address[]
-  cartItems    CartItem[]
-  orders       Order[]
-  returns      ReturnRequest[]
-  reviews      ProductReview[]
-  productViews ProductView[]
+  addresses         Address[]
+  cartItems         CartItem[]
+  orders            Order[]
+  returns           ReturnRequest[]
+  reviews           ProductReview[]
+  productViews      ProductView[]
   passwordResetOtps PasswordResetOtp[]
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
 }
 
 // One-time password used by the Amazon-style forgot/reset password flow.
@@ -186,24 +186,19 @@ model Category {
 }
 
 model Product {
-  id               String          @id @default(cuid())
+  id               String                   @id @default(cuid())
   categoryId       String
-  category         Category        @relation(fields: [categoryId], references: [id])
+  category         Category                 @relation(fields: [categoryId], references: [id])
   name             String
-  slug             String          @unique
-  sku              String          @unique
+  slug             String                   @unique
+  sku              String                   @unique
   shortDescription String?
   description      String?
-  price            Decimal         @db.Decimal(10, 2)
-  mrp              Decimal?        @db.Decimal(10, 2)
-  // GST slab this product falls under (0/5/12/18/28). Prices are stored
-  // GST-INCLUSIVE — exactly like Amazon India — so this rate never adds money on
-  // top; it only splits out the tax already inside `price` for the invoice. See
-  // lib/pricing.js. Ayurvedic goods commonly sit at 5% or 12%, not 18%.
-  gstRate          Int             @default(0)
+  price            Decimal                  @db.Decimal(10, 2)
+  mrp              Decimal?                 @db.Decimal(10, 2)
   // Per-product delivery charge (seller-fulfilled shipping). Summed across the
   // order and waived once the subtotal clears the free-shipping threshold.
-  shippingFee      Decimal         @default(0) @db.Decimal(10, 2)
+  shippingFee      Decimal                  @default(0) @db.Decimal(10, 2)
   // Optional free-text promo badge shown on the product card (e.g. "Up to 4% off").
   // Null/empty => no badge is rendered. Admin-managed in /admin/products.
   offerLabel       String?
@@ -232,9 +227,9 @@ model Product {
   // relevance-ranked search; never written to from application code. Declared as
   // Unsupported so Prisma tracks it without trying to manage its generation rule.
   searchVector     Unsupported("tsvector")?
-  stock            Int             @default(0)
-  isFeatured       Boolean         @default(false)
-  isActive         Boolean         @default(true)
+  stock            Int                      @default(0)
+  isFeatured       Boolean                  @default(false)
+  isActive         Boolean                  @default(true)
   images           ProductImage[]
   attributes       ProductAttribute[]
   cartItems        CartItem[]
@@ -242,8 +237,8 @@ model Product {
   reviews          ProductReview[]
   homeItems        HomeSectionItem[]
   views            ProductView[]
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
 
   @@index([searchVector], type: Gin)
 }
@@ -285,6 +280,14 @@ model ProductReview {
   @@unique([userId, productId])
 }
 
+// A signed-in shopper's cart. This is the authoritative copy: it follows them
+// across devices and browsers, exactly like Amazon. Signed-out visitors keep a
+// cart in their own browser instead (lib/cart-client.js), which is merged into
+// this table on sign-in — see mergeGuestCart in lib/cart.js.
+//
+// Only quantity and selection live here. Price, delivery, name and imagery
+// are read from the Product on every request, so a saved cart can never serve a
+// stale price the way a browser snapshot can.
 model CartItem {
   id        String   @id @default(cuid())
   userId    String
@@ -292,29 +295,38 @@ model CartItem {
   productId String
   product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   quantity  Int      @default(1)
+  // Per-line checkbox on the cart screen. Only selected lines are checked out,
+  // so the choice has to survive a reload and follow the account to any device.
+  selected  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@unique([userId, productId])
+  // Every cart render reads one shopper's lines, oldest first.
+  @@index([userId, createdAt])
 }
 
 model Order {
-  id              String        @id @default(cuid())
-  orderNumber     String        @unique
+  id              String          @id @default(cuid())
+  orderNumber     String          @unique
   userId          String
-  user            User          @relation(fields: [userId], references: [id])
-  status          OrderStatus   @default(PENDING)
-  paymentStatus   PaymentStatus @default(PENDING)
-  subtotal        Decimal       @db.Decimal(10, 2)
-  tax             Decimal       @default(0) @db.Decimal(10, 2)
-  shipping        Decimal       @default(0) @db.Decimal(10, 2)
-  total           Decimal       @db.Decimal(10, 2)
+  user            User            @relation(fields: [userId], references: [id])
+  status          OrderStatus     @default(PENDING)
+  paymentStatus   PaymentStatus   @default(PENDING)
+  subtotal        Decimal         @db.Decimal(10, 2)
+  shipping        Decimal         @default(0) @db.Decimal(10, 2)
+  total           Decimal         @db.Decimal(10, 2)
   // Money already sent back to the customer across every cancellation/return on
   // this order. paymentStatus only flips to REFUNDED once this reaches `total`,
   // so a partial return leaves the order PAID with a smaller balance — the same
-  // way Amazon shows "Refunded Rs. X" against a still-delivered order.
-  refundedTotal   Decimal       @default(0) @db.Decimal(10, 2)
+  // way Amazon shows "Refunded AED X" against a still-delivered order.
+  refundedTotal   Decimal         @default(0) @db.Decimal(10, 2)
   addressSnapshot Json?
+  // Courier consignment details, filled in by the admin when the order ships.
+  // Both are free text: the store hands parcels to whichever courier is
+  // cheapest on the route, so there is no fixed carrier list to enumerate.
+  trackingNumber  String?
+  courierName     String?
   // When the courier handed the parcel over. This starts the return window, so
   // it is stamped the moment an admin marks the order DELIVERED.
   deliveredAt     DateTime?
@@ -324,25 +336,20 @@ model Order {
   items           OrderItem[]
   payments        Payment[]
   returns         ReturnRequest[]
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
 }
 
 model OrderItem {
-  id          String  @id @default(cuid())
+  id          String       @id @default(cuid())
   orderId     String
-  order       Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order       Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
   productId   String
-  product     Product @relation(fields: [productId], references: [id])
+  product     Product      @relation(fields: [productId], references: [id])
   productName String
   quantity    Int
-  price       Decimal @db.Decimal(10, 2)
-  total       Decimal @db.Decimal(10, 2)
-  // GST captured at purchase time so an invoice/refund is exact even if the
-  // product's rate later changes. `tax` is the GST already embedded in `total`
-  // (prices are GST-inclusive), NOT an extra charge on top. See lib/pricing.js.
-  gstRate     Int     @default(0)
-  tax         Decimal @default(0) @db.Decimal(10, 2)
+  price       Decimal      @db.Decimal(10, 2)
+  total       Decimal      @db.Decimal(10, 2)
   returnItems ReturnItem[]
 }
 
@@ -363,19 +370,19 @@ model ReturnRequest {
   resolution      ReturnResolution @default(REFUND)
   reason          ReturnReason
   comment         String?
-  // Item value + its share of tax (+ shipping when the whole order goes back),
-  // computed server-side in lib/returns.js — never sent by the client.
+  // Item value (+ shipping when the whole order goes back), computed
+  // server-side in lib/returns.js — never sent by the client.
   refundAmount    Decimal          @db.Decimal(10, 2)
   refundMethod    RefundMethod?
-  refundDetails   Json?            // customer-supplied bank destination snapshot
-  refundReference String?          // seller's transfer reference, shown to the customer
-  adminNote       String?          // rejection reason / internal note
+  refundDetails   Json? // customer-supplied bank destination snapshot
+  refundReference String? // seller's transfer reference, shown to the customer
+  adminNote       String? // rejection reason / internal note
   items           ReturnItem[]
   requestedAt     DateTime         @default(now())
   approvedAt      DateTime?
   pickedUpAt      DateTime?
   receivedAt      DateTime?
-  closedAt        DateTime?        // set when it lands in any terminal status
+  closedAt        DateTime? // set when it lands in any terminal status
   updatedAt       DateTime         @updatedAt
 
   @@index([userId, requestedAt])
@@ -426,9 +433,9 @@ model HomeSection {
   id        String            @id @default(cuid())
   type      HomeSectionType
   placement SectionPlacement  @default(HOME) // Which public page this renders on
-  title     String?           // Main heading shown above the block
-  eyebrow   String?           // Small uppercase label above the heading
-  subtitle  String?           // Short descriptive paragraph
+  title     String? // Main heading shown above the block
+  eyebrow   String? // Small uppercase label above the heading
+  subtitle  String? // Short descriptive paragraph
   position  Int               @default(0)
   isActive  Boolean           @default(true)
   items     HomeSectionItem[]
@@ -450,15 +457,15 @@ model HomeSectionItem {
   section   HomeSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
   position  Int         @default(0)
   isActive  Boolean     @default(true)
-  title     String?     // Card name / reviewer name
-  subtitle  String?     // Small label (e.g. brand) / role
-  body      String?     // Longer text (e.g. review quote, card description)
+  title     String? // Card name / reviewer name
+  subtitle  String? // Small label (e.g. brand) / role
+  body      String? // Longer text (e.g. review quote, card description)
   imageUrl  String?
   videoUrl  String?
-  badge     String?     // e.g. "Up to 40% off"
-  href      String?     // Click-through link
-  metric    String?     // STATS_BAR only: which live metric to show (see
-                        // STATS_METRICS in lib/admin-api.js). "STATIC" => plain text.
+  badge     String? // e.g. "Up to 40% off"
+  href      String? // Click-through link
+  metric    String? // STATS_BAR only: which live metric to show (see
+  // STATS_METRICS in lib/admin-api.js). "STATIC" => plain text.
   productId String?
   product   Product?    @relation(fields: [productId], references: [id], onDelete: SetNull)
   createdAt DateTime    @default(now())
@@ -521,4 +528,40 @@ model FaqItem {
   updatedAt DateTime @updatedAt
 
   @@index([isActive, sortOrder])
+}
+
+// Outcome of a single delivery attempt to the email provider.
+enum EmailStatus {
+  SENT
+  FAILED
+  SKIPPED // no valid recipient address — nothing was attempted
+}
+
+// Audit trail of every transactional email the app tried to send.
+//
+// Written by lib/email.js on both success and failure, so "did the customer
+// actually get their refund email?" is answerable from the admin panel instead
+// of from server logs that have already rolled over. Deliberately stores the
+// subject and template name but NOT the rendered body — bodies are large,
+// reproducible from the template, and can contain OTP codes.
+model EmailLog {
+  id        String      @id @default(cuid())
+  recipient String
+  subject   String
+  // Template key, e.g. "order_placed" / "return_refunded". Lets the admin
+  // filter by kind without parsing subject lines.
+  template  String
+  provider  String
+  status    EmailStatus
+  error     String?     @db.Text
+  // Set when the email is about a specific order/return, so the admin order
+  // screen can show what was sent for it. Intentionally NOT a foreign key: the
+  // log must outlive the row it describes.
+  orderId   String?
+  returnId  String?
+  createdAt DateTime    @default(now())
+
+  @@index([createdAt])
+  @@index([orderId])
+  @@index([status, createdAt])
 }

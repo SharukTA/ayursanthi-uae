@@ -13,6 +13,7 @@ import {
   returnWindowEndsAt,
   returnableUnits,
 } from "@/lib/returns";
+import { formatMoney } from "@/lib/currency";
 
 /**
  * "Return or replace items" — the Amazon return wizard, in one form:
@@ -128,7 +129,7 @@ export function ReturnRequestModal({ order, onClose, onSubmitted }) {
           <p className="font-bold text-[#0f1111]">Order {order.orderNumber}</p>
           {windowEndsAt ? (
             <p className="mt-0.5">
-              Eligible for return until {windowEndsAt.toLocaleDateString("en-IN", {
+              Eligible for return until {windowEndsAt.toLocaleDateString("en-AE", {
                 year: "numeric",
                 month: "short",
                 day: "numeric",
@@ -167,7 +168,7 @@ export function ReturnRequestModal({ order, onClose, onSubmitted }) {
                       <span className="truncate">{item.productName}</span>
                     </span>
                     <span className="mt-0.5 block text-[11px] text-[#565959]">
-                      Rs. {Number(item.price).toLocaleString()} · {max} of {item.quantity} unit
+                      {formatMoney(item.price)} · {max} of {item.quantity} unit
                       {item.quantity !== 1 ? "s" : ""} returnable
                     </span>
 
@@ -323,30 +324,26 @@ export function ReturnRequestModal({ order, onClose, onSubmitted }) {
               </div>
             ) : null}
 
-            {/* Live refund preview — the item value (GST included), plus shipping
-                when nothing sellable stays with the customer. */}
+            {/* Live refund preview — the item value, plus shipping when nothing
+                sellable stays with the customer. */}
             <div className="mt-3 rounded-md border border-[#d5d9d9] bg-[#f8fafc] p-3 text-[11px]">
               <div className="flex justify-between text-[#3f4545]">
-                <span>Item value (incl. GST)</span>
+                <span>Item value</span>
                 <span className="font-bold text-[#0f1111]">
-                  Rs. {breakdown.items.toLocaleString()}
+                  {formatMoney(breakdown.items)}
                 </span>
-              </div>
-              <div className="mt-1 flex justify-between text-[#565959]">
-                <span className="pl-2">of which GST</span>
-                <span>Rs. {breakdown.tax.toLocaleString()}</span>
               </div>
               <div className="mt-1 flex justify-between text-[#3f4545]">
                 <span>Shipping refunded</span>
                 <span className="font-bold text-[#0f1111]">
                   {breakdown.shipping > 0
-                    ? `Rs. ${breakdown.shipping.toLocaleString()}`
+                    ? formatMoney(breakdown.shipping)
                     : "Not refundable"}
                 </span>
               </div>
               <div className="mt-2 flex justify-between border-t border-[#d5d9d9] pt-2 text-xs font-extrabold text-[#0f1111]">
                 <span>Estimated refund</span>
-                <span>Rs. {breakdown.total.toLocaleString()}</span>
+                <span>{formatMoney(breakdown.total)}</span>
               </div>
             </div>
           </fieldset>

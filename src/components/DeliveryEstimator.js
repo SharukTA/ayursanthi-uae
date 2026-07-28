@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { MapPin, Truck, BadgeIndianRupee, RotateCcw } from "lucide-react";
+import { MapPin, Truck, Banknote, RotateCcw } from "lucide-react";
 
 // Amazon/Flipkart-style "Deliver to <pincode>" box. The shopper enters a 6-digit
 // Indian PIN and gets an estimated delivery window plus the COD/returns promise.
@@ -10,7 +10,7 @@ import { MapPin, Truck, BadgeIndianRupee, RotateCcw } from "lucide-react";
 const STORAGE_KEY = "ayursanthi_pincode";
 
 function formatDate(date) {
-  return date.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
+  return date.toLocaleDateString("en-AE", { weekday: "short", day: "numeric", month: "short" });
 }
 
 // A friendly 3–6 day window from today, skipping nothing fancy — just a range.
@@ -103,7 +103,7 @@ export function DeliveryEstimator() {
             </span>
           </p>
           <p className="flex items-center gap-2 text-[#565959]">
-            <BadgeIndianRupee className="size-4 text-emerald-700" />
+            <Banknote className="size-4 text-emerald-700" />
             Cash on Delivery available
           </p>
           <p className="flex items-center gap-2 text-[#565959]">

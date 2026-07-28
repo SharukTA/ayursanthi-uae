@@ -7,7 +7,7 @@ import { FREE_SHIPPING_THRESHOLD } from "@/lib/pricing";
 // always have something to show.
 export const DEFAULT_SETTINGS = {
   contact_phone: "+91 99999 99999",
-  contact_email: "support@ayursanthi.com",
+  contact_email: "support@ayurshoppee.ae",
   contact_company: "Ayursanthi Wellness Corp",
   contact_address: "Kochi, Kerala, India",
   contact_hours: "Mon-Sat, 9AM - 6PM",
@@ -15,7 +15,7 @@ export const DEFAULT_SETTINGS = {
   social_facebook: "",
   social_instagram: "",
   social_twitter: "",
-  // Goods subtotal (GST-inclusive) at/above which delivery is free. Stored as a
+  // Goods subtotal at/above which delivery is free. Stored as a
   // string like every setting; read as a number via getFreeShippingThreshold().
   free_shipping_threshold: String(FREE_SHIPPING_THRESHOLD),
 };

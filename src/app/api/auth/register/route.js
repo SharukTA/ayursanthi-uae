@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { hashPassword, setSession } from "@/lib/auth";
 import { sendWelcomeEmail } from "@/lib/email";
+import { queueEmail } from "@/lib/email-queue";
 import { validateRegistration, normalizePhone } from "@/lib/validation";
 
 export const runtime = "nodejs";
@@ -69,9 +70,11 @@ export async function POST(request) {
       role: newUser.role,
     });
 
-    // Fire-and-forget welcome email. Intentionally NOT awaited so a messaging
-    // failure or slow gateway can never block or break the signup response.
-    sendWelcomeEmail({ name: newUser.name, email: newUser.email });
+    // Non-blocking welcome email: a messaging failure or slow gateway must
+    // never break the signup response. Queued via after() rather than left as a
+    // bare un-awaited call, because a serverless host can freeze the function
+    // the moment the response is flushed and drop the send entirely.
+    queueEmail(() => sendWelcomeEmail({ name: newUser.name, email: newUser.email }));
 
     return Response.json(
       {

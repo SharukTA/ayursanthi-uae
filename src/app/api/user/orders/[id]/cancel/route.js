@@ -1,6 +1,7 @@
 import { getSession } from "@/lib/auth";
 import { cancelOrder } from "@/lib/order-actions";
 import { CANCEL_REASONS, cancelReasonLabel } from "@/lib/returns";
+import { formatMoney } from "@/lib/currency";
 
 export const runtime = "nodejs";
 
@@ -62,7 +63,7 @@ export async function POST(request, { params }) {
     return Response.json({
       success: true,
       message: refunded
-        ? `Order cancelled. Rs. ${Number(result.order.refundedTotal).toLocaleString()} will be refunded to you.`
+        ? `Order cancelled. ${formatMoney(result.order.refundedTotal)} will be refunded to you.`
         : "Order cancelled. Nothing was charged, so there is nothing to refund.",
       order: result.order,
     });

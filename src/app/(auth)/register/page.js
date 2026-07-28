@@ -155,7 +155,7 @@ export default function RegisterPage() {
               }}
               disabled={loading}
               error={!!errors.phone}
-              defaultCountry="IN"
+              defaultCountry="AE"
               placeholder="Mobile number"
               className="min-h-12 w-full bg-white font-normal text-slate-900 transition focus-within:border-[#007185] focus-within:ring-4 focus-within:ring-[#007185]/25"
               inputClassName="px-3 text-sm"

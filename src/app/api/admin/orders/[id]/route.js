@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { jsonError, ORDER_STATUSES, prismaErrorResponse, requireAdmin } from "@/lib/admin-api";
+import { sendOrderStatusEmail } from "@/lib/email-orders";
+import { queueEmail } from "@/lib/email-queue";
 import { cancelOrder } from "@/lib/order-actions";
 import { canTransitionOrderStatus } from "@/lib/returns";
 
@@ -76,12 +78,23 @@ export async function PATCH(request, { params }) {
     const paymentStatus =
       existing.paymentStatus === "PENDING" && status === "DELIVERED" ? "PAID" : null;
 
+    // Courier details, sent alongside the SHIPPED transition. Absent keys leave
+    // the stored values untouched; an explicit empty string clears them.
+    const tracking = {};
+    if (body.trackingNumber !== undefined) {
+      tracking.trackingNumber = String(body.trackingNumber).trim().slice(0, 120) || null;
+    }
+    if (body.courierName !== undefined) {
+      tracking.courierName = String(body.courierName).trim().slice(0, 120) || null;
+    }
+
     const order = await prisma.$transaction(async (tx) => {
       const updated = await tx.order.update({
         where: { id },
         data: {
           status,
           ...(paymentStatus ? { paymentStatus } : {}),
+          ...tracking,
           // Stamped once: this is what starts the customer's return window.
           ...(status === "DELIVERED" && !existing.deliveredAt ? { deliveredAt: new Date() } : {}),
         },
@@ -101,6 +114,17 @@ export async function PATCH(request, { params }) {
 
       return updated;
     });
+
+    // Only mail on a real transition. Re-saving the same status is a legitimate
+    // no-op (canTransitionOrderStatus allows it) and is exactly what a
+    // tracking-number correction sends — the customer must not get a second
+    // "your order has shipped" because a typo was fixed.
+    //
+    // The CANCELLED branch above returns early — its email is sent from inside
+    // cancelOrder(), so both the admin and customer cancel paths are covered.
+    if (existing.status !== status) {
+      queueEmail(() => sendOrderStatusEmail(id, status));
+    }
 
     return Response.json({ order });
   } catch (err) {

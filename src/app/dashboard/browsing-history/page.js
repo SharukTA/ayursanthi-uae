@@ -8,6 +8,7 @@ import { FadeIn, PageReveal } from "@/components/Animated";
 import { ProductMedia } from "@/components/ProductMedia";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { clearRecentlyViewed } from "@/lib/recently-viewed";
+import { formatMoney } from "@/lib/currency";
 
 // Amazon's "Browsing History" page: everything we hold about what this shopper
 // has looked at, with the controls to remove it or stop recording.
@@ -28,7 +29,7 @@ function timeAgo(iso) {
   if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
   const days = Math.round(hours / 24);
   if (days <= 7) return `${days} day${days === 1 ? "" : "s"} ago`;
-  return new Date(then).toLocaleDateString("en-IN", {
+  return new Date(then).toLocaleDateString("en-AE", {
     day: "numeric",
     month: "short",
     year: "numeric",
@@ -287,7 +288,7 @@ export default function BrowsingHistoryPage() {
                       {timeAgo(item.viewedAt)}
                       {product.price != null ? (
                         <span className="ml-2 font-bold text-[#0f1111]">
-                          Rs. {Number(product.price).toLocaleString("en-IN")}
+                          {formatMoney(product.price)}
                         </span>
                       ) : null}
                     </p>

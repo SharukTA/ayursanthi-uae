@@ -30,7 +30,8 @@ import { Button } from "@/components/ui/button";
 import { MediaUrlField } from "@/components/MediaUrlField";
 import { MarkdownDescriptionField } from "@/components/MarkdownDescriptionField";
 import { useConfirm } from "@/components/ConfirmDialog";
-import { GST_RATES, FREE_SHIPPING_THRESHOLD } from "@/lib/pricing";
+import { FREE_SHIPPING_THRESHOLD } from "@/lib/pricing";
+import { CURRENCY, formatMoney } from "@/lib/currency";
 
 export default function AdminProductsPage() {
   const router = useRouter();
@@ -52,9 +53,6 @@ export default function AdminProductsPage() {
   const [categoryId, setCategoryId] = useState("");
   const [price, setPrice] = useState("");
   const [mrp, setMrp] = useState("");
-  // Prices are GST-inclusive: this slab only splits the tax already inside the
-  // price for the invoice. Default 0% (unclassified). See lib/pricing.js.
-  const [gstRate, setGstRate] = useState("0");
   // Per-product delivery fee, summed per order and waived above the free-shipping
   // threshold. Blank = free shipping for this product.
   const [shippingFee, setShippingFee] = useState("");
@@ -88,7 +86,6 @@ export default function AdminProductsPage() {
     setCategoryId("");
     setPrice("");
     setMrp("");
-    setGstRate("0");
     setShippingFee("");
     setOfferLabel("");
     setNetQuantity("");
@@ -108,7 +105,6 @@ export default function AdminProductsPage() {
     setCategoryId(prod.categoryId || "");
     setPrice(prod.price != null ? String(prod.price) : "");
     setMrp(prod.mrp != null ? String(prod.mrp) : "");
-    setGstRate(prod.gstRate != null ? String(prod.gstRate) : "0");
     setShippingFee(
       prod.shippingFee != null && Number(prod.shippingFee) > 0
         ? String(prod.shippingFee)
@@ -315,7 +311,6 @@ export default function AdminProductsPage() {
         categoryId,
         price: Number(price),
         mrp: mrp ? Number(mrp) : undefined,
-        gstRate: Number(gstRate) || 0,
         shippingFee: shippingFee ? Number(shippingFee) : 0,
         offerLabel: editingId ? offerLabel.trim() : offerLabel.trim() || undefined,
         netQuantity: editingId ? netQuantity.trim() : netQuantity.trim() || undefined,
@@ -484,7 +479,7 @@ export default function AdminProductsPage() {
                 </label>
 
                 <label className="grid gap-2 min-w-0 text-xs font-semibold text-slate-800">
-                  Price (INR) *
+                  Price ({CURRENCY}) *
                   <input
                     type="number"
                     step="0.01"
@@ -492,46 +487,26 @@ export default function AdminProductsPage() {
                     onChange={(e) => setPrice(e.target.value)}
                     disabled={submitting}
                     required
-                    placeholder="999"
+                    placeholder="49"
                     className="w-full min-w-0 min-h-10 rounded border border-input bg-white px-3 text-xs font-normal outline-none transition focus:border-emerald-700"
                   />
                 </label>
 
                 <label className="grid gap-2 min-w-0 text-xs font-semibold text-slate-800">
-                  MRP (INR)
+                  MRP ({CURRENCY})
                   <input
                     type="number"
                     step="0.01"
                     value={mrp}
                     onChange={(e) => setMrp(e.target.value)}
                     disabled={submitting}
-                    placeholder="1299"
+                    placeholder="69"
                     className="w-full min-w-0 min-h-10 rounded border border-input bg-white px-3 text-xs font-normal outline-none transition focus:border-emerald-700"
                   />
                 </label>
 
                 <label className="grid gap-2 min-w-0 text-xs font-semibold text-slate-800">
-                  GST Rate
-                  <select
-                    value={gstRate}
-                    onChange={(e) => setGstRate(e.target.value)}
-                    disabled={submitting}
-                    className="w-full min-w-0 min-h-10 rounded border border-input bg-white px-3 text-xs font-normal outline-none transition focus:border-emerald-700"
-                  >
-                    {GST_RATES.map((rate) => (
-                      <option key={rate} value={rate}>
-                        {rate}%{rate === 0 ? " (exempt)" : ""}
-                      </option>
-                    ))}
-                  </select>
-                  <span className="text-[10px] font-normal text-slate-500">
-                    Price above is GST-inclusive — this only splits the tax out on
-                    the invoice. Ayurvedic goods are often 5% or 12%.
-                  </span>
-                </label>
-
-                <label className="grid gap-2 min-w-0 text-xs font-semibold text-slate-800">
-                  Shipping Fee (INR)
+                  Shipping Fee ({CURRENCY})
                   <input
                     type="number"
                     step="0.01"
@@ -550,9 +525,8 @@ export default function AdminProductsPage() {
                     <span className="flex items-start gap-1.5 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-[10px] font-normal leading-snug text-amber-800">
                       <AlertTriangle className="mt-px size-3 shrink-0" />
                       <span>
-                        This price (Rs. {Number(price).toLocaleString()}) is at or
-                        above the free-shipping threshold (Rs.{" "}
-                        {Number(freeShipThreshold).toLocaleString()}), so any order
+                        This price ({formatMoney(price)}) is at or
+                        above the free-shipping threshold ({formatMoney(freeShipThreshold)}), so any order
                         with this product ships free and this delivery fee will
                         never be charged. Set it to 0, or lower the price.
                       </span>
@@ -911,9 +885,9 @@ export default function AdminProductsPage() {
                         <div>
                           <p className="text-[9px] font-bold uppercase tracking-wider text-slate-450">Price / MRP</p>
                           <p className="mt-0.5">
-                            <span className="font-extrabold text-emerald-800">Rs. {Number(prod.price).toLocaleString()}</span>
+                            <span className="font-extrabold text-emerald-800">{formatMoney(prod.price)}</span>
                             {prod.mrp && (
-                              <span className="text-[10px] text-slate-500 line-through ml-1.5">Rs. {Number(prod.mrp).toLocaleString()}</span>
+                              <span className="text-[10px] text-slate-500 line-through ml-1.5">{formatMoney(prod.mrp)}</span>
                             )}
                           </p>
                         </div>
@@ -953,9 +927,9 @@ export default function AdminProductsPage() {
                           </span>
                         </td>
                         <td className="py-4">
-                          <span className="font-extrabold text-emerald-800">Rs. {Number(prod.price).toLocaleString()}</span>
+                          <span className="font-extrabold text-emerald-800">{formatMoney(prod.price)}</span>
                           {prod.mrp && (
-                            <span className="text-[10px] text-slate-500 line-through ml-1.5">Rs. {Number(prod.mrp).toLocaleString()}</span>
+                            <span className="text-[10px] text-slate-500 line-through ml-1.5">{formatMoney(prod.mrp)}</span>
                           )}
                         </td>
                         <td className="py-4">

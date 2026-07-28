@@ -17,10 +17,12 @@ import {
   FolderTree,
   Package,
   FileText,
+  Mail,
   Settings,
   History,
 } from "lucide-react";
 import { useSession } from "@/components/SessionProvider";
+import { clearGuestCart, notifyCartChanged } from "@/lib/cart-client";
 
 // Mirrors the dashboard sidebar so the header account menu and the dashboard
 // page stay in sync.
@@ -41,6 +43,7 @@ const adminNavItems = [
   { href: "/admin/categories", label: "Categories", icon: FolderTree },
   { href: "/admin/products", label: "Inventory", icon: Package },
   { href: "/admin/pages", label: "Pages & FAQ", icon: FileText },
+  { href: "/admin/emails", label: "Email Log", icon: Mail },
   { href: "/admin/settings", label: "Settings", icon: Settings },
 ];
 
@@ -73,6 +76,11 @@ export function AccountMenu({ open, onClose, onBrowse }) {
     const toastId = toast.loading("Logging you out...");
     try {
       await fetch("/api/auth/logout", { method: "POST" });
+      // The cart stays safely on the account. Anything still in this browser
+      // belongs to the session that just ended and must not greet whoever signs
+      // in next on a shared computer.
+      clearGuestCart();
+      notifyCartChanged();
       toast.success("Logged out successfully.", { id: toastId });
       window.dispatchEvent(new Event("authUpdate"));
       onClose();

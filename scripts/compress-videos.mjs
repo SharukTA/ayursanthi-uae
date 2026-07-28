@@ -1,19 +1,17 @@
-// Compress product videos before uploading them to Blob.
+// Compress product videos before uploading them to the media bucket.
 //
-// Why: the ten clips already in Blob total 101 MB — one is 15.5 MB for a single
-// product. Delivered video is what exhausted the store's monthly data transfer.
-// Re-encoded with the settings below the same clips land at roughly 0.5-1.5 MB
-// each with no visible quality loss at the sizes this site displays them.
-//
-// Usage (run on the ORIGINAL files on your machine — the copies in Blob can't be
-// downloaded while the store is blocked):
+// Why: an unprocessed set of ten clips totalled 101 MB — one was 15.5 MB for a
+// single product. Delivered video is the single biggest driver of media data
+// transfer. Re-encoded with the settings below the same clips land at roughly
+// 0.5-1.5 MB each with no visible quality loss at the sizes this site displays
+// them. Run this on the ORIGINAL files before they ever reach the bucket.
 //
 //   node scripts/compress-videos.mjs ./raw-videos ./compressed
 //
 // Then upload the files from ./compressed through the admin product form. Because
-// uploads use `addRandomSuffix: true`, each re-upload gets a fresh URL — remember
-// to delete the old oversized blobs from the Vercel dashboard afterwards so you
-// stop paying to store them.
+// `buildKey()` gives every upload a random segment, each re-upload gets a fresh
+// URL — remember to delete the old oversized objects from the R2 dashboard
+// afterwards so you stop paying to store them.
 
 import { execFile } from "node:child_process";
 import { mkdir, readdir, stat } from "node:fs/promises";
@@ -113,7 +111,7 @@ async function main() {
     );
     console.log(
       "\nUpload the compressed files via the admin product form, then delete the\n" +
-        "old blobs in the Vercel dashboard so you stop paying to store them."
+        "old objects in the R2 dashboard so you stop paying to store them."
     );
   }
 }

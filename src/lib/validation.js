@@ -3,6 +3,8 @@
 // (src/app/api/auth/register/route.js) so the rules stay in one place and the
 // server can never be bypassed by a hand-crafted request.
 
+import { validateNationalNumber } from "@/lib/geo/phone-rules";
+
 // Pragmatic email check: one @, a dotted domain, no whitespace. Deliberately
 // not RFC 5322-exhaustive — the goal is to catch typos, not parse every legal
 // address. Real deliverability is confirmed by the welcome email.
@@ -12,9 +14,9 @@ export const EMAIL_MAX_LENGTH = 254; // RFC 5321 maximum address length.
 // International phone numbers (E.164): an optional leading "+" country-code
 // prefix followed by 7–15 digits. 15 is the ITU E.164 maximum (country code +
 // national number) and 7 is a safe floor for the shortest national numbers.
-// The store ships worldwide, so we stay country-agnostic and do NOT enforce
-// per-country lengths or assume a trunk "0" — same permissive approach Amazon
-// takes behind its country-code picker.
+// This is the outer bound every number must clear; numbers that carry a "+"
+// country code we have curated data for are then checked against that
+// country's actual numbering plan (see src/lib/geo/phone-rules.js).
 const PHONE_RE = /^\+?\d{7,15}$/;
 
 export const PASSWORD_MIN_LENGTH = 8;
@@ -54,7 +56,13 @@ export function validateEmail(email) {
 
 /**
  * Phone is optional. Pass { required: true } to make a blank value an error.
- * Accepts international numbers from any country (see PHONE_RE).
+ *
+ * Two layers: every number must be a plausible E.164 string (PHONE_RE), and a
+ * number that carries a country code we have curated rules for must also match
+ * that country's numbering plan — so "+91" demands exactly 10 digits starting
+ * 6-9, while an uncurated country keeps the permissive check alone. Numbers
+ * stored without a leading "+" (legacy rows) skip the country layer, since
+ * there is no country to check them against.
  */
 export function validatePhone(phone, { required = false } = {}) {
   const raw = String(phone || "").trim();
@@ -63,7 +71,7 @@ export function validatePhone(phone, { required = false } = {}) {
   if (!PHONE_RE.test(normalized)) {
     return "Please enter a valid phone number, including the country code.";
   }
-  return null;
+  return validateNationalNumber(normalized);
 }
 
 export function validatePassword(password) {

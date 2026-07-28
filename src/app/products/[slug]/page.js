@@ -18,6 +18,7 @@ import { ProductDescription, AboutThisItem } from "@/components/ProductDescripti
 import { PageSections } from "@/components/HomeSections";
 import { RecentlyViewedTracker } from "@/components/RecentlyViewedTracker";
 import { getPageSections } from "@/lib/page-sections";
+import { formatMoney } from "@/lib/currency";
 import { CARD_MEDIA_TAKE, pickCardMedia } from "@/lib/media";
 import { splitIngredients } from "@/lib/utils";
 
@@ -172,7 +173,7 @@ export default async function ProductDetailPage({ params }) {
                 <RatingStars rating={avgRating} />
                 <span className="text-xs font-medium text-[#565959] hover:underline">
                   {reviewCount > 0
-                    ? `${reviewCount.toLocaleString("en-IN")} rating${reviewCount > 1 ? "s" : ""}`
+                    ? `${reviewCount.toLocaleString("en-AE")} rating${reviewCount > 1 ? "s" : ""}`
                     : "No ratings yet"}
                 </span>
               </a>
@@ -193,11 +194,11 @@ export default async function ProductDetailPage({ params }) {
             {/* Price Frame */}
             <div className="mt-5 rounded-md bg-white border border-emerald-100 p-4 flex items-baseline gap-3">
               <span className="text-2xl font-extrabold text-emerald-800">
-                Rs. {Number(product.price).toLocaleString()}
+                {formatMoney(product.price)}
               </span>
               {product.mrp && (
                 <span className="text-sm text-[#565959] line-through">
-                  Rs. {Number(product.mrp).toLocaleString()}
+                  {formatMoney(product.mrp)}
                 </span>
               )}
               {/* Discount badge: prefer the admin-entered "Offer Badge"
@@ -211,11 +212,6 @@ export default async function ProductDetailPage({ params }) {
                 </span>
               )}
             </div>
-            {/* Amazon shows a tax-inclusive price, so prices never grow at
-                checkout — the GST is already inside this number. */}
-            <p className="mt-1.5 text-xs font-medium text-[#565959]">
-              Inclusive of all taxes
-            </p>
 
             {/* Short description */}
             <p className="mt-6 text-sm leading-6 text-[#3f4545]">

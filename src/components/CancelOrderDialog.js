@@ -6,6 +6,7 @@ import { Loader2, XCircle } from "lucide-react";
 import { Modal } from "@/components/Modal";
 import { Button } from "@/components/ui/button";
 import { CANCEL_REASONS } from "@/lib/returns";
+import { formatMoney } from "@/lib/currency";
 
 /**
  * "Cancel items" — the Amazon cancellation sheet: pick a reason, confirm, done.
@@ -63,12 +64,11 @@ export function CancelOrderDialog({ order, onClose, onCancelled }) {
         <div className="rounded-md border border-[#d5d9d9] bg-[#f8fafc] p-3 text-[11px] text-[#3f4545]">
           <p className="font-bold text-[#0f1111]">Order {order.orderNumber}</p>
           <p className="mt-0.5">
-            {order.items.length} item{order.items.length !== 1 ? "s" : ""} · Rs.{" "}
-            {Number(order.total).toLocaleString()}
+            {order.items.length} item{order.items.length !== 1 ? "s" : ""} · {formatMoney(order.total)}
           </p>
           <p className="mt-1.5">
             {alreadyPaid
-              ? `You have already paid for this order, so Rs. ${Number(order.total).toLocaleString()} will be refunded to you.`
+              ? `You have already paid for this order, so ${formatMoney(order.total)} will be refunded to you.`
               : "You pay cash on delivery, so nothing has been charged and there is nothing to refund."}
           </p>
         </div>

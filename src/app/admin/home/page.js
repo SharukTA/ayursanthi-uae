@@ -167,7 +167,7 @@ const FIELD_META = {
   title: { label: "Title / Name", type: "text", placeholder: "e.g. Kamakalpa Nabhi Oil" },
   subtitle: { label: "Subtitle / Label", type: "text", placeholder: "e.g. Deals on desires" },
   body: { label: "Description / Quote", type: "textarea", placeholder: "Longer text..." },
-  badge: { label: "Badge / Price", type: "text", placeholder: "e.g. Up to 40% off · Rs. 499" },
+  badge: { label: "Badge / Price", type: "text", placeholder: "e.g. Up to 40% off · AED 49" },
   href: { label: "Link URL", type: "text", placeholder: "/products or /categories/slug" },
 };
 

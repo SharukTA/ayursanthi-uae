@@ -8,6 +8,7 @@ import { ProductsResults } from "@/components/ProductsResults";
 import { ScrollAwareFilters } from "@/components/ScrollAwareFilters";
 import { CatalogFilters } from "@/components/CatalogFilters";
 import { getCatalogPage } from "@/lib/catalog";
+import { CURRENCY } from "@/lib/currency";
 
 export const metadata = {
   title: "Products Catalog | Ayursanthi",
@@ -106,7 +107,9 @@ export default async function ProductsPage({ searchParams }) {
   if (categoryName) activeChips.push({ label: categoryName, href: buildHref({ category: "" }) });
   if (minPrice || maxPrice) {
     activeChips.push({
-      label: `Rs. ${minPrice || "0"} – ${maxPrice || "∞"}`,
+      // Raw query values, not amounts we computed — shown verbatim with a single
+      // leading code rather than formatted twice.
+      label: `${CURRENCY} ${minPrice || "0"} – ${maxPrice || "∞"}`,
       href: buildHref({ minPrice: "", maxPrice: "" }),
     });
   }

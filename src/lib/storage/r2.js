@@ -64,9 +64,8 @@ export function publicUrl(key) {
 }
 
 // The inverse of publicUrl. Returns null for anything this bucket does not
-// serve — external URLs pasted by an admin, legacy /uploads/ paths, and
-// leftover Vercel Blob URLs from before the migration all land here, and the
-// caller treats null as "not ours, leave it alone".
+// serve — external URLs pasted by an admin and legacy /uploads/ paths both land
+// here, and the caller treats null as "not ours, leave it alone".
 export function keyFromUrl(url) {
   if (typeof url !== "string") return null;
 

@@ -6,18 +6,34 @@
  * development.
  *
  *   EMAIL_PROVIDER   "resend" (default) | "console"
- *   EMAIL_FROM       From header, e.g. "Ayursanthi <welcome@ayursanthi.com>"
+ *   EMAIL_FROM       From header, e.g. "Ayurshoppee <orders@send.ayurshoppee.ae>"
+ *   EMAIL_REPLY_TO   Where customer replies land — the From address is a
+ *                    send-only identity with no mailbox behind it.
  *   RESEND_API_KEY   Resend account API key (https://resend.com)
  *
  * If the required credentials are missing, the module falls back to a console
  * "sender" that logs the message instead of throwing. Signup therefore works
  * immediately in dev and goes live the moment real credentials are added — no
  * code changes required.
+ *
+ * Adding a provider (Brevo, SES, ...) means writing one function shaped like
+ * sendViaResend() and a case in resolveProvider(). Templates and call sites
+ * never change.
  */
 
+import { prisma } from "@/lib/prisma";
 import { getSiteSettings } from "@/lib/settings";
+import { CURRENCY, formatMoney } from "@/lib/currency";
 
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
+
+/**
+ * Money formatting now lives in lib/currency.js so email, the storefront, the
+ * admin and the PDF invoice can never disagree about how a price is written.
+ * Re-exported here because the email templates below and lib/email-orders.js
+ * already import it from this module.
+ */
+export { CURRENCY as EMAIL_CURRENCY, formatMoney };
 
 /** Very small sanity check — the API already validates the address. */
 function looksLikeEmail(value) {
@@ -45,26 +61,86 @@ function resolveProvider() {
  * @param {string} opts.html      HTML body.
  * @param {string} [opts.text]    Plain-text fallback body.
  * @param {string} [opts.from]    Override the default From header.
+ * @param {string} [opts.replyTo] Override the default Reply-To header.
+ * @param {Array<{filename: string, content: Buffer}>} [opts.attachments]
+ * @param {string} [opts.template] Template key recorded in the EmailLog audit trail.
+ * @param {string} [opts.orderId]  Order this email is about, for the audit trail.
+ * @param {string} [opts.returnId] Return this email is about, for the audit trail.
  * @returns {Promise<{ ok: boolean, provider: string, skipped?: boolean, error?: string }>}
  */
-export async function sendEmail({ to, subject, html, text, from }) {
+export async function sendEmail({
+  to,
+  subject,
+  html,
+  text,
+  from,
+  replyTo,
+  attachments,
+  template = "unknown",
+  orderId,
+  returnId,
+}) {
   const recipient = String(to || "").trim();
   if (!looksLikeEmail(recipient)) {
     console.warn(`[email] Skipped: no valid email address (received: ${to ?? "none"})`);
+    await recordEmailLog({
+      recipient: String(to ?? ""),
+      subject,
+      template,
+      provider: "none",
+      status: "SKIPPED",
+      error: "invalid_email",
+      orderId,
+      returnId,
+    });
     return { ok: false, provider: "none", skipped: true, error: "invalid_email" };
   }
 
   const sender =
-    from || process.env.EMAIL_FROM || "Ayursanthi <onboarding@resend.dev>";
+    from || process.env.EMAIL_FROM || "Ayurshoppee <onboarding@resend.dev>";
+  const replyAddress = replyTo || process.env.EMAIL_REPLY_TO || null;
   const provider = resolveProvider();
 
   if (provider === "resend") {
     try {
-      return await sendViaResend({ from: sender, to: recipient, subject, html, text });
+      const result = await sendViaResend({
+        from: sender,
+        to: recipient,
+        subject,
+        html,
+        text,
+        replyTo: replyAddress,
+        attachments,
+      });
+      await recordEmailLog({
+        recipient,
+        subject,
+        template,
+        provider: "resend",
+        status: "SENT",
+        orderId,
+        returnId,
+      });
+      return result;
     } catch (error) {
       // Never let a messaging failure surface to the caller's critical path.
-      console.error("[email] Resend send failed:", error?.message || error);
-      return { ok: false, provider: "resend", error: String(error?.message || error) };
+      // Logged loudly: a hit rate-limit here silently blocks password resets,
+      // so this line is what tells you before customers do.
+      const message = String(error?.message || error);
+      console.error(
+        `[email] DELIVERY FAILED provider=resend subject="${subject}" to=${maskForLog(recipient)}: ${message}`
+      );
+      await recordEmailLog({
+        recipient,
+        subject,
+        template,
+        provider: "resend",
+        status: "FAILED",
+        error: message,
+        orderId,
+        returnId,
+      });
+      return { ok: false, provider: "resend", error: message };
     }
   }
 
@@ -73,23 +149,75 @@ export async function sendEmail({ to, subject, html, text, from }) {
     `[email:console] -> ${recipient}\n` +
       `             Subject: ${subject}\n` +
       `             ${text || stripHtml(html)}\n` +
+      `${attachments?.length ? `             Attachments: ${attachments.map((a) => a.filename).join(", ")}\n` : ""}` +
       `             (set RESEND_API_KEY + EMAIL_FROM to send for real)`
   );
+  await recordEmailLog({
+    recipient,
+    subject,
+    template,
+    provider: "console",
+    status: "SENT",
+    orderId,
+    returnId,
+  });
   return { ok: true, provider: "console" };
+}
+
+/**
+ * Append one row to the EmailLog audit trail.
+ *
+ * Best-effort by design: a logging failure must never turn into a failed
+ * email, so every error is swallowed here. Bodies are deliberately not stored —
+ * they are large, reproducible from the template, and can contain OTP codes.
+ */
+async function recordEmailLog(entry) {
+  try {
+    await prisma.emailLog.create({
+      data: {
+        recipient: entry.recipient.slice(0, 320),
+        subject: String(entry.subject ?? "").slice(0, 500),
+        template: entry.template || "unknown",
+        provider: entry.provider,
+        status: entry.status,
+        error: entry.error ? String(entry.error).slice(0, 2000) : null,
+        orderId: entry.orderId ?? null,
+        returnId: entry.returnId ?? null,
+      },
+    });
+  } catch (error) {
+    console.error("[email] could not write EmailLog row:", error?.message || error);
+  }
 }
 
 /**
  * Resend HTTP API implementation.
  * @returns {Promise<{ ok: boolean, provider: "resend" }>}
  */
-async function sendViaResend({ from, to, subject, html, text }) {
+async function sendViaResend({ from, to, subject, html, text, replyTo, attachments }) {
   const res = await fetch(RESEND_ENDPOINT, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
     },
-    body: JSON.stringify({ from, to, subject, html, text }),
+    body: JSON.stringify({
+      from,
+      to,
+      subject,
+      html,
+      text,
+      ...(replyTo ? { reply_to: replyTo } : {}),
+      // Resend takes attachment bytes as base64 in the JSON body.
+      ...(attachments?.length
+        ? {
+            attachments: attachments.map((file) => ({
+              filename: file.filename,
+              content: Buffer.from(file.content).toString("base64"),
+            })),
+          }
+        : {}),
+    }),
   });
 
   const data = await res.json().catch(() => ({}));
@@ -101,6 +229,13 @@ async function sendViaResend({ from, to, subject, html, text }) {
   return { ok: true, provider: "resend" };
 }
 
+/** Keep full addresses out of log aggregators while staying diagnosable. */
+function maskForLog(email) {
+  const [local, domain] = String(email).split("@");
+  if (!local || !domain) return "***";
+  return `${local.slice(0, 2)}***@${domain}`;
+}
+
 /** Crude HTML → text reduction for the plain-text fallback / console logs. */
 function stripHtml(html) {
   return String(html || "")
@@ -110,45 +245,50 @@ function stripHtml(html) {
     .trim();
 }
 
-/**
- * Localised welcome-letter copy. The platform serves an Ayurvedic store based
- * in Kerala, so English, Hindi and Malayalam are provided; unknown languages
- * fall back to English. Each entry exposes the dynamic fields as functions so a
- * single template can render any language.
- */
-const WELCOME_CONTENT = {
-  en: {
-    subject: (brand) => `Welcome to ${brand}!`,
-    greeting: (name) => `Dear ${name},`,
-    intro: (brand) =>
-      `Thank you for creating your account with ${brand}. We're delighted to welcome you to our community of wellness seekers.`,
-    body: "Your account is ready. You can now explore our authentic Ayurvedic products, track your orders, earn rewards, and manage everything from your personal dashboard.",
-    cta: "Start shopping",
-    closing: (brand) => `Warm regards,\nThe ${brand} Team`,
-  },
-  hi: {
-    subject: (brand) => `${brand} में आपका स्वागत है!`,
-    greeting: (name) => `प्रिय ${name},`,
-    intro: (brand) =>
-      `${brand} के साथ अपना खाता बनाने के लिए धन्यवाद। हमारे कल्याण समुदाय में आपका स्वागत करते हुए हमें खुशी हो रही है।`,
-    body: "आपका खाता तैयार है। अब आप हमारे प्रामाणिक आयुर्वेदिक उत्पादों को देख सकते हैं, अपने ऑर्डर ट्रैक कर सकते हैं, रिवॉर्ड कमा सकते हैं और अपने डैशबोर्ड से सब कुछ प्रबंधित कर सकते हैं।",
-    cta: "खरीदारी शुरू करें",
-    closing: (brand) => `सादर,\n${brand} टीम`,
-  },
-  ml: {
-    subject: (brand) => `${brand}-ലേക്ക് സ്വാഗതം!`,
-    greeting: (name) => `പ്രിയ ${name},`,
-    intro: (brand) =>
-      `${brand}-ൽ അക്കൗണ്ട് സൃഷ്ടിച്ചതിന് നന്ദി. ഞങ്ങളുടെ ആരോഗ്യ സമൂഹത്തിലേക്ക് നിങ്ങളെ സ്വാഗതം ചെയ്യുന്നതിൽ സന്തോഷമുണ്ട്.`,
-    body: "നിങ്ങളുടെ അക്കൗണ്ട് തയ്യാറാണ്. ഇപ്പോൾ നിങ്ങൾക്ക് ആധികാരിക ആയുർവേദ ഉൽപ്പന്നങ്ങൾ കാണാം, ഓർഡറുകൾ ട്രാക്ക് ചെയ്യാം, റിവാർഡുകൾ നേടാം, ഡാഷ്‌ബോർഡിൽ നിന്ന് എല്ലാം നിയന്ത്രിക്കാം.",
-    cta: "ഷോപ്പിംഗ് ആരംഭിക്കുക",
-    closing: (brand) => `സ്നേഹപൂർവ്വം,\n${brand} ടീം`,
-  },
-};
+/** Escape user-supplied values before they go into an HTML template. */
+export function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
 
-/** Build the branded HTML welcome letter. */
-function renderWelcomeHtml({ content, brand, name, supportEmail, shopUrl }) {
-  const closingHtml = content.closing(brand).replace(/\n/g, "<br/>");
+// ---------------------------------------------------------------------------
+// Shared presentation
+// ---------------------------------------------------------------------------
+
+const BRAND_COLOR = "#156c6b";
+
+/**
+ * Branding + links every template needs, read once from editable site settings.
+ * Falls back to sane defaults whenever the DB is unreachable so an email is
+ * never blocked by a settings lookup.
+ *
+ * @returns {Promise<{brand: string, supportEmail: string, siteUrl: string}>}
+ */
+export async function getBrandContext() {
+  let brand = "Ayurshoppee";
+  let supportEmail = "support@ayurshoppee.ae";
+
+  try {
+    const settings = await getSiteSettings();
+    brand = settings.contact_company?.trim() || brand;
+    supportEmail = settings.contact_email?.trim() || supportEmail;
+  } catch {
+    // Settings unavailable — keep the defaults above.
+  }
+
+  const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").replace(/\/$/, "");
+  return { brand, supportEmail, siteUrl };
+}
+
+/**
+ * The shared HTML shell: branded header, white card, support footer. Every
+ * template renders its own `bodyHtml` into it so the chrome only exists once.
+ */
+export function renderEmailLayout({ brand, supportEmail, bodyHtml }) {
   return `<!DOCTYPE html>
 <html>
   <body style="margin:0;padding:0;background:#f1f5f9;font-family:Arial,Helvetica,sans-serif;color:#0f172a;">
@@ -157,24 +297,18 @@ function renderWelcomeHtml({ content, brand, name, supportEmail, shopUrl }) {
         <td align="center">
           <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
             <tr>
-              <td style="background:#156c6b;padding:28px 32px;text-align:center;">
-                <h1 style="margin:0;color:#ffffff;font-size:22px;letter-spacing:0.5px;">${brand}</h1>
+              <td style="background:${BRAND_COLOR};padding:28px 32px;text-align:center;">
+                <h1 style="margin:0;color:#ffffff;font-size:22px;letter-spacing:0.5px;">${escapeHtml(brand)}</h1>
               </td>
             </tr>
             <tr>
               <td style="padding:32px;">
-                <p style="margin:0 0 16px;font-size:16px;font-weight:bold;">${content.greeting(name)}</p>
-                <p style="margin:0 0 16px;font-size:15px;line-height:1.6;">${content.intro(brand)}</p>
-                <p style="margin:0 0 24px;font-size:15px;line-height:1.6;">${content.body}</p>
-                <p style="margin:0 0 28px;text-align:center;">
-                  <a href="${shopUrl}" style="display:inline-block;background:#156c6b;color:#ffffff;text-decoration:none;font-weight:bold;font-size:15px;padding:12px 28px;border-radius:8px;">${content.cta}</a>
-                </p>
-                <p style="margin:0;font-size:15px;line-height:1.6;color:#334155;">${closingHtml}</p>
+${bodyHtml}
               </td>
             </tr>
             <tr>
               <td style="padding:20px 32px;background:#f8fafc;border-top:1px solid #e2e8f0;text-align:center;font-size:12px;color:#64748b;">
-                Need help? Contact us at <a href="mailto:${supportEmail}" style="color:#156c6b;">${supportEmail}</a>.
+                Need help? Contact us at <a href="mailto:${escapeHtml(supportEmail)}" style="color:${BRAND_COLOR};">${escapeHtml(supportEmail)}</a>.
               </td>
             </tr>
           </table>
@@ -185,11 +319,127 @@ function renderWelcomeHtml({ content, brand, name, supportEmail, shopUrl }) {
 </html>`;
 }
 
+/** A centred call-to-action button. */
+export function renderButton(href, label) {
+  return `<p style="margin:0 0 28px;text-align:center;">
+  <a href="${escapeHtml(href)}" style="display:inline-block;background:${BRAND_COLOR};color:#ffffff;text-decoration:none;font-weight:bold;font-size:15px;padding:12px 28px;border-radius:8px;">${escapeHtml(label)}</a>
+</p>`;
+}
+
+/** A highlighted key/value block — order number, tracking status, and so on. */
+export function renderInfoRows(rows) {
+  const body = rows
+    .filter(Boolean)
+    .map(
+      ([label, value]) =>
+        `<tr>
+          <td style="padding:6px 0;font-size:14px;color:#64748b;">${escapeHtml(label)}</td>
+          <td style="padding:6px 0;font-size:14px;color:#0f172a;text-align:right;font-weight:bold;">${escapeHtml(value)}</td>
+        </tr>`
+    )
+    .join("\n");
+
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 16px;margin:0 0 24px;">
+${body}
+</table>`;
+}
+
+/**
+ * Order line items with a totals block.
+ *
+ * @param {Array<{productName: string, quantity: number, total: any}>} items
+ * @param {{subtotal?: any, shipping?: any, tax?: any, total?: any}} [totals]
+ */
+export function renderItemsTable(items, totals = null) {
+  const lines = (items ?? [])
+    .map(
+      (item) =>
+        `<tr>
+          <td style="padding:10px 0;border-bottom:1px solid #e2e8f0;font-size:14px;">${escapeHtml(item.productName)}<br/><span style="color:#64748b;font-size:13px;">Qty ${escapeHtml(item.quantity)}</span></td>
+          <td style="padding:10px 0;border-bottom:1px solid #e2e8f0;font-size:14px;text-align:right;white-space:nowrap;">${escapeHtml(formatMoney(item.total))}</td>
+        </tr>`
+    )
+    .join("\n");
+
+  const totalRows = totals
+    ? [
+        totals.subtotal != null ? ["Subtotal", formatMoney(totals.subtotal)] : null,
+        totals.shipping != null ? ["Delivery", formatMoney(totals.shipping)] : null,
+      ]
+        .filter(Boolean)
+        .map(
+          ([label, value]) =>
+            `<tr>
+              <td style="padding:4px 0;font-size:14px;color:#64748b;">${escapeHtml(label)}</td>
+              <td style="padding:4px 0;font-size:14px;text-align:right;color:#64748b;">${escapeHtml(value)}</td>
+            </tr>`
+        )
+        .join("\n") +
+      (totals.total != null
+        ? `<tr>
+            <td style="padding:10px 0 0;font-size:16px;font-weight:bold;">Total</td>
+            <td style="padding:10px 0 0;font-size:16px;font-weight:bold;text-align:right;">${escapeHtml(formatMoney(totals.total))}</td>
+          </tr>`
+        : "")
+    : "";
+
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
+${lines}
+${totalRows}
+</table>`;
+}
+
+/** Plain-text rendering of order lines, for the text/plain alternative. */
+export function itemsToText(items) {
+  return (items ?? [])
+    .map((item) => `  - ${item.productName} x${item.quantity} — ${formatMoney(item.total)}`)
+    .join("\n");
+}
+
+// ---------------------------------------------------------------------------
+// Welcome letter
+// ---------------------------------------------------------------------------
+
+/**
+ * Localised welcome-letter copy. Each entry exposes the dynamic fields as
+ * functions so a single template can render any language.
+ */
+const WELCOME_CONTENT = {
+  en: {
+    subject: (brand) => `Welcome to ${brand}!`,
+    greeting: (name) => `Dear ${name},`,
+    intro: (brand) =>
+      `Thank you for creating your account with ${brand}. We're delighted to welcome you to our community of wellness seekers.`,
+    body: "Your account is ready. You can now explore our authentic Ayurvedic products, track your orders, and manage everything from your personal dashboard.",
+    cta: "Start shopping",
+    closing: (brand) => `Warm regards,\nThe ${brand} Team`,
+  },
+  hi: {
+    subject: (brand) => `${brand} में आपका स्वागत है!`,
+    greeting: (name) => `प्रिय ${name},`,
+    intro: (brand) =>
+      `${brand} के साथ अपना खाता बनाने के लिए धन्यवाद। हमारे कल्याण समुदाय में आपका स्वागत करते हुए हमें खुशी हो रही है।`,
+    body: "आपका खाता तैयार है। अब आप हमारे प्रामाणिक आयुर्वेदिक उत्पादों को देख सकते हैं, अपने ऑर्डर ट्रैक कर सकते हैं और अपने डैशबोर्ड से सब कुछ प्रबंधित कर सकते हैं।",
+    cta: "खरीदारी शुरू करें",
+    closing: (brand) => `सादर,\n${brand} टीम`,
+  },
+  ml: {
+    subject: (brand) => `${brand}-ലേക്ക് സ്വാഗതം!`,
+    greeting: (name) => `പ്രിയ ${name},`,
+    intro: (brand) =>
+      `${brand}-ൽ അക്കൗണ്ട് സൃഷ്ടിച്ചതിന് നന്ദി. ഞങ്ങളുടെ ആരോഗ്യ സമൂഹത്തിലേക്ക് നിങ്ങളെ സ്വാഗതം ചെയ്യുന്നതിൽ സന്തോഷമുണ്ട്.`,
+    body: "നിങ്ങളുടെ അക്കൗണ്ട് തയ്യാറാണ്. ഇപ്പോൾ നിങ്ങൾക്ക് ആധികാരിക ആയുർവേദ ഉൽപ്പന്നങ്ങൾ കാണാം, ഓർഡറുകൾ ട്രാക്ക് ചെയ്യാം, ഡാഷ്‌ബോർഡിൽ നിന്ന് എല്ലാം നിയന്ത്രിക്കാം.",
+    cta: "ഷോപ്പിംഗ് ആരംഭിക്കുക",
+    closing: (brand) => `സ്നേഹപൂർവ്വം,\n${brand} ടീം`,
+  },
+};
+
 /**
  * Send the welcome letter email to a newly registered user.
  *
- * Fire-and-forget by design: callers should NOT await this on the critical
- * signup path. Any failure is swallowed and logged here.
+ * Fire-and-forget by design: callers should NOT block the signup response on
+ * this. On serverless, wrap the call in `after()` from "next/server" so the
+ * runtime doesn't freeze before the send completes.
  *
  * @param {{ name?: string, email?: string|null }} user
  * @param {{ lang?: string }} [options]  Preferred language ("en" | "hi" | "ml").
@@ -200,38 +450,31 @@ export async function sendWelcomeEmail(user, { lang = "en" } = {}) {
 
   const firstName = (user.name || "there").trim().split(/\s+/)[0];
   const content = WELCOME_CONTENT[lang] || WELCOME_CONTENT.en;
+  const { brand, supportEmail, siteUrl } = await getBrandContext();
+  const shopUrl = `${siteUrl}/products`;
 
-  // Branding from editable site settings, with sensible fallbacks.
-  let brand = "Ayursanthi";
-  let supportEmail = "support@ayursanthi.com";
-  try {
-    const settings = await getSiteSettings();
-    brand = settings.contact_company?.trim() || brand;
-    supportEmail = settings.contact_email?.trim() || supportEmail;
-  } catch {
-    // Settings unavailable — keep the defaults above.
-  }
+  const bodyHtml = `
+                <p style="margin:0 0 16px;font-size:16px;font-weight:bold;">${escapeHtml(content.greeting(firstName))}</p>
+                <p style="margin:0 0 16px;font-size:15px;line-height:1.6;">${escapeHtml(content.intro(brand))}</p>
+                <p style="margin:0 0 24px;font-size:15px;line-height:1.6;">${escapeHtml(content.body)}</p>
+${renderButton(shopUrl, content.cta)}
+                <p style="margin:0;font-size:15px;line-height:1.6;color:#334155;">${escapeHtml(content.closing(brand)).replace(/\n/g, "<br/>")}</p>`;
 
-  const shopUrl = `${(process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").replace(/\/$/, "")}/products`;
-  const html = renderWelcomeHtml({ content, brand, name: firstName, supportEmail, shopUrl });
+  const html = renderEmailLayout({ brand, supportEmail, bodyHtml });
   const text = `${content.greeting(firstName)}\n\n${content.intro(brand)}\n\n${content.body}\n\n${content.cta}: ${shopUrl}\n\n${content.closing(brand)}`;
 
   try {
-    await sendEmail({
-      to: user.email,
-      subject: content.subject(brand),
-      html,
-      text,
-    });
+    await sendEmail({ to: user.email, subject: content.subject(brand), html, text, template: "welcome" });
   } catch (error) {
     console.error("[email] sendWelcomeEmail failed:", error?.message || error);
   }
 }
 
-/**
- * Localised copy for the password-reset OTP email. Same three languages as the
- * welcome letter; unknown languages fall back to English.
- */
+// ---------------------------------------------------------------------------
+// Password reset OTP
+// ---------------------------------------------------------------------------
+
+/** Localised copy for the password-reset OTP email. */
 const RESET_OTP_CONTENT = {
   en: {
     subject: (brand) => `Your ${brand} password reset code`,
@@ -271,47 +514,6 @@ const RESET_OTP_CONTENT = {
   },
 };
 
-/** Build the branded HTML OTP email. */
-function renderResetOtpHtml({ content, brand, name, otp, expiryMinutes, supportEmail }) {
-  const closingHtml = content.closing(brand).replace(/\n/g, "<br/>");
-  return `<!DOCTYPE html>
-<html>
-  <body style="margin:0;padding:0;background:#f1f5f9;font-family:Arial,Helvetica,sans-serif;color:#0f172a;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:24px 0;">
-      <tr>
-        <td align="center">
-          <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
-            <tr>
-              <td style="background:#156c6b;padding:28px 32px;text-align:center;">
-                <h1 style="margin:0;color:#ffffff;font-size:22px;letter-spacing:0.5px;">${brand}</h1>
-              </td>
-            </tr>
-            <tr>
-              <td style="padding:32px;">
-                <p style="margin:0 0 16px;font-size:16px;font-weight:bold;">${content.greeting(name)}</p>
-                <p style="margin:0 0 24px;font-size:15px;line-height:1.6;">${content.intro}</p>
-                <p style="margin:0 0 8px;font-size:13px;color:#64748b;text-align:center;">${content.label}</p>
-                <p style="margin:0 0 24px;text-align:center;">
-                  <span style="display:inline-block;background:#f0fdfa;border:1px solid #99f6e4;color:#0f766e;font-size:34px;font-weight:bold;letter-spacing:10px;padding:14px 24px;border-radius:10px;">${otp}</span>
-                </p>
-                <p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#334155;">${content.expiry(expiryMinutes)}</p>
-                <p style="margin:0 0 24px;font-size:14px;line-height:1.6;color:#334155;">${content.ignore}</p>
-                <p style="margin:0;font-size:15px;line-height:1.6;color:#334155;">${closingHtml}</p>
-              </td>
-            </tr>
-            <tr>
-              <td style="padding:20px 32px;background:#f8fafc;border-top:1px solid #e2e8f0;text-align:center;font-size:12px;color:#64748b;">
-                Need help? Contact us at <a href="mailto:${supportEmail}" style="color:#156c6b;">${supportEmail}</a>.
-              </td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-    </table>
-  </body>
-</html>`;
-}
-
 /**
  * Email a one-time password for the forgot/reset password flow.
  *
@@ -329,24 +531,21 @@ export async function sendPasswordResetOtpEmail(user, otp, { expiryMinutes = 10,
 
   const firstName = (user.name || "there").trim().split(/\s+/)[0];
   const content = RESET_OTP_CONTENT[lang] || RESET_OTP_CONTENT.en;
+  const { brand, supportEmail } = await getBrandContext();
 
-  let brand = "Ayursanthi";
-  let supportEmail = "support@ayursanthi.com";
-  try {
-    const settings = await getSiteSettings();
-    brand = settings.contact_company?.trim() || brand;
-    supportEmail = settings.contact_email?.trim() || supportEmail;
-  } catch {
-    // Settings unavailable — keep the defaults above.
-  }
+  const bodyHtml = `
+                <p style="margin:0 0 16px;font-size:16px;font-weight:bold;">${escapeHtml(content.greeting(firstName))}</p>
+                <p style="margin:0 0 24px;font-size:15px;line-height:1.6;">${escapeHtml(content.intro)}</p>
+                <p style="margin:0 0 8px;font-size:13px;color:#64748b;text-align:center;">${escapeHtml(content.label)}</p>
+                <p style="margin:0 0 24px;text-align:center;">
+                  <span style="display:inline-block;background:#f0fdfa;border:1px solid #99f6e4;color:#0f766e;font-size:34px;font-weight:bold;letter-spacing:10px;padding:14px 24px;border-radius:10px;">${escapeHtml(otp)}</span>
+                </p>
+                <p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#334155;">${escapeHtml(content.expiry(expiryMinutes))}</p>
+                <p style="margin:0 0 24px;font-size:14px;line-height:1.6;color:#334155;">${escapeHtml(content.ignore)}</p>
+                <p style="margin:0;font-size:15px;line-height:1.6;color:#334155;">${escapeHtml(content.closing(brand)).replace(/\n/g, "<br/>")}</p>`;
 
-  const html = renderResetOtpHtml({ content, brand, name: firstName, otp, expiryMinutes, supportEmail });
+  const html = renderEmailLayout({ brand, supportEmail, bodyHtml });
   const text = `${content.greeting(firstName)}\n\n${content.intro}\n\n${content.label}: ${otp}\n\n${content.expiry(expiryMinutes)}\n\n${content.ignore}\n\n${content.closing(brand)}`;
 
-  return sendEmail({
-    to: user.email,
-    subject: content.subject(brand),
-    html,
-    text,
-  });
+  return sendEmail({ to: user.email, subject: content.subject(brand), html, text, template: "password_reset_otp" });
 }

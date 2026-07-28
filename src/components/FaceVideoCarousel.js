@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import useEmblaCarousel from "embla-carousel-react";
 import Autoplay from "embla-carousel-autoplay";
-import { ArrowRight, BadgeIndianRupee } from "lucide-react";
+import { ArrowRight, Tag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 // Pulls a vibrant "dominant" colour out of the current video frame by drawing it
@@ -167,7 +167,7 @@ export function FaceVideoCarousel({ items = [], onDominantColor, heroLayout = fa
           ) : null}
           {activeItem?.price ? (
             <p className="mt-4 inline-flex items-center gap-1.5 text-2xl font-bold text-[#0f1111]">
-              <BadgeIndianRupee className="size-6 text-emerald-600" />
+              <Tag className="size-6 text-emerald-600" />
               {activeItem.price}
             </p>
           ) : null}
@@ -246,7 +246,7 @@ export function FaceVideoCarousel({ items = [], onDominantColor, heroLayout = fa
                       heroLayout ? "lg:hidden" : ""
                     }`}
                   >
-                    <BadgeIndianRupee className="size-4" />
+                    <Tag className="size-4" />
                     {item.price}
                   </span>
                 ) : null}

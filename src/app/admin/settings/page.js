@@ -10,6 +10,8 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { Button } from "@/components/ui/button";
 import { validateSettings } from "@/lib/settings-shared";
+import { FREE_SHIPPING_THRESHOLD } from "@/lib/pricing";
+import { CURRENCY } from "@/lib/currency";
 
 // Field groups for the settings form. `key` must match a key in lib/settings.js.
 const GROUPS = [
@@ -18,7 +20,7 @@ const GROUPS = [
     icon: Phone,
     fields: [
       { key: "contact_phone", label: "Phone number", placeholder: "+91 99999 99999" },
-      { key: "contact_email", label: "Support email", placeholder: "support@ayursanthi.com" },
+      { key: "contact_email", label: "Support email", placeholder: "support@ayurshoppee.ae" },
       { key: "contact_company", label: "Company / office name", placeholder: "Ayursanthi Wellness Corp" },
       { key: "contact_address", label: "Address", placeholder: "Kochi, Kerala, India" },
       { key: "contact_hours", label: "Working hours", placeholder: "Mon-Sat, 9AM - 6PM" },
@@ -31,10 +33,10 @@ const GROUPS = [
     fields: [
       {
         key: "free_shipping_threshold",
-        label: "Free-shipping threshold (INR)",
-        placeholder: "1000",
+        label: `Free-shipping threshold (${CURRENCY})`,
+        placeholder: String(FREE_SHIPPING_THRESHOLD),
         type: "number",
-        hint: "Orders with a goods subtotal (incl. GST) at or above this amount ship free. Below it, the per-product shipping fees apply.",
+        hint: "Orders with a goods subtotal at or above this amount ship free. Below it, the per-product shipping fees apply.",
       },
     ],
   },

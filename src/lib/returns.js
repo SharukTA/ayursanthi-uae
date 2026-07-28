@@ -17,8 +17,9 @@
 // How long after delivery a customer may still start a return.
 export const RETURN_WINDOW_DAYS = 7;
 
-// Fulfillment states a customer may still cancel from. SHIPPED is intentionally
-// absent: the parcel is already with the courier.
+// Fulfillment states a customer may still cancel from. SHIPPED and
+// OUT_FOR_DELIVERY are intentionally absent: the parcel is already with the
+// courier, and one that is out on the van is even further gone.
 export const CANCELLABLE_ORDER_STATUSES = ["PENDING", "CONFIRMED", "PROCESSING"];
 
 // The fulfillment ladder, in order. An order only ever moves *forward* along it,
@@ -26,11 +27,23 @@ export const CANCELLABLE_ORDER_STATUSES = ["PENDING", "CONFIRMED", "PROCESSING"]
 // are terminal: the admin dropdown offers nothing further and the API refuses
 // it — so a CONFIRMED order can never be walked back to PENDING, and a CANCELLED
 // one is frozen. Post-delivery changes are handled through returns, not here.
+//
+// Every rung lists *all* the rungs ahead of it, not just the next one: a small
+// store often hands a parcel over and only updates the record once, so skipping
+// straight from PROCESSING to DELIVERED has to stay legal.
 export const ORDER_STATUS_TRANSITIONS = {
-  PENDING: ["CONFIRMED", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"],
-  CONFIRMED: ["PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"],
-  PROCESSING: ["SHIPPED", "DELIVERED", "CANCELLED"],
-  SHIPPED: ["DELIVERED", "CANCELLED"],
+  PENDING: [
+    "CONFIRMED",
+    "PROCESSING",
+    "SHIPPED",
+    "OUT_FOR_DELIVERY",
+    "DELIVERED",
+    "CANCELLED",
+  ],
+  CONFIRMED: ["PROCESSING", "SHIPPED", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED"],
+  PROCESSING: ["SHIPPED", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED"],
+  SHIPPED: ["OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED"],
+  OUT_FOR_DELIVERY: ["DELIVERED", "CANCELLED"],
   DELIVERED: [],
   CANCELLED: [],
 };
@@ -261,53 +274,26 @@ function round2(value) {
 /**
  * Refund maths for a set of selected units, the way Amazon splits it:
  *   - the item value goes back in full,
- *   - the GST that belongs to those units goes back,
  *   - shipping only when nothing sellable stays with the customer, because the
  *     delivery still happened for anything they keep.
  *
- * Prices are GST-INCLUSIVE (see lib/pricing.js): each order line's `price`
- * already contains its tax, so the refund total is item value + shipping — the
- * `tax` field is just the slice of that item value which is GST, shown for the
- * invoice. (Historical orders that added GST on top are detected and refunded
- * the old way so their refunds stay whole.)
+ * No tax component: the store charges none (see lib/pricing.js), so a refund is
+ * item value + shipping.
  *
  * @param {object} order                       order with items (+ returns) loaded
  * @param {Array<{orderItemId: string, quantity: number}>} selections
- * @returns {{items: number, tax: number, shipping: number, total: number}}
+ * @returns {{items: number, shipping: number, total: number}}
  */
 export function computeRefundBreakdown(order, selections) {
   const byId = new Map((order?.items ?? []).map((item) => [item.id, item]));
 
   let itemsAmount = 0;
-  let perLineTax = 0;
   for (const selection of selections ?? []) {
     const item = byId.get(selection.orderItemId);
     if (!item) continue;
-    const quantity = Number(selection.quantity);
-    itemsAmount += Number(item.price) * quantity;
-
-    // GST attributable to the units returned, from the tax captured on the line
-    // at purchase time, split evenly across that line's units.
-    const lineQty = Number(item.quantity) || 0;
-    if (lineQty > 0) perLineTax += (Number(item.tax ?? 0) * quantity) / lineQty;
+    itemsAmount += Number(item.price) * Number(selection.quantity);
   }
   itemsAmount = round2(itemsAmount);
-  perLineTax = round2(perLineTax);
-
-  const subtotal = Number(order?.subtotal ?? 0);
-  const orderShipping = Number(order?.shipping ?? 0);
-  const orderTotal = Number(order?.total ?? 0);
-
-  // Legacy orders added GST on top of the subtotal (total = subtotal + tax +
-  // shipping); inclusive orders bake it in (total = subtotal + shipping). Detect
-  // which, so an old order still refunds the tax it charged on top.
-  const taxAddedOnTop = orderTotal > round2(subtotal + orderShipping) + 0.01;
-
-  const tax = taxAddedOnTop
-    ? subtotal > 0
-      ? round2((Number(order.tax) * itemsAmount) / subtotal)
-      : 0
-    : perLineTax;
 
   // Units already gone (earlier returns) plus the ones being sent back now: if
   // that covers the whole order, the shipping fee goes back too.
@@ -317,12 +303,7 @@ export function computeRefundBreakdown(order, selections) {
     remainingAfter[selection.orderItemId] -= Number(selection.quantity);
   }
   const wholeOrderGone = Object.values(remainingAfter).every((qty) => qty <= 0);
-  const shipping = wholeOrderGone ? round2(orderShipping) : 0;
+  const shipping = wholeOrderGone ? round2(Number(order?.shipping ?? 0)) : 0;
 
-  // Inclusive: tax is already inside itemsAmount. Legacy: it was charged on top.
-  const total = taxAddedOnTop
-    ? round2(itemsAmount + tax + shipping)
-    : round2(itemsAmount + shipping);
-
-  return { items: itemsAmount, tax, shipping, total };
+  return { items: itemsAmount, shipping, total: round2(itemsAmount + shipping) };
 }

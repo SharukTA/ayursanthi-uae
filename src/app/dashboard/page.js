@@ -13,6 +13,7 @@ import {
   KeyRound,
 } from "lucide-react";
 import { FadeIn, PageReveal, Stagger, StaggerItem } from "@/components/Animated";
+import { formatMoney } from "@/lib/currency";
 
 // Amazon's "Your Account" hub is a grid of large cards, each an icon + title +
 // one-line description, linking to a section. These are the customer-facing
@@ -100,6 +101,7 @@ export default function DashboardPage() {
       case "DELIVERED": return "bg-emerald-50 text-emerald-800";
       case "CONFIRMED": return "bg-indigo-50 text-indigo-800";
       case "SHIPPED": return "bg-blue-50 text-blue-800";
+      case "OUT_FOR_DELIVERY": return "bg-cyan-50 text-cyan-800";
       case "PROCESSING": return "bg-amber-50 text-amber-800";
       case "CANCELLED": return "bg-rose-50 text-rose-800";
       default: return "bg-slate-100 text-slate-600";
@@ -175,7 +177,7 @@ export default function DashboardPage() {
                     {order.orderNumber}
                   </p>
                   <p className="mt-0.5 text-[10px] text-[#565959]">
-                    {new Date(order.createdAt).toLocaleDateString("en-IN", {
+                    {new Date(order.createdAt).toLocaleDateString("en-AE", {
                       year: "numeric",
                       month: "short",
                       day: "numeric",
@@ -184,12 +186,12 @@ export default function DashboardPage() {
                 </div>
                 <div className="shrink-0 text-right">
                   <p className="text-xs font-extrabold text-[#0f1111]">
-                    Rs. {Number(order.total).toLocaleString()}
+                    {formatMoney(order.total)}
                   </p>
                   <span
                     className={`mt-0.5 inline-block rounded px-1.5 py-0.5 text-[9px] font-bold ${statusColor(order.status)}`}
                   >
-                    {order.status}
+                    {order.status.replace(/_/g, " ")}
                   </span>
                 </div>
               </Link>

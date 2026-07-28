@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, Search } from "lucide-react";
 import { COUNTRIES, flagEmoji, getCountry } from "@/lib/geo/countries";
+import { getMaxNationalLength } from "@/lib/geo/phone-rules";
 
 // Amazon-style phone entry: a country dial-code picker on the left and the
 // national number on the right. The component owns the country/number split
@@ -34,7 +35,7 @@ function parseValue(value, fallbackCode) {
 export function PhoneField({
   value,
   onChange,
-  defaultCountry = "IN",
+  defaultCountry = "AE",
   disabled = false,
   required = false,
   error = false,
@@ -56,6 +57,9 @@ export function PhoneField({
   const country = getCountry(code) || getCountry(defaultCountry);
   const dial = country?.dial || "";
   const composed = national ? `+${dial}${national}` : "";
+  // Hard stop on how many digits the selected country can accept, so an over-
+  // long number is impossible to type rather than only rejected on submit.
+  const maxNational = getMaxNationalLength(country?.code || defaultCountry);
 
   // Keep internal state in sync when the parent value changes from the outside
   // (e.g. a profile that loads asynchronously). Guarded against our own emits.
@@ -89,16 +93,20 @@ export function PhoneField({
   };
 
   const handleNational = (raw) => {
-    const clean = raw.replace(/\D/g, "");
+    const clean = raw.replace(/\D/g, "").slice(0, maxNational);
     setNational(clean);
     emit(code, clean);
   };
 
   const selectCountry = (nextCode) => {
+    // Switching to a country with a shorter plan (e.g. India -> Qatar) would
+    // otherwise leave digits behind that the new country can never accept.
+    const trimmed = national.slice(0, getMaxNationalLength(nextCode));
     setCode(nextCode);
+    setNational(trimmed);
     setOpen(false);
     setQuery("");
-    emit(nextCode, national);
+    emit(nextCode, trimmed);
   };
 
   const filtered = useMemo(() => {
@@ -145,6 +153,7 @@ export function PhoneField({
         onChange={(e) => handleNational(e.target.value)}
         disabled={disabled}
         required={required}
+        maxLength={maxNational}
         placeholder={placeholder}
         aria-invalid={error ? "true" : undefined}
         className={`min-w-0 flex-1 bg-transparent outline-none disabled:opacity-60 ${inputClassName}`}

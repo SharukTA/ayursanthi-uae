@@ -72,7 +72,7 @@ export function ProductReviews({ reviews = [] }) {
           <div>
             <RatingStars rating={average} />
             <p className="mt-0.5 text-xs font-medium text-[#565959]">
-              {total.toLocaleString("en-IN")} review{total > 1 ? "s" : ""}
+              {total.toLocaleString("en-AE")} review{total > 1 ? "s" : ""}
             </p>
           </div>
         </div>

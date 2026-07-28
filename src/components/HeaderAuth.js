@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { LogOut, User } from "lucide-react";
 import { useSession } from "@/components/SessionProvider";
+import { clearGuestCart, notifyCartChanged } from "@/lib/cart-client";
 
 export function HeaderAuth({ onOpenMenu } = {}) {
   const router = useRouter();
@@ -21,6 +22,10 @@ export function HeaderAuth({ onOpenMenu } = {}) {
         throw new Error("Logout request failed.");
       }
 
+      // The cart stays safely on the account; the browser copy must not outlive
+      // the session (see AccountMenu).
+      clearGuestCart();
+      notifyCartChanged();
       toast.success("Successfully logged out.", { id: toastId });
       window.dispatchEvent(new Event("authUpdate"));
       router.push("/");

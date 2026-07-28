@@ -27,7 +27,7 @@ export async function GET() {
         include: { items: true },
       },
       // Refund rows only — the customer has no use for the COD placeholder, but
-      // "Rs. X refunded on <date>" is exactly what they look for.
+      // "AED X refunded on <date>" is exactly what they look for.
       payments: {
         where: { provider: "refund" },
         orderBy: { createdAt: "desc" },

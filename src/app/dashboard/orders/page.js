@@ -16,8 +16,9 @@ import { FadeIn, PageReveal } from "@/components/Animated";
 import { CancelOrderDialog } from "@/components/CancelOrderDialog";
 import { ReturnRequestModal } from "@/components/ReturnRequestModal";
 import { OrderReturns } from "@/components/OrderReturns";
+import { OrderProgress } from "@/components/OrderProgress";
 import { canCancelOrder, canReturnOrder, returnWindowEndsAt } from "@/lib/returns";
-import { orderChargesTaxOnTop } from "@/lib/pricing";
+import { formatMoney } from "@/lib/currency";
 
 // Amazon renders the order status as a bold line above the items ("Delivered
 // 12 July", "Cancelled", …). Greens collapse to ink in this theme, so every
@@ -26,13 +27,29 @@ const STATUS_LINE = {
   DELIVERED: "text-[#0f1111]",
   CONFIRMED: "text-[#0f1111]",
   SHIPPED: "text-[#0f1111]",
+  OUT_FOR_DELIVERY: "text-[#0f1111]",
   PROCESSING: "text-[#0f1111]",
   PENDING: "text-[#565959]",
   CANCELLED: "text-[#565959]",
 };
 
+// The bold line above the items, mirroring Amazon's wording.
+const STATUS_LINES = {
+  DELIVERED: "Delivered",
+  CANCELLED: "Cancelled",
+  OUT_FOR_DELIVERY: "Out for delivery",
+  SHIPPED: "Shipped",
+  PROCESSING: "Preparing to ship",
+  CONFIRMED: "Order confirmed",
+  PENDING: "Order placed",
+};
+
+// Statuses where the parcel is with the courier, so a consignment number is
+// worth showing.
+const IN_TRANSIT = ["SHIPPED", "OUT_FOR_DELIVERY", "DELIVERED"];
+
 const fmtDate = (value) =>
-  new Date(value).toLocaleDateString("en-IN", {
+  new Date(value).toLocaleDateString("en-AE", {
     year: "numeric",
     month: "long",
     day: "numeric",
@@ -163,19 +180,7 @@ export default function OrdersPage() {
             const windowEndsAt = returnWindowEndsAt(order);
             const firstSlug = order.items.find((i) => i.product?.slug)?.product?.slug;
 
-            // The bold status line above the items.
-            const statusLine =
-              order.status === "DELIVERED"
-                ? "Delivered"
-                : order.status === "CANCELLED"
-                  ? "Cancelled"
-                  : order.status === "SHIPPED"
-                    ? "Shipped"
-                    : order.status === "PROCESSING"
-                      ? "Preparing to ship"
-                      : order.status === "CONFIRMED"
-                        ? "Order confirmed"
-                        : "Order placed";
+            const statusLine = STATUS_LINES[order.status] ?? STATUS_LINES.PENDING;
 
             return (
               <FadeIn
@@ -198,7 +203,7 @@ export default function OrdersPage() {
                         Total
                       </p>
                       <p className="mt-0.5 text-[13px] text-[#0f1111]">
-                        Rs. {Number(order.total).toLocaleString()}
+                        {formatMoney(order.total)}
                       </p>
                     </div>
                     {addr?.fullName ? (
@@ -229,6 +234,16 @@ export default function OrdersPage() {
                         <ChevronDown className="size-3.5" />
                       )}
                     </button>
+                    {/* A cancelled order was never invoiced, so the link is
+                        offered on every other state. */}
+                    {order.status !== "CANCELLED" ? (
+                      <a
+                        href={`/dashboard/orders/${order.id}/invoice`}
+                        className="mt-0.5 block text-[13px] text-[#007185] transition hover:text-[#c7511f]"
+                      >
+                        Download invoice
+                      </a>
+                    ) : null}
                   </div>
                 </div>
 
@@ -237,10 +252,29 @@ export default function OrdersPage() {
                   <div className="min-w-0 flex-1">
                     <p className={`text-[17px] font-bold ${lineClass}`}>
                       {statusLine}
+                      {order.status === "DELIVERED" && order.deliveredAt
+                        ? ` ${fmtDate(order.deliveredAt)}`
+                        : ""}
                       {order.status === "CANCELLED" && order.cancelledAt
                         ? ` on ${fmtDate(order.cancelledAt)}`
                         : ""}
                     </p>
+
+                    {/* The progress bar. Renders nothing for a cancelled order —
+                        that case is covered by the panel further down. */}
+                    <OrderProgress order={order} />
+
+                    {/* Courier consignment, once the parcel is actually moving.
+                        Kept as plain text: the store uses whichever courier is
+                        cheapest per route, so there is no single tracking URL
+                        to link to. */}
+                    {order.trackingNumber && IN_TRANSIT.includes(order.status) ? (
+                      <p className="mt-1 text-[13px] text-[#565959]">
+                        {order.courierName ? `${order.courierName} · ` : ""}
+                        Tracking&nbsp;
+                        <span className="font-mono text-[#0f1111]">{order.trackingNumber}</span>
+                      </p>
+                    ) : null}
 
                     <div className="mt-3 flex flex-col gap-3">
                       {order.items.map((item) => {
@@ -284,8 +318,7 @@ export default function OrdersPage() {
                                 </p>
                               )}
                               <p className="mt-0.5 text-[12px] text-[#565959]">
-                                Qty: {item.quantity} · Rs.{" "}
-                                {Number(item.price).toLocaleString()}
+                                Qty: {item.quantity} · {formatMoney(item.price)}
                               </p>
                               {slug ? (
                                 <Link
@@ -361,14 +394,15 @@ export default function OrdersPage() {
                         ) : null}
                         <p className="mt-1">
                           {Number(order.refundedTotal) > 0
-                            ? `Rs. ${Number(order.refundedTotal).toLocaleString()} has been refunded.`
+                            ? `${formatMoney(order.refundedTotal)} has been refunded.`
                             : "Nothing was charged for this order."}
                         </p>
                       </div>
                     ) : null}
 
                     {/* Policy messaging when no action button is available */}
-                    {!cancellable.allowed && order.status === "SHIPPED" ? (
+                    {!cancellable.allowed &&
+                    ["SHIPPED", "OUT_FOR_DELIVERY"].includes(order.status) ? (
                       <p className="text-[11px] text-[#565959]">{cancellable.message}</p>
                     ) : null}
                     {!returnable.allowed && order.status === "DELIVERED" ? (
@@ -384,55 +418,28 @@ export default function OrdersPage() {
                         Order Summary
                       </h4>
                       <div className="grid gap-2 text-xs">
-                        {/* Prices are GST-inclusive: the GST sits inside the items
-                            line, so it's shown as an "included" note, not added on
-                            top. Any legacy order that charged tax on top keeps its
-                            original layout. */}
-                        {orderChargesTaxOnTop(order) ? (
-                          <>
-                            <div className="flex justify-between text-[#3f4545]">
-                              <span>Subtotal</span>
-                              <span className="font-bold text-[#0f1111]">
-                                Rs. {Number(order.subtotal).toLocaleString()}
-                              </span>
-                            </div>
-                            <div className="flex justify-between text-[#3f4545]">
-                              <span>GST</span>
-                              <span className="font-bold text-[#0f1111]">
-                                Rs. {Number(order.tax).toLocaleString()}
-                              </span>
-                            </div>
-                          </>
-                        ) : (
-                          <div className="flex justify-between text-[#3f4545]">
-                            <span>Items (incl. GST)</span>
-                            <span className="font-bold text-[#0f1111]">
-                              Rs. {Number(order.subtotal).toLocaleString()}
-                            </span>
-                          </div>
-                        )}
+                        <div className="flex justify-between text-[#3f4545]">
+                          <span>Items</span>
+                          <span className="font-bold text-[#0f1111]">
+                            {formatMoney(order.subtotal)}
+                          </span>
+                        </div>
                         <div className="flex justify-between text-[#3f4545]">
                           <span>Shipping</span>
                           <span className="font-bold text-[#0f1111]">
                             {Number(order.shipping) === 0
                               ? "FREE"
-                              : `Rs. ${Number(order.shipping).toLocaleString()}`}
+                              : formatMoney(order.shipping)}
                           </span>
                         </div>
                         <div className="flex justify-between border-t border-[#d5d9d9] pt-2 font-extrabold text-[#0f1111]">
                           <span>Order Total</span>
-                          <span>Rs. {Number(order.total).toLocaleString()}</span>
+                          <span>{formatMoney(order.total)}</span>
                         </div>
-                        {!orderChargesTaxOnTop(order) && Number(order.tax) > 0 && (
-                          <div className="flex justify-between text-[10px] text-[#565959]">
-                            <span>Includes GST</span>
-                            <span>Rs. {Number(order.tax).toLocaleString()}</span>
-                          </div>
-                        )}
                         {Number(order.refundedTotal) > 0 ? (
                           <div className="flex justify-between font-bold text-emerald-800">
                             <span>Refunded</span>
-                            <span>- Rs. {Number(order.refundedTotal).toLocaleString()}</span>
+                            <span>- {formatMoney(order.refundedTotal)}</span>
                           </div>
                         ) : null}
                       </div>

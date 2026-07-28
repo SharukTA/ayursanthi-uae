@@ -1,6 +1,7 @@
 import { getSession } from "@/lib/auth";
 import { createReturnRequest } from "@/lib/order-actions";
 import { REFUND_METHODS, RETURN_REASONS, RETURN_RESOLUTIONS } from "@/lib/returns";
+import { formatMoney } from "@/lib/currency";
 
 export const runtime = "nodejs";
 
@@ -107,7 +108,7 @@ export async function POST(request, { params }) {
       success: true,
       message:
         resolution === "REFUND"
-          ? `Return requested. Rs. ${result.breakdown.total.toLocaleString()} will be refunded once we receive the item.`
+          ? `Return requested. ${formatMoney(result.breakdown.total)} will be refunded once we receive the item.`
           : "Return requested. We will ship a replacement once we receive the item.",
       request: result.request,
       breakdown: result.breakdown,

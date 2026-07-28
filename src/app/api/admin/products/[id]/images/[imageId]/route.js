@@ -6,8 +6,7 @@ export const runtime = "nodejs";
 
 // Delete the backing file for a media URL, but only for files we host and only
 // when no other product image still points at it. `deleteByUrl` ignores anything
-// the active storage driver does not own — externally pasted URLs, and the
-// Vercel Blob URLs left over from before the R2 migration.
+// the active storage driver does not own, such as externally pasted URLs.
 async function maybeDeleteUploadedFile(url) {
   if (!url || !isManagedUrl(url)) return;
 

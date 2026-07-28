@@ -188,7 +188,7 @@ export default function ProfilePage() {
                 }}
                 disabled={saving}
                 error={!!errors.phone}
-                defaultCountry="IN"
+                defaultCountry="AE"
                 placeholder="Phone number"
                 borderClassName="border-[#d5d9d9]"
                 className="min-h-10 bg-white text-[#0f1111] focus-within:border-[#007185] focus-within:ring-4 focus-within:ring-[#007185]/25"
@@ -202,7 +202,7 @@ export default function ProfilePage() {
             "Member Since",
             Calendar,
             profile?.createdAt
-              ? new Date(profile.createdAt).toLocaleDateString("en-IN", {
+              ? new Date(profile.createdAt).toLocaleDateString("en-AE", {
                   year: "numeric",
                   month: "long",
                   day: "numeric",

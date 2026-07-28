@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getSession, hashPassword, verifyPassword } from "@/lib/auth";
+import { sendSecurityAlertEmail } from "@/lib/email-security";
+import { queueEmail } from "@/lib/email-queue";
 
 export const runtime = "nodejs";
 
@@ -26,9 +28,11 @@ export async function PUT(request) {
     );
   }
 
+  // name/email are read here purely so the security alert below can be sent
+  // without a second round-trip.
   const user = await prisma.user.findUnique({
     where: { id: session.userId },
-    select: { passwordHash: true },
+    select: { passwordHash: true, name: true, email: true },
   });
 
   if (!user || !verifyPassword(currentPassword, user.passwordHash)) {
@@ -40,6 +44,8 @@ export async function PUT(request) {
     where: { id: session.userId },
     data: { passwordHash: newHash },
   });
+
+  queueEmail(() => sendSecurityAlertEmail(user, "password_changed"));
 
   return Response.json({ message: "Password updated successfully." });
 }

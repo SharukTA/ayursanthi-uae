@@ -9,12 +9,14 @@ import { FadeIn, PageReveal } from "@/components/Animated";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { ORDER_STATUS_TRANSITIONS } from "@/lib/returns";
+import { formatMoney } from "@/lib/currency";
 
 const ORDER_STATUSES = [
   "PENDING",
   "CONFIRMED",
   "PROCESSING",
   "SHIPPED",
+  "OUT_FOR_DELIVERY",
   "DELIVERED",
   "CANCELLED",
 ];
@@ -23,10 +25,16 @@ const STATUS_STYLES = {
   DELIVERED: "bg-emerald-50 text-emerald-800 border-emerald-200",
   CONFIRMED: "bg-indigo-50 text-indigo-800 border-indigo-200",
   SHIPPED: "bg-blue-50 text-blue-800 border-blue-200",
+  // A shade along from SHIPPED — same journey, one step later.
+  OUT_FOR_DELIVERY: "bg-cyan-50 text-cyan-800 border-cyan-200",
   PROCESSING: "bg-amber-50 text-amber-800 border-amber-200",
   CANCELLED: "bg-rose-50 text-rose-800 border-rose-200",
   PENDING: "bg-slate-100 text-slate-600 border-slate-200",
 };
+
+// Underscored enum values read badly in a dropdown. Everything else is a single
+// word and passes through unchanged.
+const statusLabel = (status) => status.replace(/_/g, " ");
 
 export default function AdminOrdersPage() {
   const router = useRouter();
@@ -67,14 +75,33 @@ export default function AdminOrdersPage() {
     }
   };
 
+  // Courier details being typed, keyed by order id. Only sent when the admin
+  // explicitly saves or ships, so a half-typed number is never persisted.
+  const [trackingDraft, setTrackingDraft] = useState({});
+
+  const draftFor = (order) =>
+    trackingDraft[order.id] ?? {
+      courierName: order.courierName ?? "",
+      trackingNumber: order.trackingNumber ?? "",
+    };
+
+  const setDraft = (orderId, patch) =>
+    setTrackingDraft((prev) => ({
+      ...prev,
+      [orderId]: { ...(prev[orderId] ?? {}), ...patch },
+    }));
+
   const updateStatus = async (orderId, status) => {
     setSavingId(orderId);
     const toastId = toast.loading("Updating order status...");
     try {
+      // Ship the courier details with the transition so the "your order has
+      // shipped" email can carry a tracking number on its first send.
+      const draft = trackingDraft[orderId];
       const res = await fetch(`/api/admin/orders/${orderId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ status, ...(draft ?? {}) }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -91,12 +118,53 @@ export default function AdminOrdersPage() {
                   status: data.order.status,
                   paymentStatus: data.order.paymentStatus,
                   refundedTotal: data.order.refundedTotal,
+                  trackingNumber: data.order.trackingNumber,
+                  courierName: data.order.courierName,
                 }
               : o
           )
         );
         toast.success(`Order marked ${status}.`, { id: toastId });
       }
+    } catch (e) {
+      toast.error("Network error.", { id: toastId });
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  /**
+   * Save courier details without moving the order along. The API treats a
+   * same-status PATCH as a no-op, so re-sending the current status updates the
+   * tracking fields and deliberately does NOT re-send the shipping email.
+   */
+  const saveTracking = async (order) => {
+    const draft = draftFor(order);
+    setSavingId(order.id);
+    const toastId = toast.loading("Saving tracking details...");
+    try {
+      const res = await fetch(`/api/admin/orders/${order.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: order.status, ...draft }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.message || "Failed to save tracking details.", { id: toastId });
+        return;
+      }
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === order.id
+            ? {
+                ...o,
+                trackingNumber: data.order.trackingNumber,
+                courierName: data.order.courierName,
+              }
+            : o
+        )
+      );
+      toast.success("Tracking details saved.", { id: toastId });
     } catch (e) {
       toast.error("Network error.", { id: toastId });
     } finally {
@@ -196,7 +264,7 @@ export default function AdminOrdersPage() {
                     <td className="p-4">
                       <p className="font-mono font-bold text-emerald-800">{order.orderNumber}</p>
                       <p className="mt-0.5 text-[10px] text-slate-400">
-                        {new Date(order.createdAt).toLocaleDateString("en-IN", {
+                        {new Date(order.createdAt).toLocaleDateString("en-AE", {
                           year: "numeric",
                           month: "short",
                           day: "numeric",
@@ -214,7 +282,7 @@ export default function AdminOrdersPage() {
                       </span>
                     </td>
                     <td className="p-4 font-extrabold text-slate-900">
-                      Rs. {Number(order.total).toLocaleString()}
+                      {formatMoney(order.total)}
                     </td>
                     <td className="p-4">
                       <span
@@ -230,7 +298,7 @@ export default function AdminOrdersPage() {
                       </span>
                       {Number(order.refundedTotal) > 0 ? (
                         <p className="mt-0.5 text-[10px] font-bold text-slate-500">
-                          Rs. {Number(order.refundedTotal).toLocaleString()} refunded
+                          {formatMoney(order.refundedTotal)} refunded
                         </p>
                       ) : null}
                     </td>
@@ -240,7 +308,7 @@ export default function AdminOrdersPage() {
                           STATUS_STYLES[order.status] || STATUS_STYLES.PENDING
                         }`}
                       >
-                        {order.status}
+                        {statusLabel(order.status)}
                       </span>
                     </td>
                     <td className="p-4">
@@ -263,12 +331,47 @@ export default function AdminOrdersPage() {
                                 value={s}
                                 disabled={s !== order.status && !nextStatuses.includes(s)}
                               >
-                                {s}
+                                {statusLabel(s)}
                               </option>
                             ))}
                           </select>
                         );
                       })()}
+
+                      {/* Courier details. Offered from PROCESSING onwards: the
+                          number has to be enterable *before* the order is
+                          marked SHIPPED so the email can carry it, and still
+                          correctable afterwards without re-notifying. */}
+                      {["PROCESSING", "SHIPPED", "OUT_FOR_DELIVERY", "DELIVERED"].includes(
+                        order.status
+                      ) ? (
+                        <div className="mt-2 flex flex-col gap-1">
+                          <input
+                            type="text"
+                            value={draftFor(order).courierName}
+                            onChange={(e) => setDraft(order.id, { courierName: e.target.value })}
+                            placeholder="Courier"
+                            disabled={savingId === order.id}
+                            className="w-32 rounded-md border border-slate-300 bg-white px-2 py-1 text-[11px] text-slate-800 outline-none focus:border-emerald-600 disabled:opacity-50"
+                          />
+                          <input
+                            type="text"
+                            value={draftFor(order).trackingNumber}
+                            onChange={(e) => setDraft(order.id, { trackingNumber: e.target.value })}
+                            placeholder="Tracking no."
+                            disabled={savingId === order.id}
+                            className="w-32 rounded-md border border-slate-300 bg-white px-2 py-1 text-[11px] text-slate-800 outline-none focus:border-emerald-600 disabled:opacity-50"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => saveTracking(order)}
+                            disabled={savingId === order.id}
+                            className="w-32 rounded-md border border-emerald-700 px-2 py-1 text-[11px] font-bold text-emerald-800 hover:bg-emerald-50 disabled:opacity-50"
+                          >
+                            Save tracking
+                          </button>
+                        </div>
+                      ) : null}
                     </td>
                   </tr>
                 ))}

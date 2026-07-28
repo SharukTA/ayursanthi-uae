@@ -39,8 +39,6 @@ export function pickCardMedia(images = []) {
 // This matters because the admin media fields accept a pasted URL from any
 // domain, not just our own uploads. Keep this in sync with next.config.mjs.
 const OPTIMIZABLE_HOSTS = [
-  // Vercel Blob — legacy rows written before the R2 migration.
-  /\.public\.blob\.vercel-storage\.com$/,
   /^images\.pexels\.com$/,
 ];
 

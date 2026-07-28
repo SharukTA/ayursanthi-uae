@@ -4,9 +4,7 @@ import {
   cleanString,
   jsonError,
   prismaErrorResponse,
-  readBoolean,
-  readGstRate,
-  readInteger,
+  readBoolean,  readInteger,
   readMoney,
   requireAdmin,
   slugify,
@@ -155,9 +153,6 @@ export async function PATCH(request, { params }) {
       data.mrp = readMoney(body.mrp);
     }
 
-    if ("gstRate" in body) {
-      data.gstRate = readGstRate(body.gstRate);
-    }
 
     if ("shippingFee" in body) {
       data.shippingFee = readMoney(body.shippingFee) ?? 0;

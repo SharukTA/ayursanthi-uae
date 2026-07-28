@@ -10,6 +10,7 @@ import {
 } from "@react-pdf/renderer";
 import { parseRichText } from "@/components/RichText";
 import { splitIngredients } from "@/lib/utils";
+import { formatMoney } from "@/lib/currency";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Printable product sheet. Rendered on the server (see the /pdf route) into a
@@ -171,7 +172,7 @@ export function ProductPdfDocument({ product, images }) {
       : null;
   const badge = offerLabel?.trim() || (discount ? `${discount}% OFF` : null);
   const ingredients = splitIngredients(keyIngredients);
-  const printedOn = new Date().toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" });
+  const printedOn = new Date().toLocaleDateString("en-AE", { day: "numeric", month: "long", year: "numeric" });
 
   return (
     <Document title={`${name} — Ayursanthi`} author="Ayursanthi">
@@ -188,14 +189,14 @@ export function ProductPdfDocument({ product, images }) {
           <Stars rating={rating} />
           <Text style={s.ratingText}>
             {reviewCount > 0
-              ? `${rating.toFixed(1)} out of 5  (${reviewCount.toLocaleString("en-IN")} rating${reviewCount > 1 ? "s" : ""})`
+              ? `${rating.toFixed(1)} out of 5  (${reviewCount.toLocaleString("en-AE")} rating${reviewCount > 1 ? "s" : ""})`
               : "No ratings yet"}
           </Text>
         </View>
 
         <View style={s.priceRow}>
-          <Text style={s.price}>Rs. {Number(price).toLocaleString("en-IN")}</Text>
-          {mrp ? <Text style={s.mrp}>Rs. {Number(mrp).toLocaleString("en-IN")}</Text> : null}
+          <Text style={s.price}>{formatMoney(price)}</Text>
+          {mrp ? <Text style={s.mrp}>{formatMoney(mrp)}</Text> : null}
           {badge ? <Text style={s.offer}>{badge}</Text> : null}
         </View>
 

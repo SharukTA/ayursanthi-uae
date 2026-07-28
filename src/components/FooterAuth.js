@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useSession } from "@/components/SessionProvider";
+import { clearGuestCart, notifyCartChanged } from "@/lib/cart-client";
 
 // The footer's bottom-bar auth line. Signed out -> "Already a customer? Sign
 // in"; signed in -> a greeting with a Sign out button, mirroring the header.
@@ -16,6 +17,10 @@ export function FooterAuth() {
     try {
       const res = await fetch("/api/auth/logout", { method: "POST" });
       if (!res.ok) throw new Error("Logout request failed.");
+      // The cart stays safely on the account; the browser copy must not outlive
+      // the session (see AccountMenu).
+      clearGuestCart();
+      notifyCartChanged();
       toast.success("Successfully logged out.", { id: toastId });
       window.dispatchEvent(new Event("authUpdate"));
       router.push("/");

@@ -1,5 +1,12 @@
 import { prisma } from "@/lib/prisma";
 import {
+  sendNewReturnAdminEmail,
+  sendOrderCancelledEmail,
+  sendReturnRequestedEmail,
+  sendReturnStatusEmail,
+} from "@/lib/email-orders";
+import { queueEmail } from "@/lib/email-queue";
+import {
   CUSTOMER_WITHDRAWABLE_RETURN_STATUSES,
   NON_RESTOCKABLE_REASONS,
   RETURN_STATUS_TRANSITIONS,
@@ -162,6 +169,11 @@ export async function cancelOrder({ orderId, userId, actor = "CUSTOMER", reason 
     return tx.order.findUnique({ where: { id: order.id }, include: ORDER_WITH_LINES });
   });
 
+  // Sent from here, not the routes: both the customer's cancel button and the
+  // admin's CANCELLED transition come through this function, so one call site
+  // covers both and they can never drift apart.
+  queueEmail(() => sendOrderCancelledEmail(order.id));
+
   return { status: "cancelled", order: updated };
 }
 
@@ -272,6 +284,9 @@ export async function createReturnRequest({
     include: { items: true },
   });
 
+  queueEmail(() => sendReturnRequestedEmail(request.id));
+  queueEmail(() => sendNewReturnAdminEmail(request.id));
+
   return { status: "created", request, breakdown };
 }
 
@@ -375,6 +390,8 @@ export async function updateReturnStatus({ returnId, status, adminNote, refundRe
     });
   });
 
+  queueEmail(() => sendReturnStatusEmail(request.id, status));
+
   return { status: "updated", request: updated };
 }
 
@@ -403,6 +420,8 @@ export async function withdrawReturnRequest({ returnId, userId }) {
     data: { status: "CANCELLED", closedAt: new Date() },
     include: { items: true },
   });
+
+  queueEmail(() => sendReturnStatusEmail(request.id, "CANCELLED"));
 
   return { status: "cancelled", request: updated };
 }

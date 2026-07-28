@@ -1,6 +1,9 @@
 import { getSession } from "@/lib/auth";
 import { placeCodOrder } from "@/lib/checkout";
+import { sendNewOrderAdminEmail, sendOrderPlacedEmail } from "@/lib/email-orders";
+import { queueEmail } from "@/lib/email-queue";
 import { validatePhone } from "@/lib/validation";
+import { countryUsesPostalCode } from "@/lib/geo/postal";
 
 export const runtime = "nodejs";
 
@@ -33,6 +36,11 @@ export async function POST(request) {
       return Response.json({ message: "Your cart is empty." }, { status: 400 });
     }
 
+    // The postal code is only required where the country actually has one — the
+    // UAE has no postal-code system, so demanding one here would reject every
+    // genuine local address. Mirrors the checkout form; see lib/geo/postal.js.
+    const postalRequired = countryUsesPostalCode(shippingAddress?.countryCode);
+
     if (
       !shippingAddress ||
       !shippingAddress.fullName ||
@@ -40,7 +48,7 @@ export async function POST(request) {
       !shippingAddress.line1 ||
       !shippingAddress.city ||
       !shippingAddress.state ||
-      !shippingAddress.postalCode ||
+      (postalRequired && !shippingAddress.postalCode) ||
       !shippingAddress.country
     ) {
       return Response.json(
@@ -71,6 +79,11 @@ export async function POST(request) {
         { status: 400 }
       );
     }
+
+    // Hooked here rather than inside placeCodOrder() because this route is its
+    // only caller — checkout.js stays a pure pricing/persistence function.
+    queueEmail(() => sendOrderPlacedEmail(result.order.id));
+    queueEmail(() => sendNewOrderAdminEmail(result.order.id));
 
     return Response.json({
       success: true,

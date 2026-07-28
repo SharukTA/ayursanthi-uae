@@ -11,6 +11,15 @@ import { Button } from "@/components/ui/button";
 import { AnimatedHeading } from "@/components/AnimatedText";
 import { Tilt3D } from "@/components/Tilt3D";
 import { calculateOrderTotals, FREE_SHIPPING_THRESHOLD } from "@/lib/pricing";
+import { formatMoney } from "@/lib/currency";
+import {
+  getCart,
+  isLineSelected,
+  removeFromCart,
+  setAllCartLinesSelected,
+  setCartLineSelected,
+  setCartQuantity,
+} from "@/lib/cart-client";
 
 export default function CartPage() {
   const [cart, setCart] = useState([]);
@@ -19,16 +28,27 @@ export default function CartPage() {
   // until the settings fetch resolves. The server enforces the real value.
   const [freeShipThreshold, setFreeShipThreshold] = useState(FREE_SHIPPING_THRESHOLD);
 
-  // Load cart from localStorage on component mount
+  // Load the cart. For a signed-in shopper this is their account cart, read
+  // fresh from the database with live prices and stock; for a visitor it is the
+  // cart in their own browser. Signing in merges the second into the first —
+  // all of that lives behind getCart() (see lib/cart-client.js).
   useEffect(() => {
-    try {
-      const storedCart = JSON.parse(localStorage.getItem("ayursanthi_cart") || "[]");
-      setCart(storedCart);
-    } catch (e) {
-      console.error("Failed to load cart.");
-    } finally {
-      setLoading(false);
-    }
+    let active = true;
+
+    getCart()
+      .then(({ items }) => {
+        if (active) setCart(items);
+      })
+      .catch(() => {
+        if (active) toast.error("We couldn't load your cart. Please refresh.");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   // Pull the current free-shipping threshold so the summary matches checkout.
@@ -46,38 +66,74 @@ export default function CartPage() {
     };
   }, []);
 
-  // Persist any cart change to localStorage and let the header badge refresh.
-  const persistCart = (updated) => {
-    setCart(updated);
-    localStorage.setItem("ayursanthi_cart", JSON.stringify(updated));
-    window.dispatchEvent(new Event("cartUpdate"));
+  /**
+   * Run a cart mutation, showing the change immediately and then reconciling
+   * with whatever the store actually saved.
+   *
+   * The optimistic step matters now that a signed-in cart is a round trip: the
+   * "+" button has to feel instant. If the write fails we put the previous cart
+   * back rather than leaving the screen showing something that was never saved.
+   */
+  const mutate = async (optimistic, action) => {
+    const previous = cart;
+    if (optimistic) setCart(optimistic);
+
+    try {
+      const { items, capped } = await action();
+      setCart(items);
+      if (capped) {
+        toast.warning("That's the most we can ship of this item right now.");
+      }
+    } catch (err) {
+      setCart(previous);
+      toast.error(err.message || "We couldn't update your cart. Please try again.");
+    }
   };
 
   const updateQuantity = (productId, amount) => {
-    const updated = cart.map((item) => {
-      if (item.productId === productId) {
-        const newQty = item.quantity + amount;
-        return { ...item, quantity: newQty > 0 ? newQty : 1 };
-      }
-      return item;
-    });
-    persistCart(updated);
+    const line = cart.find((item) => item.productId === productId);
+    if (!line) return;
+
+    // The "−" button stops at 1; removing is the bin icon's job.
+    const nextQty = Math.max(1, line.quantity + amount);
+    if (nextQty === line.quantity) return;
+
+    // Live stock is only known for the account cart; the browser cart carries a
+    // snapshot, and the server clamps either way.
+    if (amount > 0 && typeof line.stock === "number" && nextQty > line.stock) {
+      toast.warning(`Only ${line.stock} in stock.`);
+      return;
+    }
+
+    mutate(
+      cart.map((item) => (item.productId === productId ? { ...item, quantity: nextQty } : item)),
+      () => setCartQuantity(productId, nextQty)
+    );
   };
 
   const removeItem = (productId, name) => {
-    persistCart(cart.filter((item) => item.productId !== productId));
-    toast.success(`Removed ${name} from your cart.`);
+    mutate(
+      cart.filter((item) => item.productId !== productId),
+      async () => {
+        const result = await removeFromCart(productId);
+        toast.success(`Removed ${name} from your cart.`);
+        return result;
+      }
+    );
   };
 
   // Items without the flag are treated as selected (backward compatible with
   // carts saved before checkboxes existed). Only selected items are checked out.
-  const isSelected = (item) => item.selected !== false;
+  const isSelected = isLineSelected;
 
   const toggleSelect = (productId) => {
-    persistCart(
-      cart.map((item) =>
-        item.productId === productId ? { ...item, selected: item.selected === false } : item
-      )
+    const line = cart.find((item) => item.productId === productId);
+    if (!line) return;
+    const next = !isSelected(line);
+
+    mutate(
+      cart.map((item) => (item.productId === productId ? { ...item, selected: next } : item)),
+      () => setCartLineSelected(productId, next)
     );
   };
 
@@ -85,22 +141,30 @@ export default function CartPage() {
 
   const toggleSelectAll = () => {
     const next = !allSelected;
-    persistCart(cart.map((item) => ({ ...item, selected: next })));
+    mutate(
+      cart.map((item) => ({ ...item, selected: next })),
+      () => setAllCartLinesSelected(next)
+    );
   };
 
   // Clicking a product opens its details page, and removes it from the cart.
   const handleViewDetails = (productId, name) => {
-    persistCart(cart.filter((item) => item.productId !== productId));
-    toast.message(`Opening ${name} — removed from your cart.`);
+    mutate(
+      cart.filter((item) => item.productId !== productId),
+      async () => {
+        const result = await removeFromCart(productId);
+        toast.message(`Opening ${name} — removed from your cart.`);
+        return result;
+      }
+    );
   };
 
   // Pricing calculations — based only on the items the customer has selected.
-  // Prices are GST-inclusive, so `tax` is the portion already inside `subtotal`;
-  // the total is goods + delivery (see lib/pricing.js). The server recomputes it
-  // all from the DB at checkout.
+  // The total is goods + delivery (see lib/pricing.js). No tax is charged. The
+  // server recomputes it all from the DB at checkout.
   const selectedItems = cart.filter(isSelected);
   const selectedCount = selectedItems.reduce((acc, item) => acc + item.quantity, 0);
-  const { subtotal, tax, shipping, total } = calculateOrderTotals(
+  const { subtotal, shipping, total } = calculateOrderTotals(
     selectedItems,
     freeShipThreshold
   );
@@ -207,8 +271,21 @@ export default function CartPage() {
                               </p>
                             ) : null}
                             <p className="mt-1 text-xs text-[#0f1111] font-extrabold">
-                              Rs. {item.price.toLocaleString()}
+                              {formatMoney(item.price)}
                             </p>
+                            {/* Live availability, straight from the product.
+                                Only the account cart knows it — a browser cart
+                                carries whatever stock was true when the item
+                                was added, so `stock` may be absent. */}
+                            {typeof item.stock === "number" && item.stock <= 0 ? (
+                              <p className="mt-1 text-xs font-bold text-rose-600">
+                                Currently unavailable
+                              </p>
+                            ) : typeof item.stock === "number" && item.stock <= 5 ? (
+                              <p className="mt-1 text-xs font-bold text-[#b12704]">
+                                Only {item.stock} left in stock
+                              </p>
+                            ) : null}
                           </div>
                         </Link>
                       </div>
@@ -218,7 +295,8 @@ export default function CartPage() {
                         <div className="flex items-center rounded-md border border-[#d5d9d9] p-0.5">
                           <button
                             onClick={() => updateQuantity(item.productId, -1)}
-                            className="flex size-7 items-center justify-center rounded bg-[#f8fafc] text-[#0f1111] hover:bg-[#232f3e] hover:text-white transition"
+                            disabled={item.quantity <= 1}
+                            className="flex size-7 items-center justify-center rounded bg-[#f8fafc] text-[#0f1111] hover:bg-[#232f3e] hover:text-white transition disabled:opacity-40 disabled:hover:bg-[#f8fafc] disabled:hover:text-[#0f1111]"
                           >
                             <Minus className="size-3" />
                           </button>
@@ -227,7 +305,10 @@ export default function CartPage() {
                           </span>
                           <button
                             onClick={() => updateQuantity(item.productId, 1)}
-                            className="flex size-7 items-center justify-center rounded bg-[#f8fafc] text-[#0f1111] hover:bg-[#232f3e] hover:text-white transition"
+                            disabled={
+                              typeof item.stock === "number" && item.quantity >= item.stock
+                            }
+                            className="flex size-7 items-center justify-center rounded bg-[#f8fafc] text-[#0f1111] hover:bg-[#232f3e] hover:text-white transition disabled:opacity-40 disabled:hover:bg-[#f8fafc] disabled:hover:text-[#0f1111]"
                           >
                             <Plus className="size-3" />
                           </button>
@@ -235,7 +316,7 @@ export default function CartPage() {
 
                         <div className="flex items-center gap-4">
                           <span className="text-sm font-extrabold text-[#0f1111] w-20 text-right">
-                            Rs. {(item.price * item.quantity).toLocaleString()}
+                            {formatMoney(item.price * item.quantity)}
                           </span>
                           <button
                             onClick={() => removeItem(item.productId, item.name)}
@@ -273,8 +354,8 @@ export default function CartPage() {
 
                 <div className="space-y-3 text-xs font-medium text-[#3f4545]">
                   <div className="flex justify-between">
-                    <span>Items (incl. GST)</span>
-                    <span className="font-bold text-[#0f1111]">Rs. {subtotal.toLocaleString()}</span>
+                    <span>Items</span>
+                    <span className="font-bold text-[#0f1111]">{formatMoney(subtotal)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span>Shipping Charges</span>
@@ -282,7 +363,7 @@ export default function CartPage() {
                       {shipping === 0 ? (
                         <span className="text-[#0f1111] font-bold uppercase">Free</span>
                       ) : (
-                        `Rs. ${shipping.toLocaleString()}`
+                        formatMoney(shipping)
                       )}
                     </span>
                   </div>
@@ -290,17 +371,12 @@ export default function CartPage() {
 
                 <div className="border-t border-[#d5d9d9] pt-4 flex justify-between font-extrabold text-[#0f1111]">
                   <span className="text-sm">Total Amount</span>
-                  <span className="text-base text-[#0f1111]">Rs. {total.toLocaleString()}</span>
+                  <span className="text-base text-[#0f1111]">{formatMoney(total)}</span>
                 </div>
-                {tax > 0 && (
-                  <p className="-mt-2 text-right text-[10px] font-medium text-[#565959]">
-                    Includes GST of Rs. {tax.toLocaleString()}
-                  </p>
-                )}
 
                 {shipping > 0 && (
                   <p className="text-[10px] font-medium text-[#0f1111] bg-[#f8fafc] border border-[#d5d9d9] p-2 rounded text-center">
-                    Add <b>Rs. {(freeShipThreshold - subtotal).toLocaleString()}</b> more to qualify for <b>FREE SHIPPING</b>!
+                    Add <b>{formatMoney(freeShipThreshold - subtotal)}</b> more to qualify for <b>FREE SHIPPING</b>!
                   </p>
                 )}
 

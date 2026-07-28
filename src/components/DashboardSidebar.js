@@ -15,6 +15,7 @@ import {
   X,
   History,
 } from "lucide-react";
+import { clearGuestCart, notifyCartChanged } from "@/lib/cart-client";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, exact: true },
@@ -110,6 +111,10 @@ export function DashboardSidebar({ session }) {
     const toastId = toast.loading("Logging you out...");
     try {
       await fetch("/api/auth/logout", { method: "POST" });
+      // The cart stays safely on the account; the browser copy must not outlive
+      // the session (see AccountMenu).
+      clearGuestCart();
+      notifyCartChanged();
       toast.success("Logged out successfully.", { id: toastId });
       window.dispatchEvent(new Event("authUpdate"));
       router.push("/");

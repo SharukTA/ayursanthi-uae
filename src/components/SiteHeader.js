@@ -17,6 +17,7 @@ import { HeaderAuth, MobileHeaderAuth } from "@/components/HeaderAuth";
 import { AccountMenu } from "@/components/AccountMenu";
 import { Logo3D } from "@/components/Logo3D";
 import { useSession } from "@/components/SessionProvider";
+import { formatMoney } from "@/lib/currency";
 
 const navItems = [
   { href: "/", label: "Home" },
@@ -42,9 +43,7 @@ const NAV_LINK =
 const DRAWER_FALLBACK_IMG =
   "https://images.pexels.com/photos/4871365/pexels-photo-4871365.jpeg?auto=compress&cs=tinysrgb&w=200";
 
-function formatPrice(value) {
-  return `Rs. ${Number(value).toLocaleString("en-IN")}`;
-}
+const formatPrice = formatMoney;
 
 // `transparent` — homepage only. The header sits over the hero's video-tint
 // gradient with no background of its own, so the gradient reads from the very

@@ -8,6 +8,7 @@ import {
   RETURN_STATUS_COPY,
   returnReasonLabel,
 } from "@/lib/returns";
+import { formatMoney } from "@/lib/currency";
 
 /**
  * The "Your Returns" block shown inside an expanded order: every return request
@@ -27,7 +28,7 @@ const RETURN_STATUS_STYLES = {
 };
 
 function formatDate(value) {
-  return new Date(value).toLocaleDateString("en-IN", {
+  return new Date(value).toLocaleDateString("en-AE", {
     year: "numeric",
     month: "short",
     day: "numeric",
@@ -130,7 +131,7 @@ export function OrderReturns({ order, onChanged }) {
                     <p className="mt-1 text-[11px] text-[#3f4545]">
                       Refund amount:{" "}
                       <span className="font-bold text-[#0f1111]">
-                        Rs. {Number(request.refundAmount).toLocaleString()}
+                        {formatMoney(request.refundAmount)}
                       </span>
                       {request.refundReference ? ` · Ref ${request.refundReference}` : ""}
                     </p>
@@ -184,7 +185,7 @@ export function OrderReturns({ order, onChanged }) {
                   {formatDate(refund.createdAt)}
                 </span>
                 <span className="shrink-0 font-extrabold">
-                  Rs. {Number(refund.amount).toLocaleString()}
+                  {formatMoney(refund.amount)}
                 </span>
               </li>
             ))}

@@ -3,25 +3,35 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ShoppingCart } from "lucide-react";
+import { getCartCount } from "@/lib/cart-client";
 
 export function CartBadge() {
   const [itemCount, setItemCount] = useState(0);
 
   useEffect(() => {
-    function computeCartItemsCount() {
+    // The badge lives in the header on every page, so it is almost always the
+    // first thing to ask for the cart after a sign-in — which makes it the
+    // component that triggers the browser-cart merge (see lib/cart-client.js).
+    let active = true;
+
+    async function refresh() {
       try {
-        const cart = JSON.parse(localStorage.getItem("ayursanthi_cart") || "[]");
-        const total = cart.reduce((acc, item) => acc + item.quantity, 0);
-        setItemCount(total);
-      } catch (err) {
-        setItemCount(0);
+        const count = await getCartCount();
+        if (active) setItemCount(count);
+      } catch {
+        if (active) setItemCount(0);
       }
     }
 
-    computeCartItemsCount();
-    window.addEventListener("cartUpdate", computeCartItemsCount);
+    refresh();
+    window.addEventListener("cartUpdate", refresh);
+    // Signing in or out swaps which cart is in play — the count has to follow.
+    window.addEventListener("authUpdate", refresh);
+
     return () => {
-      window.removeEventListener("cartUpdate", computeCartItemsCount);
+      active = false;
+      window.removeEventListener("cartUpdate", refresh);
+      window.removeEventListener("authUpdate", refresh);
     };
   }, []);
 

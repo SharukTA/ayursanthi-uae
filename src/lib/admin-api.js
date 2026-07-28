@@ -1,6 +1,5 @@
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { GST_RATES, DEFAULT_GST_RATE } from "@/lib/pricing";
 
 export function jsonError(message, status = 400, details = undefined) {
   return Response.json({ message, details }, { status });
@@ -43,6 +42,7 @@ export const ORDER_STATUSES = [
   "CONFIRMED",
   "PROCESSING",
   "SHIPPED",
+  "OUT_FOR_DELIVERY",
   "DELIVERED",
   "CANCELLED",
 ];
@@ -94,13 +94,6 @@ export function readInteger(value, fallback = 0) {
   return Number.isFinite(number) ? number : fallback;
 }
 
-// Coerce an admin-supplied GST rate to one of the allowed Indian slabs, falling
-// back to the default (0%) for anything missing or off-slab. Prices are
-// GST-inclusive, so this only affects how tax is split out — never the price.
-export function readGstRate(value) {
-  const rate = Number(value);
-  return GST_RATES.includes(rate) ? rate : DEFAULT_GST_RATE;
-}
 
 export function readMoney(value) {
   if (value === null || value === undefined || value === "") {
@@ -137,7 +130,7 @@ export const SECTION_PLACEMENTS = ["HOME", "PRODUCT", "CATEGORY", "CHECKOUT"];
 
 // Valid HomeSectionItem.metric values for STATS_BAR items. Live metrics are
 // computed from the database at render time; "STATIC" shows the item's title as
-// plain text (a trust promise like "Free shipping over Rs. 1000").
+// plain text (a trust promise like "Free shipping over AED 150").
 export const STATS_METRICS = [
   "REGISTERED_CUSTOMERS",
   "PAID_ORDERS",

@@ -10,9 +10,9 @@ import { RichText } from "@/components/RichText";
 // Markdown editor for a product's full description. A plain <textarea> plus a
 // toolbar whose buttons insert the small markdown subset understood by RichText
 // / ProductDescription ("## " heading, "### " subheading, "- " bullet, and
-// "![alt](url)" image) at the caret. Images upload straight to Vercel Blob via
-// /api/admin/upload (admin-gated) — the same flow as MediaUrlField — and the
-// returned URL is inserted as an image tag. A toggle shows a live preview.
+// "![alt](url)" image) at the caret. Images upload through /api/admin/upload
+// (admin-gated) — the same flow as MediaUrlField — and the returned URL is
+// inserted as an image tag. A toggle shows a live preview.
 // ─────────────────────────────────────────────────────────────────────────────
 const IMAGE_ACCEPT = "image/jpeg,image/png,image/webp,image/gif,image/avif,image/svg+xml";
 

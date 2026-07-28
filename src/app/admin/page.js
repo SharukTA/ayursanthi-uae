@@ -5,7 +5,7 @@ import { getSession } from "@/lib/auth";
 import { 
   Users, 
   ShoppingBag, 
-  IndianRupee, 
+  Banknote,
   FolderTree, 
   ArrowRight,
   TrendingUp,
@@ -16,12 +16,14 @@ import {
   LayoutTemplate,
   RotateCcw,
   Settings,
-  FileText
+  FileText,
+  Mail
 } from "lucide-react";
 import { FadeIn, PageReveal, Stagger, StaggerItem } from "@/components/Animated";
 import { SiteHeader } from "@/components/SiteHeader";
 import { Button } from "@/components/ui/button";
 import { SiteFooter } from "@/components/SiteFooter";
+import { formatMoney } from "@/lib/currency";
 
 export const metadata = {
   title: "Admin Dashboard | Ayursanthi",
@@ -105,7 +107,7 @@ export default async function AdminDashboardPage() {
       <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8 flex-1 w-full">
         <Stagger className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {[
-            { label: "Total Revenue", value: `Rs. ${totalRevenue.toLocaleString()}`, icon: IndianRupee, tone: "text-emerald-700 bg-emerald-100/55 border-emerald-200" },
+            { label: "Total Revenue", value: formatMoney(totalRevenue), icon: Banknote, tone: "text-emerald-700 bg-emerald-100/55 border-emerald-200" },
             { label: "Total Orders", value: totalOrders, icon: ShoppingBag, tone: "text-indigo-750 bg-indigo-100/55 border-indigo-250" },
             { label: "Total Products", value: totalProducts, icon: Package, tone: "text-amber-800 bg-amber-100/55 border-amber-250" },
             { label: "Registered Users", value: totalUsers, icon: Users, tone: "text-rose-800 bg-rose-100/55 border-rose-250" }
@@ -164,7 +166,7 @@ export default async function AdminDashboardPage() {
                           <p className="font-bold text-slate-900">{ord.user.name}</p>
                           <p className="text-[10px] text-slate-400">{ord.user.email}</p>
                         </td>
-                        <td className="py-3.5 font-extrabold text-slate-900">Rs. {Number(ord.total).toLocaleString()}</td>
+                        <td className="py-3.5 font-extrabold text-slate-900">{formatMoney(ord.total)}</td>
                         <td className="py-3.5">
                           <span className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[9px] font-bold ${
                             ord.status === "DELIVERED" 
@@ -237,6 +239,13 @@ export default async function AdminDashboardPage() {
                   href: "/admin/pages",
                   icon: FileText,
                   color: "bg-sky-100 text-sky-800"
+                },
+                {
+                  title: "Email Log",
+                  desc: "See every transactional email the store has sent, and catch delivery failures early.",
+                  href: "/admin/emails",
+                  icon: Mail,
+                  color: "bg-rose-100 text-rose-800"
                 },
                 {
                   title: "Site Settings",

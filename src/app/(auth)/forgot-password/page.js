@@ -8,10 +8,16 @@ import { Loader2, Eye, EyeOff, CheckCircle2, ArrowLeft } from "lucide-react";
 import { Logo3D } from "@/components/Logo3D";
 
 // Amazon-style 3-step password reset:
-//   email    -> submit email/mobile, we send a 6-digit OTP
+//   email    -> submit the account email, we send a 6-digit OTP
 //   otp      -> enter the code, verified server-side (not yet consumed)
 //   password -> set + confirm the new password (consumes the code)
 //   done     -> success, link back to sign in
+//
+// Email only: the OTP is delivered by email (lib/email.js) and there is no SMS
+// sender wired up, so offering "email or mobile" here would promise a text
+// message that never arrives. The API still resolves a mobile number to its
+// account — see lib/reset-otp.js — so this is a UI restriction, and re-adding
+// the mobile option later needs only the copy below plus a real SMS provider.
 export default function ForgotPasswordPage() {
   const router = useRouter();
   const [step, setStep] = useState("email");
@@ -33,7 +39,7 @@ export default function ForgotPasswordPage() {
   const handleSendOtp = async (e) => {
     e.preventDefault();
     if (!identifier.trim()) {
-      toast.error("Please enter your email address or mobile number.");
+      toast.error("Please enter your email address.");
       return;
     }
     setLoading(true);
@@ -47,7 +53,7 @@ export default function ForgotPasswordPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message);
       setMaskedEmail(data.maskedEmail || "");
-      toast.success("If the account exists, a code is on its way.", { id: toastId });
+      toast.success("If the account exists, a code is on its way to your email.", { id: toastId });
       setStep("otp");
     } catch (err) {
       toast.error(err.message || "Something went wrong. Please try again.", { id: toastId });
@@ -132,18 +138,22 @@ export default function ForgotPasswordPage() {
 
       <main className="flex flex-1 items-center justify-center px-4 py-6 sm:py-10">
         <div className="w-full max-w-sm rounded-md border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-          {/* STEP 1 — email / mobile */}
+          {/* STEP 1 — account email */}
           {step === "email" && (
             <form onSubmit={handleSendOtp}>
               <h1 className="text-xl font-semibold text-slate-900 sm:text-2xl">Password assistance</h1>
               <p className="mt-2 text-sm text-slate-600">
-                Enter the email or mobile number associated with your account.
+                Enter the email address associated with your account and we&apos;ll send you a
+                one-time password.
               </p>
 
               <label className="mt-6 grid gap-2 text-sm font-semibold text-slate-900">
-                Email or mobile number
+                Email
                 <input
-                  type="text"
+                  type="email"
+                  inputMode="email"
+                  autoComplete="email"
+                  placeholder="you@example.com"
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
                   disabled={loading}
@@ -239,7 +249,7 @@ export default function ForgotPasswordPage() {
             <form onSubmit={handleResetPassword}>
               <h1 className="text-xl font-semibold text-slate-900 sm:text-2xl">Create new password</h1>
               <p className="mt-2 text-sm text-slate-600">
-                Choose a strong password you don't use elsewhere. Minimum 8 characters, with a letter and a number.
+                Choose a strong password you don&apos;t use elsewhere. Minimum 8 characters, with a letter and a number.
               </p>
 
               <label className="mt-6 grid gap-2 text-sm font-semibold text-slate-900">

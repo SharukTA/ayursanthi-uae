@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getSession, setSession } from "@/lib/auth";
+import { sendSecurityAlertEmail } from "@/lib/email-security";
+import { queueEmail } from "@/lib/email-queue";
 import { validateName, validatePhone, normalizePhone } from "@/lib/validation";
 
 export const runtime = "nodejs";
@@ -65,6 +67,13 @@ export async function PUT(request) {
     }
   }
 
+  // Read the current values first so the security alert can say what actually
+  // changed — and so re-saving an unchanged form doesn't email the customer.
+  const before = await prisma.user.findUnique({
+    where: { id: session.userId },
+    select: { name: true, phone: true },
+  });
+
   const user = await prisma.user.update({
     where: { id: session.userId },
     data: { name: name.trim(), phone: cleanPhone },
@@ -72,6 +81,17 @@ export async function PUT(request) {
   });
 
   await setSession({ ...session, name: user.name });
+
+  const changes = [];
+  if (before && before.name !== user.name) {
+    changes.push(["Name", `${before.name} → ${user.name}`]);
+  }
+  if (before && (before.phone ?? null) !== (user.phone ?? null)) {
+    changes.push(["Phone", `${before.phone || "not set"} → ${user.phone || "removed"}`]);
+  }
+  if (changes.length > 0) {
+    queueEmail(() => sendSecurityAlertEmail(user, "profile_changed", { changes }));
+  }
 
   return Response.json({ user, message: "Profile updated successfully." });
 }

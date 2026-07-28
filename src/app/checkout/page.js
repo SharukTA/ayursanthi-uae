@@ -19,8 +19,20 @@ import { PhoneField } from "@/components/PhoneField";
 import { CountrySelect, StateField } from "@/components/AddressFields";
 import { validatePhone } from "@/lib/validation";
 import { getCountry } from "@/lib/geo/countries";
-import { hasStates } from "@/lib/geo/states";
+import {
+  countryUsesPostalCode,
+  postalCodeLabel,
+  subdivisionLabel,
+} from "@/lib/geo/postal";
 import { calculateOrderTotals, FREE_SHIPPING_THRESHOLD } from "@/lib/pricing";
+import { formatMoney } from "@/lib/currency";
+import {
+  clearBuyNowItem,
+  finalizePurchase,
+  getCart,
+  notifyCartChanged,
+  readBuyNowItem,
+} from "@/lib/cart-client";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Amazon-style checkout ("secure checkout pipeline"): a white page with three
@@ -57,11 +69,13 @@ function estimatedDeliveryWindow() {
   const end = new Date();
   end.setDate(end.getDate() + 6);
   const fmt = (d) =>
-    d.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
+    d.toLocaleDateString("en-AE", { weekday: "short", day: "numeric", month: "short" });
   return `${fmt(start)} – ${fmt(end)}`;
 }
 
-const money = (value) => `Rs. ${Number(value).toLocaleString("en-IN")}`;
+// Alias kept so the JSX below reads the same; the formatting itself is shared
+// with the cart, the invoice and the order emails via lib/currency.js.
+const money = formatMoney;
 
 // Shared shell for the interstitial screens (auth gate, admin block, success),
 // so they sit on the same white Amazon page as the checkout itself.
@@ -100,17 +114,22 @@ export default function CheckoutPage() {
   // leaves the cart (and its total) completely untouched.
   const [buyNowMode, setBuyNowMode] = useState(false);
 
-  // Address Fields. `country` is an ISO2 code (India by default, to match the
-  // store's ₹/GST pricing); the snapshot sent to the server carries the
-  // readable country name plus the code.
+  // Address Fields. `country` is an ISO2 code, defaulting to the UAE — the
+  // store's home market, so the overwhelming majority of shoppers never touch
+  // the selector. The snapshot sent to the server carries the readable country
+  // name plus the code.
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [line1, setLine1] = useState("");
   const [line2, setLine2] = useState("");
   const [city, setCity] = useState("");
-  const [country, setCountry] = useState("IN");
+  const [country, setCountry] = useState("AE");
   const [state, setState] = useState("");
   const [postalCode, setPostalCode] = useState("");
+
+  // The UAE and several other markets have no postal codes, so the field is
+  // optional there. The order API applies the same rule server-side.
+  const needsPostalCode = countryUsesPostalCode(country);
 
   // Cash on Delivery is currently the only way to pay — no online gateway.
   const [paymentMethod, setPaymentMethod] = useState("COD");
@@ -148,27 +167,33 @@ export default function CheckoutPage() {
 
     checkAuth();
 
-    try {
-      // ?buynow=1 means we arrived here straight from a product page's "Buy Now"
-      // and should check out only that single stashed item — not the cart.
-      const isBuyNow =
-        new URLSearchParams(window.location.search).get("buynow") === "1";
-      setBuyNowMode(isBuyNow);
+    // ?buynow=1 means we arrived here straight from a product page's "Buy Now"
+    // and should check out only that single stashed item — not the cart.
+    const isBuyNow = new URLSearchParams(window.location.search).get("buynow") === "1";
+    setBuyNowMode(isBuyNow);
 
-      if (isBuyNow) {
-        const item = JSON.parse(localStorage.getItem("ayursanthi_buynow") || "null");
-        setCart(item ? [item] : []);
-      } else {
-        const storedCart = JSON.parse(localStorage.getItem("ayursanthi_cart") || "[]");
-        setCart(storedCart);
+    async function loadBasket() {
+      try {
+        if (isBuyNow) {
+          const item = readBuyNowItem();
+          setCart(item ? [item] : []);
+          return;
+        }
+        // Checkout is gated on being signed in, so in practice this is always
+        // the account cart — read live from the database, with any cart built
+        // while signed out already merged in (see lib/cart-client.js).
+        const { items } = await getCart();
+        setCart(items);
+      } catch {
+        console.error("Failed to load cart.");
+      } finally {
+        // Marks the read as done so the empty state only shows once we actually
+        // know the basket is empty, rather than flashing during the first paint.
+        setCartLoaded(true);
       }
-    } catch (e) {
-      console.error("Failed to load cart.");
-    } finally {
-      // Marks the read as done so the empty state only shows once we actually
-      // know the basket is empty, rather than flashing during the first paint.
-      setCartLoaded(true);
     }
+
+    loadBasket();
   }, []);
 
   // Pull the current free-shipping threshold so the totals here match the cart
@@ -206,10 +231,9 @@ export default function CheckoutPage() {
   }, [authChecked, session, orderSuccess, bookingItems.length]);
 
   const itemCount = bookingItems.reduce((acc, item) => acc + item.quantity, 0);
-  // Prices are GST-inclusive, so `tax` is the portion already inside `subtotal`
-  // and the order total is goods + delivery (see lib/pricing.js). The server
-  // recomputes all of this from DB prices before the order is created.
-  const { subtotal, tax, shipping, total } = calculateOrderTotals(
+  // The order total is goods + delivery (see lib/pricing.js). No tax is charged.
+  // The server recomputes all of this from DB prices before the order is created.
+  const { subtotal, shipping, total } = calculateOrderTotals(
     bookingItems,
     freeShipThreshold
   );
@@ -231,21 +255,18 @@ export default function CheckoutPage() {
     toast.success("Order Placed Successfully!");
     if (buyNowMode) {
       // Buy-now never touched the cart — just discard the one-off item.
-      localStorage.removeItem("ayursanthi_buynow");
+      clearBuyNowItem();
+      notifyCartChanged();
     } else {
-      // Keep any unselected items in the cart; only clear what was purchased.
-      const remaining = cart.filter((item) => item.selected === false);
-      if (remaining.length > 0) {
-        localStorage.setItem("ayursanthi_cart", JSON.stringify(remaining));
-      } else {
-        localStorage.removeItem("ayursanthi_cart");
-      }
+      // The account cart already had the purchased lines removed inside the
+      // order transaction (lib/checkout.js), and anything left unticked was
+      // deliberately kept. This only prunes a browser copy.
+      finalizePurchase(bookingItems.map((item) => item.productId));
     }
-    window.dispatchEvent(new Event("cartUpdate"));
     setPlacedOrderDetails({
       orderNumber: data.orderNumber,
       totalAmount: total,
-      address: `${line1}, ${city}, ${state} - ${postalCode}`,
+      address: [line1, city, state].filter(Boolean).join(", ") + (postalCode ? ` - ${postalCode}` : ""),
       delivery: deliveryWindow,
     });
     setOrderSuccess(true);
@@ -301,7 +322,14 @@ export default function CheckoutPage() {
       return;
     }
 
-    if (!fullName.trim() || !phone.trim() || !line1.trim() || !city.trim() || !state.trim() || !postalCode.trim()) {
+    if (
+      !fullName.trim() ||
+      !phone.trim() ||
+      !line1.trim() ||
+      !city.trim() ||
+      !state.trim() ||
+      (needsPostalCode && !postalCode.trim())
+    ) {
       toast.error("Please complete all shipping address fields.");
       return;
     }
@@ -454,7 +482,7 @@ export default function CheckoutPage() {
       <div className="flex justify-between gap-4">
         <dt>
           Items ({itemCount}
-          {itemCount === 1 ? " item" : " items"}, incl. GST):
+          {itemCount === 1 ? " item" : " items"}):
         </dt>
         <dd>{money(subtotal)}</dd>
       </div>
@@ -466,12 +494,6 @@ export default function CheckoutPage() {
         <dt>Order total:</dt>
         <dd>{money(total)}</dd>
       </div>
-      {tax > 0 && (
-        <div className="flex justify-between gap-4 text-[11px] text-[#565959]">
-          <dt>Includes GST of:</dt>
-          <dd>{money(tax)}</dd>
-        </div>
-      )}
     </dl>
   );
 
@@ -623,13 +645,13 @@ export default function CheckoutPage() {
                   </label>
 
                   <label className={FIELD_LABEL}>
-                    State / Province *
+                    {subdivisionLabel(country)} *
                     <StateField
                       country={country}
                       value={state}
                       onChange={setState}
                       disabled={submitting}
-                      placeholder="State / Province"
+                      placeholder={subdivisionLabel(country)}
                       className={FIELD}
                     />
                   </label>
@@ -647,15 +669,19 @@ export default function CheckoutPage() {
                     />
                   </label>
 
+                  {/* The UAE (and the other markets in geo/postal.js) has no
+                      postal-code system, so this stays optional there rather
+                      than blocking a perfectly valid local address. */}
                   <label className={FIELD_LABEL}>
-                    {hasStates(country) && country === "IN" ? "Pincode *" : "Postal / ZIP code *"}
+                    {postalCodeLabel(country)}
+                    {needsPostalCode ? " *" : " (optional)"}
                     <input
                       type="text"
                       value={postalCode}
                       onChange={(e) => setPostalCode(e.target.value)}
                       disabled={submitting}
-                      required
-                      placeholder="Postal / ZIP code"
+                      required={needsPostalCode}
+                      placeholder={postalCodeLabel(country)}
                       className={FIELD}
                     />
                   </label>

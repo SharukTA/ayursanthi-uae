@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/auth";
+import { sendSecurityAlertEmail } from "@/lib/email-security";
+import { queueEmail } from "@/lib/email-queue";
 import { validatePassword } from "@/lib/validation";
 import {
   otpMatches,
@@ -76,6 +78,11 @@ export async function POST(request) {
         where: { userId: user.id, consumedAt: null },
       }),
     ]);
+
+    // Tell the account owner their password changed. If the reset was not them,
+    // this is the only warning they get — and it lands in the inbox rather than
+    // the session the attacker controls.
+    queueEmail(() => sendSecurityAlertEmail(user, "password_reset"));
 
     return Response.json({ ok: true, message: "Your password has been reset. Please sign in." });
   } catch (error) {

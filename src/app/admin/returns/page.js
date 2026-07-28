@@ -22,6 +22,7 @@ import {
   isTerminalReturnStatus,
   returnReasonLabel,
 } from "@/lib/returns";
+import { formatMoney } from "@/lib/currency";
 
 // What each move actually does behind the scenes — spelled out on the confirm
 // sheet so nobody refunds cash by accident.
@@ -258,7 +259,7 @@ export default function AdminReturnsPage() {
                         <span className="font-mono font-bold text-slate-700">
                           {request.order?.orderNumber}
                         </span>{" "}
-                        · {new Date(request.requestedAt).toLocaleDateString("en-IN")}
+                        · {new Date(request.requestedAt).toLocaleDateString("en-AE")}
                       </p>
                     </div>
                     <span
@@ -291,7 +292,7 @@ export default function AdminReturnsPage() {
                           </span>
                         </span>
                         <span className="shrink-0 font-bold text-slate-900">
-                          Rs. {Number(line.amount).toLocaleString()}
+                          {formatMoney(line.amount)}
                         </span>
                       </li>
                     ))}
@@ -302,7 +303,7 @@ export default function AdminReturnsPage() {
                       <span className="font-bold text-slate-900">Wants:</span>{" "}
                       {request.resolution === "REPLACEMENT" ? "Replacement" : "Refund"}
                       {request.resolution === "REFUND"
-                        ? ` of Rs. ${Number(request.refundAmount).toLocaleString()}`
+                        ? ` of ${formatMoney(request.refundAmount)}`
                         : ""}
                     </p>
                     <p>
@@ -389,7 +390,7 @@ export default function AdminReturnsPage() {
               </p>
               {pendingAction.status === "REFUNDED" ? (
                 <p className="mt-1 font-bold text-slate-900">
-                  Refund: Rs. {Number(pendingAction.request.refundAmount).toLocaleString()}
+                  Refund: {formatMoney(pendingAction.request.refundAmount)}
                 </p>
               ) : null}
             </div>
