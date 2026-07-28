@@ -1,5 +1,5 @@
 /**
- * Order and return lifecycle emails.
+ * Order lifecycle emails.
  *
  * Every sender here takes an id and loads what it needs itself, so the call
  * sites in the routes and in lib/order-actions.js stay one-liners and no
@@ -30,7 +30,6 @@ import {
   sendEmail,
 } from "@/lib/email";
 import { renderOrderInvoice } from "@/lib/invoice";
-import { RETURN_STATUS_COPY, returnReasonLabel } from "@/lib/returns";
 
 /** Statuses that always mail the customer. */
 const CORE_STATUS_EMAILS = ["SHIPPED", "OUT_FOR_DELIVERY", "DELIVERED"];
@@ -244,14 +243,11 @@ export async function sendOrderStatusEmail(orderId, status) {
 
   const { brand, supportEmail, siteUrl } = await getBrandContext();
 
-  // Delivery is also the moment the return window opens, so say so here rather
-  // than making the customer go hunting for the policy. Out for delivery is the
-  // last useful moment to remind an unpaid (Cash on Delivery) customer that the
-  // courier will want the money at the door.
+  // Out for delivery is the last useful moment to remind an unpaid (Cash on
+  // Delivery) customer that the courier will want the money at the door.
   let extra = null;
   if (status === "DELIVERED") {
-    extra =
-      "Your tax invoice is attached. If anything isn't right, you can request a return from your orders page within 7 days.";
+    extra = "Your invoice is attached.";
   } else if (status === "OUT_FOR_DELIVERY" && order.paymentStatus === "PENDING") {
     extra = `This is a Cash on Delivery order — please have ${formatMoney(order.total)} ready for the courier.`;
   }
@@ -365,177 +361,5 @@ export async function sendOrderCancelledEmail(orderId) {
     subject: `Order ${order.orderNumber} cancelled`,
     html: renderEmailLayout({ brand, supportEmail, bodyHtml }),
     text: `Hi ${firstName(order.user.name)},\n\n${lead}\n\n${money}\n\nOrder: ${order.orderNumber}${order.cancelReason ? `\nReason: ${order.cancelReason}` : ""}`,
-  });
-}
-
-// ---------------------------------------------------------------------------
-// Returns
-// ---------------------------------------------------------------------------
-
-const RETURN_FOR_EMAIL = {
-  items: { include: { orderItem: true } },
-  order: { select: { orderNumber: true } },
-  user: { select: { name: true, email: true } },
-};
-
-/** Return lines rendered through the shared items table. */
-function returnLines(request) {
-  return (request.items ?? []).map((line) => ({
-    productName: line.orderItem?.productName ?? "Item",
-    quantity: line.quantity,
-    total: line.amount,
-  }));
-}
-
-/**
- * Acknowledges a newly opened return/replacement request.
- * @param {string} returnId
- */
-export async function sendReturnRequestedEmail(returnId) {
-  const request = await prisma.returnRequest.findUnique({
-    where: { id: returnId },
-    include: RETURN_FOR_EMAIL,
-  });
-  if (!request?.user?.email) return;
-
-  const { brand, supportEmail, siteUrl } = await getBrandContext();
-  const isRefund = request.resolution === "REFUND";
-
-  const lead = isRefund
-    ? `We've received your return request. Once we get the item back, we'll refund ${formatMoney(request.refundAmount)}.`
-    : "We've received your replacement request. Once we get the item back, we'll ship a fresh unit.";
-
-  const bodyHtml = [
-    heading(`Hi ${firstName(request.user.name)},`),
-    paragraphs(lead, "Please keep the item in its original packaging until it's collected."),
-    renderInfoRows(
-      [
-        ["Return number", request.returnNumber],
-        ["Order number", request.order?.orderNumber ?? "—"],
-        ["Reason", returnReasonLabel(request.reason)],
-        ["You asked for", isRefund ? "Refund" : "Replacement"],
-        isRefund ? ["Refund amount", formatMoney(request.refundAmount)] : null,
-      ].filter(Boolean)
-    ),
-    renderItemsTable(returnLines(request)),
-    renderButton(`${siteUrl}/dashboard/orders`, "Track your return"),
-  ].join("\n");
-
-  await sendEmail({
-    to: request.user.email,
-    template: "return_requested",
-    returnId: request.id,
-    subject: `Return requested — ${request.returnNumber}`,
-    html: renderEmailLayout({ brand, supportEmail, bodyHtml }),
-    text: `Hi ${firstName(request.user.name)},\n\n${lead}\n\nReturn: ${request.returnNumber}\nOrder: ${request.order?.orderNumber}\nReason: ${returnReasonLabel(request.reason)}\n\n${siteUrl}/dashboard/orders`,
-  });
-}
-
-/**
- * Alerts the store that a return needs reviewing.
- * @param {string} returnId
- */
-export async function sendNewReturnAdminEmail(returnId) {
-  const to = adminRecipient();
-  if (!to) return;
-
-  const request = await prisma.returnRequest.findUnique({
-    where: { id: returnId },
-    include: RETURN_FOR_EMAIL,
-  });
-  if (!request) return;
-
-  const { brand, supportEmail, siteUrl } = await getBrandContext();
-
-  const bodyHtml = [
-    heading(`Return request: ${request.returnNumber}`),
-    renderInfoRows(
-      [
-        ["Order", request.order?.orderNumber ?? "—"],
-        ["Customer", request.user?.name || "—"],
-        ["Email", request.user?.email || "—"],
-        ["Reason", returnReasonLabel(request.reason)],
-        ["Wants", request.resolution === "REFUND" ? "Refund" : "Replacement"],
-        ["Amount", formatMoney(request.refundAmount)],
-      ].filter(Boolean)
-    ),
-    request.comment
-      ? paragraphs(`Customer note: ${request.comment}`)
-      : "",
-    renderItemsTable(returnLines(request)),
-    renderButton(`${siteUrl}/admin/returns`, "Review in admin"),
-  ].join("\n");
-
-  await sendEmail({
-    to,
-    template: "admin_new_return",
-    returnId: request.id,
-    subject: `Return ${request.returnNumber} needs review`,
-    html: renderEmailLayout({ brand, supportEmail, bodyHtml }),
-    text: `Return ${request.returnNumber} on order ${request.order?.orderNumber}\nCustomer: ${request.user?.name} (${request.user?.email})\nReason: ${returnReasonLabel(request.reason)}\nAmount: ${formatMoney(request.refundAmount)}`,
-  });
-}
-
-/** Per-status lead copy for return lifecycle emails. */
-const RETURN_STATUS_LEAD = {
-  APPROVED: () => "Your return has been approved. Keep the item packed — a pickup will be scheduled.",
-  PICKED_UP: () => "The courier has collected your item. We'll let you know once it reaches us.",
-  RECEIVED: () => "We've received your item and are processing your request now.",
-  REFUNDED: (r) =>
-    `Your refund of ${formatMoney(r.refundAmount)} has been issued. Depending on your bank it may take 3-5 business days to appear.`,
-  REPLACED: () => "A replacement unit has been dispatched and is on its way to you.",
-  REJECTED: () => "After reviewing your request, we're unable to approve this return.",
-  CANCELLED: () => "Your return request has been withdrawn, as requested.",
-};
-
-/**
- * Tells the customer their return moved to a new status.
- *
- * @param {string} returnId
- * @param {string} status  the new ReturnStatus
- */
-export async function sendReturnStatusEmail(returnId, status) {
-  const buildLead = RETURN_STATUS_LEAD[status];
-  if (!buildLead) return;
-
-  const request = await prisma.returnRequest.findUnique({
-    where: { id: returnId },
-    include: RETURN_FOR_EMAIL,
-  });
-  if (!request?.user?.email) return;
-
-  const { brand, supportEmail, siteUrl } = await getBrandContext();
-  const label = RETURN_STATUS_COPY[status]?.label ?? status;
-  const lead = buildLead(request);
-
-  const bodyHtml = [
-    heading(`Hi ${firstName(request.user.name)},`),
-    paragraphs(
-      lead,
-      // A rejection without a reason is the fastest way to a support ticket.
-      status === "REJECTED" && request.adminNote ? `Reason: ${request.adminNote}` : null
-    ),
-    renderInfoRows(
-      [
-        ["Return number", request.returnNumber],
-        ["Order number", request.order?.orderNumber ?? "—"],
-        ["Status", label],
-        status === "REFUNDED" ? ["Refunded", formatMoney(request.refundAmount)] : null,
-        status === "REFUNDED" && request.refundReference
-          ? ["Reference", request.refundReference]
-          : null,
-      ].filter(Boolean)
-    ),
-    renderItemsTable(returnLines(request)),
-    renderButton(`${siteUrl}/dashboard/orders`, "View your return"),
-  ].join("\n");
-
-  await sendEmail({
-    to: request.user.email,
-    template: `return_${status.toLowerCase()}`,
-    returnId: request.id,
-    subject: `${label} — ${request.returnNumber}`,
-    html: renderEmailLayout({ brand, supportEmail, bodyHtml }),
-    text: `Hi ${firstName(request.user.name)},\n\n${lead}\n\nReturn: ${request.returnNumber}\nStatus: ${label}\n\n${siteUrl}/dashboard/orders`,
   });
 }

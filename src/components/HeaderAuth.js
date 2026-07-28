@@ -37,7 +37,7 @@ export function HeaderAuth({ onOpenMenu } = {}) {
 
   if (!session) {
     // Amazon-style desktop auth: a "Hello, sign in / Account" stack and a
-    // "Returns / & Orders" stack. Both send signed-out visitors to /login.
+    // "Your / Orders" stack. Both send signed-out visitors to /login.
     return (
       <div className="flex items-center gap-1">
         <Link
@@ -51,8 +51,8 @@ export function HeaderAuth({ onOpenMenu } = {}) {
           href="/login"
           className="rounded border border-transparent px-2 py-1 leading-tight text-[#ffffff] transition hover:border-white/40"
         >
-          <span className="block text-[11px] text-white/80">Returns</span>
-          <span className="block text-sm font-bold text-[#ffffff]">&amp; Orders</span>
+          <span className="block text-[11px] text-white/80">Your</span>
+          <span className="block text-sm font-bold text-[#ffffff]">Orders</span>
         </Link>
       </div>
     );
@@ -79,7 +79,7 @@ export function HeaderAuth({ onOpenMenu } = {}) {
 
   // Main header: below lg the slide-over drawer (with logout) handles the
   // account; on laptop/desktop we mirror Amazon — a "Hello, {name} / Account"
-  // stack followed by a "Returns / & Orders" stack, and NO logout icon (logout
+  // stack followed by a "Your / Orders" stack, and NO logout icon (logout
   // lives inside the portal/account menu instead).
   if (onOpenMenu) {
     return (
@@ -94,7 +94,7 @@ export function HeaderAuth({ onOpenMenu } = {}) {
           {accountContent}
         </button>
 
-        {/* lg and up: Amazon-style account + Returns & Orders stacks. */}
+        {/* lg and up: Amazon-style account + Your Orders stacks. */}
         <Link
           href={portalUrl}
           className="hidden rounded border border-transparent px-2 py-1 leading-tight text-[#ffffff] transition hover:border-white/40 lg:block"
@@ -115,8 +115,8 @@ export function HeaderAuth({ onOpenMenu } = {}) {
           href={ordersUrl}
           className="hidden rounded border border-transparent px-2 py-1 leading-tight text-[#ffffff] transition hover:border-white/40 lg:block"
         >
-          <span className="block text-[11px] text-white/80">Returns</span>
-          <span className="block text-sm font-bold text-[#ffffff]">&amp; Orders</span>
+          <span className="block text-[11px] text-white/80">Your</span>
+          <span className="block text-sm font-bold text-[#ffffff]">Orders</span>
         </Link>
       </div>
     );

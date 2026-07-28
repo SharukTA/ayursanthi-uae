@@ -3,6 +3,7 @@ import { Star, Sparkles } from "lucide-react";
 import { ShopNowButton } from "@/components/ShopNowButton";
 import { ProductMedia } from "@/components/ProductMedia";
 import { formatMoney } from "@/lib/currency";
+import { TAX_INCLUSIVE_LABEL } from "@/lib/pricing";
 
 // Shared, Amazon-style product card used across the catalog and category grids.
 //
@@ -183,6 +184,12 @@ export function ProductCard({
               ) : null}
             </div>
 
+            {/* The price is final — say so on the card rather than leaving the
+                shopper to discover it at checkout. */}
+            <p className="mt-0.5 text-[10px] font-medium text-[#565959]">
+              {TAX_INCLUSIVE_LABEL}
+            </p>
+
             {outOfStock ? (
               <p className="mt-1 text-[11px] font-bold text-[#e11d48]">Out of stock</p>
             ) : lowStock ? (
@@ -279,15 +286,22 @@ export function ProductCard({
             (Amazon's mobile pattern) — side-by-side it would be squeezed by a
             long price and its trailing chevron clipped by the card edge. */}
         <div className="mt-2.5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-          <div className="flex flex-wrap items-baseline gap-x-2">
-            <span className="text-base font-extrabold text-[#ffffff] sm:text-lg">
-              {formatMoney(price)}
-            </span>
-            {hasDeal ? (
-              <span className="text-xs font-medium text-[#ffffff]/55 line-through">
-                {formatMoney(mrp)}
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-baseline gap-x-2">
+              <span className="text-base font-extrabold text-[#ffffff] sm:text-lg">
+                {formatMoney(price)}
               </span>
-            ) : null}
+              {hasDeal ? (
+                <span className="text-xs font-medium text-[#ffffff]/55 line-through">
+                  {formatMoney(mrp)}
+                </span>
+              ) : null}
+            </div>
+            {/* The price is final — say so on the card rather than leaving the
+                shopper to discover it at checkout. */}
+            <p className="text-[10px] font-medium text-[#ffffff]/70">
+              {TAX_INCLUSIVE_LABEL}
+            </p>
           </div>
           <ShopNowButton href={href} size="sm" className="w-full sm:w-auto" />
         </div>
@@ -433,6 +447,12 @@ export function ProductListRow({ product, categoryName, rating = 0, reviewCount 
               </span>
             ) : null}
           </div>
+
+          {/* The price is final — say so on the row rather than leaving the
+              shopper to discover it at checkout. */}
+          <p className="mt-0.5 text-[10px] font-medium text-[#565959]">
+            {TAX_INCLUSIVE_LABEL}
+          </p>
 
           {/* Stock line then CTA. On mobile the right-hand column is narrow, so
               the CTA takes its own full-width line rather than competing with

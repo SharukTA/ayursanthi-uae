@@ -26,7 +26,8 @@ export async function placeCodOrder({ userId, cart, shippingAddress }) {
   }
 
   // Recompute every amount from DB prices — never trust what the client sent.
-  // No tax is charged: the store is not VAT-registered. See lib/pricing.js.
+  // Prices are tax-inclusive and final, so there is nothing to add on top of
+  // the goods but delivery. See lib/pricing.js.
   let subtotal = 0;
   let shippingRaw = 0;
   const items = [];

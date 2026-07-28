@@ -9,8 +9,8 @@ import { OrderInvoiceDocument } from "@/components/OrderInvoiceDocument";
  *
  * Amounts are read straight off the stored order — never recomputed — so the
  * invoice always matches what the customer was actually charged, even if a
- * product’s price has changed since. No tax is shown: the store is not
- * VAT-registered, so it may not issue a tax invoice (see lib/pricing.js).
+ * product’s price has changed since. No tax line is shown: prices are
+ * tax-inclusive and final (see lib/pricing.js).
  */
 
 /** Invoice numbers are derived from the order, so they're stable across renders. */

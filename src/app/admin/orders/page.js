@@ -4,11 +4,11 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ShoppingBag, ArrowLeft, Loader2, Package, RotateCcw, Search } from "lucide-react";
+import { ShoppingBag, ArrowLeft, Loader2, Package, Search } from "lucide-react";
 import { FadeIn, PageReveal } from "@/components/Animated";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
-import { ORDER_STATUS_TRANSITIONS } from "@/lib/returns";
+import { ORDER_STATUS_TRANSITIONS } from "@/lib/order-policy";
 import { formatMoney } from "@/lib/currency";
 
 const ORDER_STATUSES = [
@@ -196,25 +196,12 @@ export default function AdminOrdersPage() {
 
       <section className="bg-slate-950 py-8 text-white">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <Link
-              href="/admin"
-              className="inline-flex items-center gap-1 text-xs font-bold text-white/70 hover:text-white"
-            >
-              <ArrowLeft className="size-3.5" /> Back to Console
-            </Link>
-            <Link
-              href="/admin/returns"
-              style={{
-                color: "#ffffff",
-                backgroundColor: "rgba(255,255,255,0.12)",
-                border: "1px solid rgba(255,255,255,0.35)",
-              }}
-              className="inline-flex items-center gap-1 rounded px-2.5 py-1 text-xs font-bold"
-            >
-              <RotateCcw className="size-3.5" /> Returns &amp; Refunds
-            </Link>
-          </div>
+          <Link
+            href="/admin"
+            className="inline-flex items-center gap-1 text-xs font-bold text-white/70 hover:text-white"
+          >
+            <ArrowLeft className="size-3.5" /> Back to Console
+          </Link>
           <PageReveal>
             <h1 className="mt-2 flex items-center gap-2 text-3xl font-bold tracking-tight text-white">
               <ShoppingBag className="size-7" /> Order Management

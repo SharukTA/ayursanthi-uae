@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { Loader2, XCircle } from "lucide-react";
 import { Modal } from "@/components/Modal";
 import { Button } from "@/components/ui/button";
-import { CANCEL_REASONS } from "@/lib/returns";
+import { CANCEL_REASONS } from "@/lib/order-policy";
 import { formatMoney } from "@/lib/currency";
 
 /**

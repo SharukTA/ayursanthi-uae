@@ -28,8 +28,8 @@ When registering an account with us, you represent that all information provided
 ## 3. Products, Pricing & Billing
 We make every effort to display the colors, specifications, and prices of our ayurvedic products accurately. We reserve the right to modify prices or adjust shipping configurations without notice. Payment processing must be made through our authorized checkout gateways using valid cards or UPI keys.
 
-## 4. Refund and Return Policies
-We support a 15-day return policy for unopened items returned in their original packaging. Upon receiving the return, we inspect the items and process approved refunds back to your original source of payment within 5-7 business days. Shipping costs are non-refundable unless the return is due to a product defect.
+## 4. Cancellations and Refunds
+We do not offer returns or replacements on any product. Orders may be cancelled from your account at any time before they are handed to the courier; once an order has shipped it can no longer be cancelled. If payment has already been collected on a cancelled order, the full amount is refunded within 3-5 business days.
 
 ## 5. Intellectual Property Rights
 All content, text, designs, brand marks, and software code on Ayursanthi belong exclusively to Ayursanthi Wellness. No user may reproduce, re-host, or commercially exploit any material without explicit written consent.
@@ -64,7 +64,7 @@ export const DEFAULT_FAQS = [
   { question: "How do I create an account?", answer: "Click the Register button in the header and fill in your name, email, phone number, and password. Your account is ready to shop with straight away." },
   { question: "How can I track my orders?", answer: "Login to your account and head to Dashboard → My Orders. You'll see the full history with status (Pending, Confirmed, Shipped, Delivered) along with the item details, price breakdown, and shipping address." },
   { question: "What payment methods are accepted?", answer: "We accept all major credit/debit cards, UPI, and net banking during checkout. All payments are processed through secure, encrypted gateways." },
-  { question: "What is the return and refund policy?", answer: "We support a 15-day return policy for unopened products in their original packaging. Approved refunds are processed within 5-7 business days to the original payment source." },
+  { question: "Can I cancel my order?", answer: "Yes. Go to Dashboard → My Orders and cancel any order that has not yet been handed to the courier. Once an order ships it can no longer be cancelled. We do not accept returns or replacements, so please check your order carefully before it is dispatched." },
 ];
 
 // Read active FAQ items, falling back to the built-in list if none exist.

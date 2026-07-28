@@ -1,4 +1,5 @@
 import { Document, Page, View, Text, StyleSheet } from "@react-pdf/renderer";
+import { TAX_INCLUSIVE_LABEL } from "@/lib/pricing";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Commercial invoice for a single order. Rendered on the server (see lib/invoice.js)
@@ -7,8 +8,8 @@ import { Document, Page, View, Text, StyleSheet } from "@react-pdf/renderer";
 //
 // Every amount is passed in already computed — this component does no pricing
 // arithmetic of its own, so an invoice can never disagree with the order it
-// describes. No tax is charged or broken out — the store is not VAT-registered
-// (see lib/pricing.js), so this is a plain commercial invoice, not a tax invoice.
+// describes. Prices are tax-inclusive and final (see lib/pricing.js), so there
+// is no tax line to break out: the totals block runs goods → delivery → total.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const EMERALD = "#047857";
@@ -109,7 +110,7 @@ export function OrderInvoiceDocument({ invoice }) {
             <Text style={s.brandMeta}>{supportEmail}</Text>
           </View>
           <View>
-            <Text style={s.docTitle}>TAX INVOICE</Text>
+            <Text style={s.docTitle}>INVOICE</Text>
             <Text style={s.docMeta}>Invoice no. {invoiceNumber}</Text>
             <Text style={s.docMeta}>Order no. {orderNumber}</Text>
             <Text style={s.docMeta}>Date: {orderDate}</Text>
@@ -165,6 +166,14 @@ export function OrderInvoiceDocument({ invoice }) {
           </View>
         </View>
 
+        {/* Says in words what the totals block already does in numbers: the
+            amounts above are final, with no tax to be added on top. */}
+        <View style={s.note}>
+          <Text style={s.noteText}>
+            {TAX_INCLUSIVE_LABEL}. All amounts are in AED and final — no tax is
+            added on top of the prices shown.
+          </Text>
+        </View>
 
         <View style={s.footer} fixed>
           <Text style={s.footText}>{brand} — {supportEmail}</Text>

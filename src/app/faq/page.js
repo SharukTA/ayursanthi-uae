@@ -9,7 +9,7 @@ import { getFaqs } from "@/lib/pages";
 
 export const metadata = {
   title: "FAQ | Ayursanthi",
-  description: "Frequently asked questions about Ayursanthi products, orders, payments, shipping, and returns.",
+  description: "Frequently asked questions about Ayursanthi products, orders, payments, shipping, and cancellations.",
 };
 
 // Admin-managed FAQ list (lib/pages.js falls back to defaults if none exist).

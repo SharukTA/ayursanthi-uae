@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { MapPin, Truck, Banknote, RotateCcw } from "lucide-react";
+import { MapPin, Truck, Banknote } from "lucide-react";
 
 // Amazon/Flipkart-style "Deliver to <pincode>" box. The shopper enters a 6-digit
-// Indian PIN and gets an estimated delivery window plus the COD/returns promise.
+// Indian PIN and gets an estimated delivery window plus the Cash on Delivery promise.
 // The estimate is intentionally a simple client-side window (no carrier API), so
 // it's framed as an estimate; the last-used pincode is remembered like Amazon.
 const STORAGE_KEY = "ayursanthi_pincode";
@@ -105,10 +105,6 @@ export function DeliveryEstimator() {
           <p className="flex items-center gap-2 text-[#565959]">
             <Banknote className="size-4 text-emerald-700" />
             Cash on Delivery available
-          </p>
-          <p className="flex items-center gap-2 text-[#565959]">
-            <RotateCcw className="size-4 text-emerald-700" />
-            7-day easy returns on eligible items
           </p>
         </div>
       ) : null}

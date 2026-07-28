@@ -7,8 +7,10 @@
  *
  * The model:
  *
- *   • The price the shopper sees is the price they pay for the goods. No tax is
- *     calculated, added, or broken out anywhere.
+ *   • Prices are tax-inclusive and final. The amount on the card is the amount
+ *     charged for the goods — nothing is calculated, added, or broken out on
+ *     top of it anywhere in the app, the invoice or the emails. There is no tax
+ *     rate stored per product, per order line, or site-wide.
  *
  *   • Delivery is a per-product fee (seller-fulfilled shipping), summed across
  *     the order and waived entirely once the subtotal clears the free-shipping
@@ -16,20 +18,17 @@
  *
  *   • Order total = subtotal (goods) + delivery.
  *
- * On tax: the store previously carried Indian GST slabs, which have no meaning
- * for a UAE business. The UAE equivalent is VAT at a flat 5%, and only a
- * business registered with the Federal Tax Authority (holding a TRN) may charge
- * it or issue a tax invoice — charging VAT without registration is an offence.
- * This store is not registered, so it charges no tax at all and issues a plain
- * commercial invoice.
- *
- * If the VAT registration threshold (AED 375,000 of taxable supplies in a
- * rolling 12 months) is ever crossed, registration becomes mandatory within 30
- * days and tax comes back as: a store-level rate + TRN in site settings, a
- * per-product tax category (standard / zero-rated / exempt), and VAT carved OUT
- * of these same inclusive prices — UAE law requires consumer prices to be
- * displayed VAT-inclusive, so the maths below stays the base it is carved from.
+ * Every screen that prints a price says so in words, using TAX_INCLUSIVE_LABEL
+ * below, so a shopper never has to wonder whether tax gets added at checkout.
  */
+
+/**
+ * The one line every price surface prints beneath an amount: product cards, the
+ * product page buy box, the cart summary and the checkout summary all import
+ * this rather than typing their own, so the wording can never drift apart
+ * between screens.
+ */
+export const TAX_INCLUSIVE_LABEL = "Inclusive of all taxes";
 
 // Default order value (goods subtotal) at or above which delivery is free,
 // whatever the per-product shipping fees add up to. Denominated in the store

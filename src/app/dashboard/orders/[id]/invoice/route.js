@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * GET /dashboard/orders/[id]/invoice — streams the order's tax invoice.
+ * GET /dashboard/orders/[id]/invoice — streams the order's invoice PDF.
  *
  * Ownership is checked before anything is rendered: an order id is a cuid, but
  * guessable-or-not is not an access control model. Admins can pull any invoice

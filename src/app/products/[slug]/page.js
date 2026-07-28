@@ -19,6 +19,7 @@ import { PageSections } from "@/components/HomeSections";
 import { RecentlyViewedTracker } from "@/components/RecentlyViewedTracker";
 import { getPageSections } from "@/lib/page-sections";
 import { formatMoney } from "@/lib/currency";
+import { TAX_INCLUSIVE_LABEL } from "@/lib/pricing";
 import { CARD_MEDIA_TAKE, pickCardMedia } from "@/lib/media";
 import { splitIngredients } from "@/lib/utils";
 
@@ -192,25 +193,32 @@ export default async function ProductDetailPage({ params }) {
             </div>
 
             {/* Price Frame */}
-            <div className="mt-5 rounded-md bg-white border border-emerald-100 p-4 flex items-baseline gap-3">
-              <span className="text-2xl font-extrabold text-emerald-800">
-                {formatMoney(product.price)}
-              </span>
-              {product.mrp && (
-                <span className="text-sm text-[#565959] line-through">
-                  {formatMoney(product.mrp)}
+            <div className="mt-5 rounded-md bg-white border border-emerald-100 p-4">
+              <div className="flex items-baseline gap-3">
+                <span className="text-2xl font-extrabold text-emerald-800">
+                  {formatMoney(product.price)}
                 </span>
-              )}
-              {/* Discount badge: prefer the admin-entered "Offer Badge"
-                  (product.offerLabel); fall back to the percentage computed
-                  from MRP vs. price when no badge text was provided. */}
-              {(product.offerLabel?.trim() || product.mrp) && (
-                <span className="text-xs font-bold text-amber-800 bg-amber-100 rounded px-1.5 py-0.5">
-                  {product.offerLabel?.trim()
-                    ? product.offerLabel.trim()
-                    : `${Math.round(((Number(product.mrp) - Number(product.price)) / Number(product.mrp)) * 100)}% OFF`}
-                </span>
-              )}
+                {product.mrp && (
+                  <span className="text-sm text-[#565959] line-through">
+                    {formatMoney(product.mrp)}
+                  </span>
+                )}
+                {/* Discount badge: prefer the admin-entered "Offer Badge"
+                    (product.offerLabel); fall back to the percentage computed
+                    from MRP vs. price when no badge text was provided. */}
+                {(product.offerLabel?.trim() || product.mrp) && (
+                  <span className="text-xs font-bold text-amber-800 bg-amber-100 rounded px-1.5 py-0.5">
+                    {product.offerLabel?.trim()
+                      ? product.offerLabel.trim()
+                      : `${Math.round(((Number(product.mrp) - Number(product.price)) / Number(product.mrp)) * 100)}% OFF`}
+                  </span>
+                )}
+              </div>
+              {/* The price above is what the shopper pays for the goods —
+                  nothing is added on top at checkout but delivery. */}
+              <p className="mt-1 text-xs font-medium text-[#565959]">
+                {TAX_INCLUSIVE_LABEL}
+              </p>
             </div>
 
             {/* Short description */}
@@ -252,7 +260,7 @@ export default async function ProductDetailPage({ params }) {
               Download details as PDF
             </a>
 
-            {/* Delivery estimator — pincode → estimated window + COD/returns. */}
+            {/* Delivery estimator — pincode → estimated window + Cash on Delivery. */}
             <DeliveryEstimator />
 
             {/* Value Badges */}

@@ -7,7 +7,7 @@ import { Check } from "lucide-react";
  * Amazon's order progress bar: a row of nodes joined by a track that fills up to
  * whichever step the order has reached.
  *
- * The fulfilment ladder in lib/returns.js has six rungs, but a shopper does not
+ * The fulfilment ladder in lib/order-policy.js has six rungs, but a shopper does not
  * distinguish "placed" from "accepted", so PENDING and CONFIRMED collapse into a
  * single "Ordered" node — the same fold Amazon makes. Every rung after that gets
  * its own node, so each admin transition visibly moves the bar.

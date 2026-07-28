@@ -3,7 +3,7 @@ import { jsonError, ORDER_STATUSES, prismaErrorResponse, requireAdmin } from "@/
 import { sendOrderStatusEmail } from "@/lib/email-orders";
 import { queueEmail } from "@/lib/email-queue";
 import { cancelOrder } from "@/lib/order-actions";
-import { canTransitionOrderStatus } from "@/lib/returns";
+import { canTransitionOrderStatus } from "@/lib/order-policy";
 
 export const runtime = "nodejs";
 
@@ -95,7 +95,7 @@ export async function PATCH(request, { params }) {
           status,
           ...(paymentStatus ? { paymentStatus } : {}),
           ...tracking,
-          // Stamped once: this is what starts the customer's return window.
+          // Stamped once, when an admin marks the order delivered.
           ...(status === "DELIVERED" && !existing.deliveredAt ? { deliveredAt: new Date() } : {}),
         },
         include: {

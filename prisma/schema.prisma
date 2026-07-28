@@ -42,48 +42,6 @@ enum CancelledBy {
   ADMIN
 }
 
-// Lifecycle of a return/replacement request, mirroring the states Amazon shows
-// on "Your Returns". REFUNDED / REPLACED / REJECTED / CANCELLED are terminal.
-enum ReturnStatus {
-  REQUESTED // customer submitted it; waiting on the seller to approve
-  APPROVED // approved, pickup scheduled
-  PICKED_UP // courier collected the item from the customer
-  RECEIVED // arrived back and passed inspection (stock is restored here)
-  REFUNDED // money sent back — terminal for a REFUND request
-  REPLACED // replacement dispatched — terminal for a REPLACEMENT request
-  REJECTED // seller declined (outside window, item not as described, ...)
-  CANCELLED // customer withdrew the request before pickup
-}
-
-// What the customer asked for. Amazon offers both on most items.
-enum ReturnResolution {
-  REFUND
-  REPLACEMENT
-}
-
-// The fixed reason list the customer picks from, exactly like Amazon's return
-// dropdown. Reasons that mean "the item is unsellable" (DAMAGED / DEFECTIVE)
-// deliberately skip the restock step — see lib/returns.js.
-enum ReturnReason {
-  DAMAGED
-  DEFECTIVE
-  WRONG_ITEM
-  MISSING_PARTS
-  NOT_AS_DESCRIBED
-  NO_LONGER_NEEDED
-  BOUGHT_BY_MISTAKE
-  BETTER_PRICE
-  OTHER
-}
-
-// Where the refund money goes. Cash on Delivery has no card to reverse, so the
-// customer supplies a destination (bank account) at return time — the same thing
-// Amazon does for its Pay-on-Delivery orders.
-enum RefundMethod {
-  BANK_TRANSFER
-  CASH_ON_PICKUP
-}
-
 // Type of a homepage block. Each value maps to a renderer component on the
 // public homepage. Adding a new visual style for the homepage means adding a
 // value here and a matching case in the HomeSections renderer — the admin can
@@ -128,7 +86,6 @@ model User {
   addresses         Address[]
   cartItems         CartItem[]
   orders            Order[]
-  returns           ReturnRequest[]
   reviews           ProductReview[]
   productViews      ProductView[]
   passwordResetOtps PasswordResetOtp[]
@@ -316,10 +273,10 @@ model Order {
   subtotal        Decimal         @db.Decimal(10, 2)
   shipping        Decimal         @default(0) @db.Decimal(10, 2)
   total           Decimal         @db.Decimal(10, 2)
-  // Money already sent back to the customer across every cancellation/return on
-  // this order. paymentStatus only flips to REFUNDED once this reaches `total`,
-  // so a partial return leaves the order PAID with a smaller balance — the same
-  // way Amazon shows "Refunded AED X" against a still-delivered order.
+  // Money already sent back to the customer for this order. Cancellation is the
+  // only thing that puts money back (the store does not accept returns), so this
+  // is the cancellation refund and paymentStatus flips to REFUNDED once it
+  // reaches `total`.
   refundedTotal   Decimal         @default(0) @db.Decimal(10, 2)
   addressSnapshot Json?
   // Courier consignment details, filled in by the admin when the order ships.
@@ -327,82 +284,28 @@ model Order {
   // cheapest on the route, so there is no fixed carrier list to enumerate.
   trackingNumber  String?
   courierName     String?
-  // When the courier handed the parcel over. This starts the return window, so
-  // it is stamped the moment an admin marks the order DELIVERED.
+  // When the courier handed the parcel over, stamped the moment an admin marks
+  // the order DELIVERED.
   deliveredAt     DateTime?
   cancelledAt     DateTime?
   cancelledBy     CancelledBy?
   cancelReason    String?
   items           OrderItem[]
   payments        Payment[]
-  returns         ReturnRequest[]
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 }
 
 model OrderItem {
-  id          String       @id @default(cuid())
+  id          String  @id @default(cuid())
   orderId     String
-  order       Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order       Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
   productId   String
-  product     Product      @relation(fields: [productId], references: [id])
+  product     Product @relation(fields: [productId], references: [id])
   productName String
   quantity    Int
-  price       Decimal      @db.Decimal(10, 2)
-  total       Decimal      @db.Decimal(10, 2)
-  returnItems ReturnItem[]
-}
-
-// A customer's request to send item(s) back. One request covers any subset of an
-// order's lines (and any quantity within a line), so a five-item order can have
-// several independent returns in flight — again, the Amazon model.
-//
-// The money side lives on the order: when a request reaches REFUNDED a Payment
-// ledger row is written and Order.refundedTotal grows by `refundAmount`.
-model ReturnRequest {
-  id              String           @id @default(cuid())
-  returnNumber    String           @unique
-  orderId         String
-  order           Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  userId          String
-  user            User             @relation(fields: [userId], references: [id])
-  status          ReturnStatus     @default(REQUESTED)
-  resolution      ReturnResolution @default(REFUND)
-  reason          ReturnReason
-  comment         String?
-  // Item value (+ shipping when the whole order goes back), computed
-  // server-side in lib/returns.js — never sent by the client.
-  refundAmount    Decimal          @db.Decimal(10, 2)
-  refundMethod    RefundMethod?
-  refundDetails   Json? // customer-supplied bank destination snapshot
-  refundReference String? // seller's transfer reference, shown to the customer
-  adminNote       String? // rejection reason / internal note
-  items           ReturnItem[]
-  requestedAt     DateTime         @default(now())
-  approvedAt      DateTime?
-  pickedUpAt      DateTime?
-  receivedAt      DateTime?
-  closedAt        DateTime? // set when it lands in any terminal status
-  updatedAt       DateTime         @updatedAt
-
-  @@index([userId, requestedAt])
-  @@index([orderId])
-  @@index([status])
-}
-
-// One order line inside a return request, with the quantity being sent back and
-// the value that quantity contributes to the refund.
-model ReturnItem {
-  id            String        @id @default(cuid())
-  returnId      String
-  returnRequest ReturnRequest @relation(fields: [returnId], references: [id], onDelete: Cascade)
-  orderItemId   String
-  orderItem     OrderItem     @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
-  quantity      Int
-  amount        Decimal       @db.Decimal(10, 2)
-
-  @@index([returnId])
-  @@index([orderItemId])
+  price       Decimal @db.Decimal(10, 2)
+  total       Decimal @db.Decimal(10, 2)
 }
 
 model Payment {
@@ -410,8 +313,8 @@ model Payment {
   orderId           String
   order             Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
   // "cod"    — cash collected by the courier on delivery
-  // "refund"  — money sent back for a cancellation or return; `amount` is the
-  //             refunded value and `status` is REFUNDED. Sign is implied by the
+  // "refund"  — money sent back for a cancellation; `amount` is the refunded
+  //             value and `status` is REFUNDED. Sign is implied by the
   //             provider, so the ledger stays additive.
   provider          String
   providerPaymentId String?       @unique // set only by an external gateway; null for COD
@@ -548,17 +451,16 @@ model EmailLog {
   id        String      @id @default(cuid())
   recipient String
   subject   String
-  // Template key, e.g. "order_placed" / "return_refunded". Lets the admin
+  // Template key, e.g. "order_placed" / "order_cancelled". Lets the admin
   // filter by kind without parsing subject lines.
   template  String
   provider  String
   status    EmailStatus
   error     String?     @db.Text
-  // Set when the email is about a specific order/return, so the admin order
-  // screen can show what was sent for it. Intentionally NOT a foreign key: the
-  // log must outlive the row it describes.
+  // Set when the email is about a specific order, so the admin order screen can
+  // show what was sent for it. Intentionally NOT a foreign key: the log must
+  // outlive the row it describes.
   orderId   String?
-  returnId  String?
   createdAt DateTime    @default(now())
 
   @@index([createdAt])

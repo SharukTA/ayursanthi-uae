@@ -10,7 +10,11 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { Button } from "@/components/ui/button";
 import { AnimatedHeading } from "@/components/AnimatedText";
 import { Tilt3D } from "@/components/Tilt3D";
-import { calculateOrderTotals, FREE_SHIPPING_THRESHOLD } from "@/lib/pricing";
+import {
+  calculateOrderTotals,
+  FREE_SHIPPING_THRESHOLD,
+  TAX_INCLUSIVE_LABEL,
+} from "@/lib/pricing";
 import { formatMoney } from "@/lib/currency";
 import {
   getCart,
@@ -160,8 +164,9 @@ export default function CartPage() {
   };
 
   // Pricing calculations — based only on the items the customer has selected.
-  // The total is goods + delivery (see lib/pricing.js). No tax is charged. The
-  // server recomputes it all from the DB at checkout.
+  // The total is goods + delivery (see lib/pricing.js) — prices are tax-inclusive,
+  // so nothing is added on top. The server recomputes it all from the DB at
+  // checkout.
   const selectedItems = cart.filter(isSelected);
   const selectedCount = selectedItems.reduce((acc, item) => acc + item.quantity, 0);
   const { subtotal, shipping, total } = calculateOrderTotals(
@@ -369,9 +374,16 @@ export default function CartPage() {
                   </div>
                 </div>
 
-                <div className="border-t border-[#d5d9d9] pt-4 flex justify-between font-extrabold text-[#0f1111]">
-                  <span className="text-sm">Total Amount</span>
-                  <span className="text-base text-[#0f1111]">{formatMoney(total)}</span>
+                <div className="border-t border-[#d5d9d9] pt-4">
+                  <div className="flex justify-between font-extrabold text-[#0f1111]">
+                    <span className="text-sm">Total Amount</span>
+                    <span className="text-base text-[#0f1111]">{formatMoney(total)}</span>
+                  </div>
+                  {/* The total is the whole amount due — nothing is added at
+                      checkout. */}
+                  <p className="mt-1 text-[10px] font-medium text-[#565959]">
+                    {TAX_INCLUSIVE_LABEL}
+                  </p>
                 </div>
 
                 {shipping > 0 && (

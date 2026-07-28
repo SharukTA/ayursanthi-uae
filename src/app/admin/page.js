@@ -14,7 +14,6 @@ import {
   CheckCircle2,
   Clock,
   LayoutTemplate,
-  RotateCcw,
   Settings,
   FileText,
   Mail
@@ -83,9 +82,6 @@ export default async function AdminDashboardPage() {
             </Button>
             <Button asChild variant="secondary" className="bg-white border-2 border-white text-[#0f1111] hover:bg-[#f8fafc] shadow-lg shadow-black/30 h-9 rounded font-bold">
               <Link href="/admin/orders">Orders</Link>
-            </Button>
-            <Button asChild variant="secondary" className="bg-white border-2 border-white text-[#0f1111] hover:bg-[#f8fafc] shadow-lg shadow-black/30 h-9 rounded font-bold">
-              <Link href="/admin/returns">Returns</Link>
             </Button>
             <Button asChild variant="secondary" className="bg-white border-2 border-white text-[#0f1111] hover:bg-[#f8fafc] shadow-lg shadow-black/30 h-9 rounded font-bold">
               <Link href="/admin/categories">Categories Portal</Link>
@@ -204,13 +200,6 @@ export default async function AdminDashboardPage() {
                   href: "/admin/orders",
                   icon: ShoppingBag,
                   color: "bg-blue-100 text-blue-800"
-                },
-                {
-                  title: "Returns & Refunds",
-                  desc: "Work the return queue: approve requests, confirm the item is back (stock returns automatically), then refund or send a replacement.",
-                  href: "/admin/returns",
-                  icon: RotateCcw,
-                  color: "bg-rose-100 text-rose-800"
                 },
                 {
                   title: "Home Builder",

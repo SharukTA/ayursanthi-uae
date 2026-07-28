@@ -65,7 +65,6 @@ function resolveProvider() {
  * @param {Array<{filename: string, content: Buffer}>} [opts.attachments]
  * @param {string} [opts.template] Template key recorded in the EmailLog audit trail.
  * @param {string} [opts.orderId]  Order this email is about, for the audit trail.
- * @param {string} [opts.returnId] Return this email is about, for the audit trail.
  * @returns {Promise<{ ok: boolean, provider: string, skipped?: boolean, error?: string }>}
  */
 export async function sendEmail({
@@ -78,7 +77,6 @@ export async function sendEmail({
   attachments,
   template = "unknown",
   orderId,
-  returnId,
 }) {
   const recipient = String(to || "").trim();
   if (!looksLikeEmail(recipient)) {
@@ -91,7 +89,6 @@ export async function sendEmail({
       status: "SKIPPED",
       error: "invalid_email",
       orderId,
-      returnId,
     });
     return { ok: false, provider: "none", skipped: true, error: "invalid_email" };
   }
@@ -119,7 +116,6 @@ export async function sendEmail({
         provider: "resend",
         status: "SENT",
         orderId,
-        returnId,
       });
       return result;
     } catch (error) {
@@ -138,7 +134,6 @@ export async function sendEmail({
         status: "FAILED",
         error: message,
         orderId,
-        returnId,
       });
       return { ok: false, provider: "resend", error: message };
     }
@@ -159,7 +154,6 @@ export async function sendEmail({
     provider: "console",
     status: "SENT",
     orderId,
-    returnId,
   });
   return { ok: true, provider: "console" };
 }
@@ -182,7 +176,6 @@ async function recordEmailLog(entry) {
         status: entry.status,
         error: entry.error ? String(entry.error).slice(0, 2000) : null,
         orderId: entry.orderId ?? null,
-        returnId: entry.returnId ?? null,
       },
     });
   } catch (error) {
@@ -348,7 +341,7 @@ ${body}
  * Order line items with a totals block.
  *
  * @param {Array<{productName: string, quantity: number, total: any}>} items
- * @param {{subtotal?: any, shipping?: any, tax?: any, total?: any}} [totals]
+ * @param {{subtotal?: any, shipping?: any, total?: any}} [totals]
  */
 export function renderItemsTable(items, totals = null) {
   const lines = (items ?? [])

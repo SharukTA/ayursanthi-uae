@@ -1,6 +1,6 @@
 import { getSession } from "@/lib/auth";
 import { cancelOrder } from "@/lib/order-actions";
-import { CANCEL_REASONS, cancelReasonLabel } from "@/lib/returns";
+import { CANCEL_REASONS, cancelReasonLabel } from "@/lib/order-policy";
 import { formatMoney } from "@/lib/currency";
 
 export const runtime = "nodejs";
@@ -15,8 +15,8 @@ const STATUS_CODES = {
  * Customer cancels their own order.
  *
  * Only orders that have not been handed to the courier can be cancelled — the
- * window closes at SHIPPED, exactly like Amazon. After delivery the customer
- * returns the item instead (POST /api/user/orders/[id]/returns).
+ * window closes at SHIPPED. There is no return or replacement path afterwards:
+ * cancelling before dispatch is the only way out of an order.
  *
  * Cancelling restores stock and settles the payment side: a Cash-on-Delivery
  * order that was never collected is simply marked FAILED, while an order whose

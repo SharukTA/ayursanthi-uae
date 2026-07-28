@@ -14,10 +14,9 @@ import {
 } from "lucide-react";
 import { FadeIn, PageReveal } from "@/components/Animated";
 import { CancelOrderDialog } from "@/components/CancelOrderDialog";
-import { ReturnRequestModal } from "@/components/ReturnRequestModal";
-import { OrderReturns } from "@/components/OrderReturns";
+import { OrderRefunds } from "@/components/OrderRefunds";
 import { OrderProgress } from "@/components/OrderProgress";
-import { canCancelOrder, canReturnOrder, returnWindowEndsAt } from "@/lib/returns";
+import { canCancelOrder } from "@/lib/order-policy";
 import { formatMoney } from "@/lib/currency";
 
 // Amazon renders the order status as a bold line above the items ("Delivered
@@ -80,9 +79,8 @@ export default function OrdersPage() {
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState(null);
   const [tab, setTab] = useState("ALL");
-  // Order currently being cancelled / returned, or null when no sheet is open.
+  // Order currently being cancelled, or null when no sheet is open.
   const [cancelling, setCancelling] = useState(null);
-  const [returning, setReturning] = useState(null);
 
   const loadOrders = useCallback(
     () =>
@@ -173,11 +171,9 @@ export default function OrdersPage() {
             const addr = order.addressSnapshot;
             const isOpen = expandedId === order.id;
             const lineClass = STATUS_LINE[order.status] ?? STATUS_LINE.PENDING;
-            // Same policy the API enforces — see lib/returns.js. Buttons only
-            // appear when the action would actually succeed.
+            // Same policy the API enforces — see lib/order-policy.js. The
+            // button only appears when the action would actually succeed.
             const cancellable = canCancelOrder(order);
-            const returnable = canReturnOrder(order);
-            const windowEndsAt = returnWindowEndsAt(order);
             const firstSlug = order.items.find((i) => i.product?.slug)?.product?.slug;
 
             const statusLine = STATUS_LINES[order.status] ?? STATUS_LINES.PENDING;
@@ -350,16 +346,6 @@ export default function OrdersPage() {
                     >
                       View order details
                     </button>
-                    {returnable.allowed ? (
-                      <button
-                        type="button"
-                        onClick={() => setReturning(order)}
-                        className={PILL_SECONDARY}
-                      >
-                        <RotateCcw className="size-3.5" />
-                        Return or replace
-                      </button>
-                    ) : null}
                     {cancellable.allowed ? (
                       <button
                         type="button"
@@ -369,11 +355,6 @@ export default function OrdersPage() {
                         <XCircle className="size-3.5" />
                         Cancel order
                       </button>
-                    ) : null}
-                    {windowEndsAt && returnable.allowed ? (
-                      <p className="text-center text-[11px] text-[#565959]">
-                        Return window closes {fmtDate(windowEndsAt)}
-                      </p>
                     ) : null}
                   </div>
                 </div>
@@ -405,12 +386,9 @@ export default function OrdersPage() {
                     ["SHIPPED", "OUT_FOR_DELIVERY"].includes(order.status) ? (
                       <p className="text-[11px] text-[#565959]">{cancellable.message}</p>
                     ) : null}
-                    {!returnable.allowed && order.status === "DELIVERED" ? (
-                      <p className="text-[11px] text-[#565959]">{returnable.message}</p>
-                    ) : null}
 
-                    {/* Existing returns + refunds already issued */}
-                    <OrderReturns order={order} onChanged={loadOrders} />
+                    {/* Refunds already issued for this order */}
+                    <OrderRefunds order={order} />
 
                     {/* Price breakdown */}
                     <div className="rounded-md border border-[#d5d9d9] bg-white p-4">
@@ -501,14 +479,6 @@ export default function OrdersPage() {
           order={cancelling}
           onClose={() => setCancelling(null)}
           onCancelled={loadOrders}
-        />
-      ) : null}
-
-      {returning ? (
-        <ReturnRequestModal
-          order={returning}
-          onClose={() => setReturning(null)}
-          onSubmitted={loadOrders}
         />
       ) : null}
     </div>

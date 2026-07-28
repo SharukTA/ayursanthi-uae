@@ -24,7 +24,11 @@ import {
   postalCodeLabel,
   subdivisionLabel,
 } from "@/lib/geo/postal";
-import { calculateOrderTotals, FREE_SHIPPING_THRESHOLD } from "@/lib/pricing";
+import {
+  calculateOrderTotals,
+  FREE_SHIPPING_THRESHOLD,
+  TAX_INCLUSIVE_LABEL,
+} from "@/lib/pricing";
 import { formatMoney } from "@/lib/currency";
 import {
   clearBuyNowItem,
@@ -231,7 +235,8 @@ export default function CheckoutPage() {
   }, [authChecked, session, orderSuccess, bookingItems.length]);
 
   const itemCount = bookingItems.reduce((acc, item) => acc + item.quantity, 0);
-  // The order total is goods + delivery (see lib/pricing.js). No tax is charged.
+  // The order total is goods + delivery (see lib/pricing.js) — prices are
+  // tax-inclusive, so nothing is added on top of them here or on the server.
   // The server recomputes all of this from DB prices before the order is created.
   const { subtotal, shipping, total } = calculateOrderTotals(
     bookingItems,
@@ -478,6 +483,7 @@ export default function CheckoutPage() {
   // ── The order summary panel. Rendered twice: sticky in the right column and
   // again in the box at the bottom of the steps, exactly like Amazon. ──
   const orderSummary = (
+    <>
     <dl className="space-y-1.5 text-[13px] text-[#0f1111]">
       <div className="flex justify-between gap-4">
         <dt>
@@ -495,6 +501,12 @@ export default function CheckoutPage() {
         <dd>{money(total)}</dd>
       </div>
     </dl>
+    {/* The total above is the whole amount due — nothing is added after this
+        screen. Sits outside the <dl>, which may only hold dt/dd pairs. */}
+    <p className="mt-1 text-[11px] font-medium text-[#565959]">
+      {TAX_INCLUSIVE_LABEL}
+    </p>
+    </>
   );
 
   const placeOrderButton = (
@@ -823,7 +835,7 @@ export default function CheckoutPage() {
                     Order total: {money(total)}
                   </p>
                   <p className="mt-0.5 text-[12px] text-[#565959]">
-                    Payable in cash on delivery
+                    {TAX_INCLUSIVE_LABEL} · Payable in cash on delivery
                   </p>
                 </div>
               </div>
