@@ -71,7 +71,10 @@ export function FaceVideoCarousel({ items = [], onDominantColor, heroLayout = fa
   );
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [scrollSnaps, setScrollSnaps] = useState([]);
-  const [canScroll, setCanScroll] = useState(false);
+  // Optimistic until Embla measures — see SectionCarousel. Doubles as the "the
+  // track can't scroll, so centre it" flag for a single-video section, whose
+  // slide is only 72% wide on phones.
+  const [canScroll, setCanScroll] = useState(faceVideos.length > 1);
   const videoRefs = useRef([]);
   const colorCacheRef = useRef({});
   const selectedIndexRef = useRef(0);
@@ -192,7 +195,9 @@ export function FaceVideoCarousel({ items = [], onDominantColor, heroLayout = fa
       >
         <div className="relative lg:min-h-0 lg:flex-1">
         <div className="overflow-hidden rounded-2xl lg:h-full" ref={emblaRef}>
-          <div className="flex lg:h-full">
+          {/* A lone video (72% wide on phones) is centred rather than left-hung;
+              a non-scrollable Embla track sits at offset 0, so CSS decides. */}
+          <div className={`flex lg:h-full ${canScroll ? "" : "justify-center"}`}>
             {faceVideos.map((item, index) => (
             <div
               key={item.id || item.src}
@@ -289,8 +294,9 @@ export function FaceVideoCarousel({ items = [], onDominantColor, heroLayout = fa
         </div>
       </div>
 
-        {/* Position dots below — only shown when there's more than one video. */}
-        {canScroll ? (
+        {/* Position dots below — only shown when there's more than one video.
+            Read off the measured snaps so nothing is reserved pre-init. */}
+        {scrollSnaps.length > 1 ? (
           <div className="mt-5 flex items-center justify-center gap-2">
             {scrollSnaps.map((_, idx) => (
               <button

@@ -55,9 +55,79 @@ export function slugify(value) {
     .replace(/(^-|-$)+/g, "");
 }
 
+// Slugs are unique per table (see prisma/schema.prisma) but NAMES are not — two
+// products can legitimately share one ("Ashwagandha Churna" from two brands, a
+// relisted pack, a variant the admin names identically). So the slug derived
+// from the name is only a *base*: when it is already taken, the next free
+// "-1", "-2" … suffix is appended instead of failing the save with a unique
+// constraint error the admin can do nothing about.
+//
+// `model` is the Prisma delegate to check ("product" or "category").
+// `excludeId` skips the row being edited so it never collides with itself, and
+// `currentSlug` keeps that row's existing suffix stable — renumbering it on
+// every unrelated save would silently change a live URL.
+export async function uniqueSlug(baseSlug, model, { excludeId = null, currentSlug = null } = {}) {
+  const base = slugify(baseSlug);
+  if (!base) return base;
+
+  // `startsWith` also pulls in unrelated longer slugs ("ashwagandha-churna-plus"
+  // when the base is "ashwagandha-churna"); harmless, they simply never match a
+  // candidate below.
+  const rows = await prisma[model].findMany({
+    where: {
+      slug: { startsWith: base },
+      ...(excludeId ? { id: { not: excludeId } } : {}),
+    },
+    select: { slug: true },
+  });
+
+  const taken = new Set(rows.map((row) => row.slug));
+
+  if (!taken.has(base)) return base;
+  if (currentSlug && isSuffixedVariant(currentSlug, base)) return currentSlug;
+
+  let suffix = 1;
+  while (taken.has(`${base}-${suffix}`)) {
+    suffix += 1;
+  }
+
+  return `${base}-${suffix}`;
+}
+
+// True for "ashwagandha-churna-2" against base "ashwagandha-churna" — i.e. this
+// slug is already a numbered variant of the base, not a different slug that
+// merely starts with it.
+function isSuffixedVariant(slug, base) {
+  if (!slug.startsWith(`${base}-`)) return false;
+  return /^\d+$/.test(slug.slice(base.length + 1));
+}
+
 export function cleanString(value) {
   const trimmed = String(value || "").trim();
   return trimmed.length ? trimmed : null;
+}
+
+// Resolve an admin-supplied categoryId into something safe to write to
+// Product.categoryId.
+//
+// A product's category is OPTIONAL (the column is nullable — see
+// prisma/schema.prisma), so a blank/missing value simply means "uncategorized".
+// An id that no longer resolves to a real category — the admin left the product
+// form open while that category was deleted in another tab, or an old client
+// replays a stale id — is treated the same way rather than failing the save:
+// the write would otherwise be rejected by the foreign key with an error the
+// admin can do nothing about, and losing a whole product form to a stale
+// dropdown option is far worse than saving the product uncategorized.
+export async function resolveCategoryId(value) {
+  const categoryId = cleanString(value);
+  if (!categoryId) return null;
+
+  const category = await prisma.category.findUnique({
+    where: { id: categoryId },
+    select: { id: true },
+  });
+
+  return category?.id ?? null;
 }
 
 // Normalise an admin-supplied ingredient list to a canonical
@@ -146,6 +216,16 @@ export function prismaErrorResponse(error, fallbackMessage) {
 
   if (error?.code === "P2025") {
     return jsonError("Record not found.", 404);
+  }
+
+  // Foreign key violation — almost always a reference to a row that was deleted
+  // between the page loading and the form being submitted.
+  if (error?.code === "P2003") {
+    return jsonError(
+      "One of the linked records no longer exists. Refresh the page and try again.",
+      409,
+      { field: error.meta?.field_name }
+    );
   }
 
   console.error(error);

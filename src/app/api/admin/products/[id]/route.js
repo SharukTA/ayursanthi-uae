@@ -7,7 +7,9 @@ import {
   readBoolean,  readInteger,
   readMoney,
   requireAdmin,
+  resolveCategoryId,
   slugify,
+  uniqueSlug,
 } from "@/lib/admin-api";
 
 export const runtime = "nodejs";
@@ -93,8 +95,11 @@ export async function PATCH(request, { params }) {
     const body = await request.json();
     const data = {};
 
+    // Optional. Sending "" / null clears it, leaving the product uncategorized;
+    // a category that has since been deleted resolves to null the same way
+    // rather than failing the whole save. See resolveCategoryId.
     if ("categoryId" in body) {
-      data.categoryId = cleanString(body.categoryId);
+      data.categoryId = await resolveCategoryId(body.categoryId);
     }
 
     if ("name" in body) {
@@ -108,13 +113,24 @@ export async function PATCH(request, { params }) {
     }
 
     if ("slug" in body || "name" in body) {
-      const slug = slugify(body.slug || body.name);
+      const baseSlug = slugify(body.slug || body.name);
 
-      if (!slug) {
+      if (!baseSlug) {
         return jsonError("Product slug cannot be empty.");
       }
 
-      data.slug = slug;
+      // Renaming a product onto a name another product already uses suffixes the
+      // slug rather than failing the save. Passing the row's own current slug
+      // keeps an existing "-2" stable across unrelated edits.
+      const current = await prisma.product.findUnique({
+        where: { id },
+        select: { slug: true },
+      });
+
+      data.slug = await uniqueSlug(baseSlug, "product", {
+        excludeId: id,
+        currentSlug: current?.slug ?? null,
+      });
     }
 
     if ("sku" in body) {

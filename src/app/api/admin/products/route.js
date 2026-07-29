@@ -7,7 +7,9 @@ import {
   readBoolean,  readInteger,
   readMoney,
   requireAdmin,
+  resolveCategoryId,
   slugify,
+  uniqueSlug,
 } from "@/lib/admin-api";
 
 export const runtime = "nodejs";
@@ -58,7 +60,13 @@ export async function GET(request) {
 
   const products = await prisma.product.findMany({
     where: {
-      ...(categoryId ? { categoryId } : {}),
+      // `categoryId=none` filters to uncategorized products; any other value
+      // filters to that category.
+      ...(categoryId === "none"
+        ? { categoryId: null }
+        : categoryId
+          ? { categoryId }
+          : {}),
       ...(status === "active" ? { isActive: true } : {}),
       ...(status === "inactive" ? { isActive: false } : {}),
       ...(featured === "true" ? { isFeatured: true } : {}),
@@ -101,15 +109,20 @@ export async function POST(request) {
   try {
     const body = await request.json();
     const name = cleanString(body.name);
-    const slug = slugify(body.slug || body.name);
+    const baseSlug = slugify(body.slug || body.name);
     const sku = cleanString(body.sku);
-    const categoryId = cleanString(body.categoryId);
     const price = readMoney(body.price);
     const mrp = readMoney(body.mrp);
 
-    if (!categoryId || !name || !slug || !sku || !price) {
-      return jsonError("Category, name, slug, sku, and valid price are required.");
+    if (!name || !baseSlug || !sku || !price) {
+      return jsonError("Name, slug, sku, and valid price are required.");
     }
+
+    // Duplicate names are allowed; the slug gets a "-1", "-2" … suffix instead.
+    const slug = await uniqueSlug(baseSlug, "product");
+
+    // Optional — null means the product is created uncategorized.
+    const categoryId = await resolveCategoryId(body.categoryId);
 
     const product = await prisma.product.create({
       data: {

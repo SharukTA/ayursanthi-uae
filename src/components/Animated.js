@@ -2,11 +2,12 @@
 
 import { motion, useReducedMotion } from "motion/react";
 
-export function FadeIn({ children, className = "", delay = 0 }) {
+export function FadeIn({ children, className = "", delay = 0, id }) {
   const reduceMotion = useReducedMotion();
 
   return (
     <motion.div
+      id={id}
       className={className}
       initial={reduceMotion ? false : { opacity: 0, y: 22 }}
       whileInView={reduceMotion ? undefined : { opacity: 1, y: 0 }}

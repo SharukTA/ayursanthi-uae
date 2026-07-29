@@ -12,7 +12,8 @@ import Autoplay from "embla-carousel-autoplay";
 // mirror FeaturedCarousel / FaceVideoCarousel so the homepage stays consistent.
 //
 // When there are too few items to scroll, Embla won't move; we hide the controls
-// in that case so the row reads as a plain grid-like display.
+// in that case AND centre the row (see `canScroll` below) so a section with one
+// card doesn't sit alone against the left margin.
 // ─────────────────────────────────────────────────────────────────────────────
 export function SectionCarousel({ children, slideClassName = "", autoplay = true }) {
   const slides = Array.isArray(children) ? children.filter(Boolean) : [children];
@@ -26,7 +27,11 @@ export function SectionCarousel({ children, slideClassName = "", autoplay = true
   );
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [scrollSnaps, setScrollSnaps] = useState([]);
-  const [canScroll, setCanScroll] = useState(false);
+  // Optimistic until Embla measures: a multi-slide track almost always scrolls,
+  // and guessing `true` keeps a full row from painting centred for one frame
+  // before the measurement lands. A single slide never scrolls, so it starts —
+  // and stays — centred.
+  const [canScroll, setCanScroll] = useState(slides.length > 1);
 
   const scrollTo = useCallback((idx) => emblaApi?.scrollTo(idx), [emblaApi]);
 
@@ -51,7 +56,13 @@ export function SectionCarousel({ children, slideClassName = "", autoplay = true
     <div className="relative">
       <div className="relative">
         <div className="overflow-hidden" ref={emblaRef}>
-          <div className="flex -ml-4">
+          {/* Cards that don't fill the row are centred rather than left-aligned.
+              Safe to do with a transform-driven carousel: when the content is
+              narrower than the viewport Embla collapses to a single snap at
+              offset 0, so the track is never translated away from where CSS put
+              it. As items are added they keep growing outwards from the centre
+              until the row is full, at which point it scrolls from the left. */}
+          <div className={`flex -ml-4 ${canScroll ? "" : "justify-center"}`}>
             {slides.map((slide, index) => (
               <div
                 key={index}
@@ -64,8 +75,10 @@ export function SectionCarousel({ children, slideClassName = "", autoplay = true
         </div>
       </div>
 
-      {/* Position dots below — only shown when there's more than one page. */}
-      {canScroll ? (
+      {/* Position dots below — only shown when there's more than one page.
+          Keyed off the measured snaps (not `canScroll`, which starts optimistic)
+          so no empty dot row is reserved before Embla initialises. */}
+      {scrollSnaps.length > 1 ? (
         <div className="mt-6 flex items-center justify-center gap-2">
           {scrollSnaps.map((_, idx) => (
             <button

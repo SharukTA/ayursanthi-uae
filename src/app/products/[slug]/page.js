@@ -1,10 +1,11 @@
-import { notFound } from "next/navigation";
+import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { ShieldCheck, Leaf, Box, Download } from "lucide-react";
 import { FadeIn, PageReveal } from "@/components/Animated";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
+import { Button } from "@/components/ui/button";
 import { ProductActions } from "@/components/ProductActions";
 import { ProductGallery } from "@/components/ProductGallery";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
@@ -29,14 +30,101 @@ export async function generateMetadata({ params }) {
     where: { slug },
   });
 
-  if (!product) {
-    return { title: "Product Not Found" };
+  if (!product || !product.isActive) {
+    return { title: "Product Not Available | Ayursanthi" };
   }
 
   return {
     title: `${product.name} | Ayursanthi`,
     description: product.shortDescription,
   };
+}
+
+// Fallback view for a product URL that no longer resolves — the product was
+// deleted (disabled) after the link was created, or the slug was mistyped.
+// Deliberately a normal page rather than notFound(): a dead product link should
+// hand the shopper alternatives, not a 404.
+async function MissingProduct({ slug }) {
+  // Newest live products, so the page always offers somewhere to go. Wrapped
+  // because an empty catalog is a valid state and must not turn this fallback
+  // into a second failure.
+  let suggestions = [];
+  try {
+    suggestions = await prisma.product.findMany({
+      where: { isActive: true },
+      orderBy: [{ isFeatured: "desc" }, { createdAt: "desc" }],
+      take: 3,
+      include: {
+        category: { select: { name: true } },
+        images: { orderBy: { sortOrder: "asc" }, take: CARD_MEDIA_TAKE },
+        reviews: { select: { rating: true } },
+      },
+    });
+  } catch {
+    suggestions = [];
+  }
+
+  return (
+    <main className="min-h-screen bg-slate-50 text-white flex flex-col">
+      <SiteHeader />
+
+      <section className="mx-auto max-w-5xl px-4 py-16 sm:px-6 lg:px-8 flex-1 w-full">
+        <Breadcrumbs
+          items={[
+            { label: "Home", href: "/" },
+            { label: "All Products", href: "/products" },
+            { label: "Not available" },
+          ]}
+        />
+
+        <div className="rounded-md border border-dashed border-border bg-white p-10 text-center">
+          <h1 className="text-xl font-bold text-[#0f1111] sm:text-2xl">
+            This product is no longer available
+          </h1>
+          <p className="mt-3 text-sm text-[#565959]">
+            The product you were looking for{" "}
+            <span className="font-semibold text-[#0f1111]">“{slug}”</span> has been
+            removed from the store. Browse the full catalog for something similar.
+          </p>
+
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+            <Button asChild className="h-10 rounded-md bg-emerald-700 px-5 text-xs hover:bg-emerald-800">
+              <Link href="/products">Browse All Products</Link>
+            </Button>
+            <Button
+              asChild
+              variant="outline"
+              className="h-10 rounded-md border-border px-5 text-xs text-[#0f1111]"
+            >
+              <Link href="/categories">Shop by Collection</Link>
+            </Button>
+          </div>
+        </div>
+
+        {suggestions.length > 0 ? (
+          <div className="mt-10 border-t border-border pt-8">
+            <h2 className="text-lg font-bold text-[#0f1111]">You might also like</h2>
+            <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {suggestions.map((item) => {
+                const { rating, count } = summarizeReviews(item.reviews);
+                return (
+                  <ProductCard
+                    key={item.id}
+                    product={{ ...item, images: pickCardMedia(item.images) }}
+                    categoryName={item.category?.name}
+                    rating={rating}
+                    reviewCount={count}
+                  />
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
+      </section>
+
+      <SiteFooter />
+    </main>
+  );
 }
 
 export default async function ProductDetailPage({ params }) {
@@ -62,8 +150,10 @@ export default async function ProductDetailPage({ params }) {
     },
   });
 
+  // Deleted/disabled product → the store's own "no longer available" page with
+  // live suggestions, never a raw 404.
   if (!product || !product.isActive) {
-    notFound();
+    return <MissingProduct slug={slug} />;
   }
 
   // Aggregate of the product's real customer reviews, shown next to the title.
@@ -93,13 +183,18 @@ export default async function ProductDetailPage({ params }) {
       product.reviews.find((rev) => rev.userId === session.userId) || null;
   }
 
-  // Query related products from same category (excluding current product)
+  // Query related products from the same category (excluding current product).
+  // An uncategorized product — one added without a category, or one whose
+  // category was deleted — has nothing to match on, so it falls back to the
+  // newest active products rather than pulling in every other uncategorized
+  // item just because they share a null.
   const relatedProducts = await prisma.product.findMany({
     where: {
-      categoryId: product.categoryId,
+      ...(product.categoryId ? { categoryId: product.categoryId } : {}),
       id: { not: product.id },
       isActive: true,
     },
+    orderBy: { createdAt: "desc" },
     take: 3,
     include: {
       category: { select: { name: true } },
@@ -129,10 +224,21 @@ export default async function ProductDetailPage({ params }) {
 
       {/* Product Detail Grid */}
       <section className="mx-auto max-w-7xl px-4 py-4 sm:py-6 sm:px-6 lg:px-8 flex-1 w-full">
+        {/* The category crumb is dropped entirely for an uncategorized product
+            (never added to one, or its category was deleted) — Home › Product
+            still reads correctly, and there is no dead link to a category that
+            no longer exists. */}
         <Breadcrumbs
           items={[
             { label: "Home", href: "/" },
-            { label: product.category.name, href: `/products?category=${product.category.slug}` },
+            ...(product.category
+              ? [
+                  {
+                    label: product.category.name,
+                    href: `/products?category=${product.category.slug}`,
+                  },
+                ]
+              : [{ label: "All Products", href: "/products" }]),
             { label: product.name },
           ]}
         />
@@ -156,9 +262,13 @@ export default async function ProductDetailPage({ params }) {
           {/* Right Column: Descriptions & Actions */}
           <FadeIn className="flex flex-col">
             <div>
-              <span className="rounded-md bg-emerald-50 border border-emerald-200 px-2.5 py-1 text-xs font-bold text-emerald-800">
-                {product.category.name}
-              </span>
+              {/* No pill at all when the product is uncategorized — better than
+                  an empty chip or a placeholder label. */}
+              {product.category ? (
+                <span className="rounded-md bg-emerald-50 border border-emerald-200 px-2.5 py-1 text-xs font-bold text-emerald-800">
+                  {product.category.name}
+                </span>
+              ) : null}
               <AnimatedHeading
                 as="h1"
                 text={product.name}

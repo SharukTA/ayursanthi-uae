@@ -1097,8 +1097,13 @@ function ItemRow({ item, meta, products, onChanged }) {
     );
   }
 
+  // Never the raw imageUrl/videoUrl: R2 links are long and unbreakable, so they
+  // stretched the row past the container and pushed the edit/delete buttons off
+  // screen on mobile. The thumbnail already signals that media is attached.
+  const caption = item.product ? `→ ${item.product.name}` : item.href || item.subtitle || "";
+
   return (
-    <li className="flex items-center gap-3 rounded border border-slate-200 bg-white p-2.5">
+    <li className="flex min-w-0 items-center gap-3 rounded border border-slate-200 bg-white p-2.5">
       {item.imageUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={item.imageUrl} alt="" className="size-10 shrink-0 rounded object-cover" />
@@ -1111,9 +1116,7 @@ function ItemRow({ item, meta, products, onChanged }) {
         <p className="truncate text-xs font-bold text-slate-900">
           {item.title || item.product?.name || item.badge || item.subtitle || "(untitled item)"}
         </p>
-        <p className="truncate text-[10px] text-slate-500">
-          {item.product ? `→ ${item.product.name}` : item.href || item.videoUrl || item.subtitle || ""}
-        </p>
+        {caption ? <p className="truncate text-[10px] text-slate-500">{caption}</p> : null}
       </div>
       <button onClick={handleToggle} className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold ${item.isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`} title="Toggle visibility">
         {item.isActive ? "ON" : "OFF"}

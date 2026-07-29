@@ -21,6 +21,13 @@ export function HeroDealCards({ products = [], total = 0 }) {
 
   const hasMore = total > cards.length;
 
+  // A store showing exactly one new arrival widens that card, matching the CMS
+  // product carousels: at the row width (half a phone, a quarter of a laptop) a
+  // lone centred card reads as a mistake. Phone/tablet take the DEAL_GRID card's
+  // widths, laptop goes a step wider than it. No gap to subtract from the basis
+  // here — there's no neighbour. Two or more cards keep the ladder below.
+  const solo = cards.length === 1;
+
   return (
     <section className="relative z-10 block">
       <div className="mx-auto mt-8 max-w-7xl px-4 sm:px-6 lg:-mt-16 lg:px-8">
@@ -32,24 +39,52 @@ export function HeroDealCards({ products = [], total = 0 }) {
         </div>
 
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:gap-5">
-          <div className="grid flex-1 grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4 lg:gap-5">
+          {/* A wrapping flex row rather than a grid, purely so a row that isn't
+              full is centred instead of left-hung — a store with one or two
+              products used to strand a lone card against the left margin. The
+              basis ladder reproduces the old grid exactly (two columns, four
+              from lg; each card gives up its share of the gap), so a full row of
+              four is pixel-identical to before. */}
+          <div className="flex flex-1 flex-wrap justify-center gap-3 sm:gap-4 lg:gap-5">
             {cards.map((product) => (
-              <ProductCard
+              <div
                 key={product.id}
-                product={product}
-                categoryName={product.categoryName}
-                rating={product.rating}
-                reviewCount={product.reviewCount}
-                // Stacked, like the /products grid: the photo gets the top of
-                // the card to itself and the text sits on white underneath.
-                // The overlay layout drew the title/price over the lower half
-                // of the photo, which hid the product itself.
-                layout="stacked"
-                // 4:5 matches the shape stills are uploaded in, so the photo is
-                // flush with both card edges. A square box would pillarbox it
-                // (contained portrait art = white bars left and right).
-                aspect="aspect-[4/5]"
-              />
+                className={
+                  solo
+                    ? "basis-[80%] sm:basis-[45%] lg:basis-[33.333%]"
+                    : "basis-[calc(50%-0.375rem)] sm:basis-[calc(50%-0.5rem)] lg:basis-[calc(25%-0.9375rem)]"
+                }
+              >
+                <ProductCard
+                  product={product}
+                  categoryName={product.categoryName}
+                  rating={product.rating}
+                  reviewCount={product.reviewCount}
+                  // Stacked, like the /products grid: the photo gets the top of
+                  // the card to itself and the text sits on white underneath.
+                  // The overlay layout drew the title/price over the lower half
+                  // of the photo, which hid the product itself.
+                  layout="stacked"
+                  // Square rather than the 4:5 stills are uploaded in, matching
+                  // the CMS carousels: it takes a fifth off the card's height.
+                  aspect="aspect-square"
+                  // …and the photo fills that square instead of being fitted
+                  // inside it, so there are no blank bands down the sides. A 4:5
+                  // upload gives up 10% off the top and 10% off the bottom —
+                  // the margin around a centred product, not the product. Don't
+                  // widen `aspect` past square without revisiting this; the crop
+                  // grows fast from here.
+                  mediaFit="cover"
+                  // Must track the basis ladder above — the default assumes the
+                  // multi-card row and would fetch a photo sized for a card half
+                  // the width the solo card actually paints at.
+                  sizes={
+                    solo
+                      ? "(max-width: 640px) 80vw, (max-width: 1024px) 45vw, 33vw"
+                      : undefined
+                  }
+                />
+              </div>
             ))}
           </div>
 

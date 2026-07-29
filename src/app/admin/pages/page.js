@@ -14,12 +14,57 @@ import {
   Trash2,
   Eye,
   EyeOff,
+  ExternalLink,
+  ScrollText,
+  Info,
 } from "lucide-react";
 import { FadeIn, PageReveal } from "@/components/Animated";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { Button } from "@/components/ui/button";
+import { RichText } from "@/components/RichText";
 import { useConfirm } from "@/components/ConfirmDialog";
+
+// What each editable slug actually is on the public site. Keeps the admin from
+// having to guess which of the three fields lands where.
+const PAGE_META = {
+  about: {
+    label: "About Us",
+    icon: FileText,
+    path: "/about",
+    blurb:
+      "The brand-story block on the About page. The Vision / Mission cards and the twelve Kalpas grid below it are fixed layout and are not editable here.",
+    fields: {
+      title: "Heading shown above the brand story",
+      subtitle: "Line under the “About Ayursanthi” hero title",
+      body: "Brand-story paragraphs",
+    },
+  },
+  terms: {
+    label: "Terms & Conditions",
+    icon: ScrollText,
+    path: "/terms",
+    blurb:
+      "The whole Terms page. Everything a customer reads there comes from the three fields below.",
+    fields: {
+      title: "Page title",
+      subtitle: "Small line under the title (e.g. “Last updated: …”)",
+      body: "Policy sections — start a line with “## ” for each numbered section",
+    },
+  },
+};
+
+function metaFor(slug) {
+  return (
+    PAGE_META[slug] || {
+      label: slug,
+      icon: FileText,
+      path: `/${slug}`,
+      blurb: "",
+      fields: { title: "Heading", subtitle: "Subheading", body: "Body" },
+    }
+  );
+}
 
 export default function AdminPagesPage() {
   const router = useRouter();
@@ -27,6 +72,7 @@ export default function AdminPagesPage() {
   const [loading, setLoading] = useState(true);
   const [pages, setPages] = useState([]);
   const [faqs, setFaqs] = useState([]);
+  const [faqDefaults, setFaqDefaults] = useState([]);
 
   useEffect(() => {
     async function initPage() {
@@ -58,6 +104,7 @@ export default function AdminPagesPage() {
     const res = await fetch("/api/admin/faq");
     const data = await res.json();
     setFaqs(data.items || []);
+    setFaqDefaults(data.defaults || []);
   }
 
   if (loading || !authChecked) {
@@ -71,6 +118,8 @@ export default function AdminPagesPage() {
       </main>
     );
   }
+
+  const activeFaqs = faqs.filter((f) => f.isActive).length;
 
   return (
     <main className="min-h-screen bg-slate-50 text-white flex flex-col">
@@ -88,18 +137,51 @@ export default function AdminPagesPage() {
               Pages &amp; FAQ
             </h1>
             <p className="mt-1 text-sm text-slate-300">
-              Edit the About and Terms page text, and manage the FAQ list.
+              Three things live here: the <strong className="font-semibold text-white">About Us</strong> story,
+              the <strong className="font-semibold text-white">Terms &amp; Conditions</strong> policy, and
+              the <strong className="font-semibold text-white">FAQ</strong> list.
             </p>
           </PageReveal>
         </div>
       </section>
 
       <section className="mx-auto max-w-4xl px-4 py-10 sm:px-6 lg:px-8 flex-1 w-full grid gap-8">
+        {/* What lives on this screen */}
+        <FadeIn className="grid gap-3 sm:grid-cols-3">
+          {pages.map((page) => {
+            const meta = metaFor(page.slug);
+            const Icon = meta.icon;
+            return (
+              <SummaryCard
+                key={page.slug}
+                icon={Icon}
+                label={meta.label}
+                anchor={`#page-${page.slug}`}
+                livePath={meta.path}
+                status={page.customized ? "Edited by you" : "Built-in default text"}
+                statusTone={page.customized ? "text-emerald-700 bg-emerald-50" : "text-slate-500 bg-slate-100"}
+              />
+            );
+          })}
+          <SummaryCard
+            icon={HelpCircle}
+            label="FAQ"
+            anchor="#faq"
+            livePath="/faq"
+            status={
+              faqs.length === 0
+                ? `${faqDefaults.length} built-in defaults`
+                : `${activeFaqs} of ${faqs.length} question${faqs.length === 1 ? "" : "s"} visible`
+            }
+            statusTone={faqs.length === 0 ? "text-slate-500 bg-slate-100" : "text-emerald-700 bg-emerald-50"}
+          />
+        </FadeIn>
+
         {pages.map((page) => (
           <PageEditor key={page.slug} page={page} onSaved={loadPages} />
         ))}
 
-        <FaqManager faqs={faqs} onChanged={loadFaqs} />
+        <FaqManager faqs={faqs} defaults={faqDefaults} onChanged={loadFaqs} />
       </section>
 
       <SiteFooter />
@@ -107,10 +189,31 @@ export default function AdminPagesPage() {
   );
 }
 
+function SummaryCard({ icon: Icon, label, anchor, livePath, status, statusTone }) {
+  return (
+    <a
+      href={anchor}
+      className="rounded-md border border-border bg-white p-4 shadow-sm transition hover:border-emerald-700 hover:shadow"
+    >
+      <span className="flex items-center gap-2 text-sm font-bold text-slate-950">
+        <Icon className="size-4 text-emerald-700" />
+        {label}
+      </span>
+      <span className={`mt-2 inline-block rounded px-1.5 py-0.5 text-[10px] font-bold ${statusTone}`}>
+        {status}
+      </span>
+      <span className="mt-2 block text-[10px] font-semibold text-slate-400">Live at {livePath}</span>
+    </a>
+  );
+}
+
 function PageEditor({ page, onSaved }) {
+  const meta = metaFor(page.slug);
+  const Icon = meta.icon;
   const [title, setTitle] = useState(page.title || "");
   const [subtitle, setSubtitle] = useState(page.subtitle || "");
   const [body, setBody] = useState(page.body || "");
+  const [preview, setPreview] = useState(false);
   const [saving, setSaving] = useState(false);
 
   async function handleSave(e) {
@@ -135,56 +238,90 @@ function PageEditor({ page, onSaved }) {
   }
 
   return (
-    <FadeIn className="rounded-md border border-border bg-white p-6 shadow-sm">
-      <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+    <FadeIn id={`page-${page.slug}`} className="scroll-mt-6 rounded-md border border-border bg-white p-6 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
         <h2 className="text-base font-bold text-slate-950 flex items-center gap-2">
-          <FileText className="size-5 text-emerald-700" />
-          <span className="capitalize">{page.slug}</span> page
+          <Icon className="size-5 text-emerald-700" />
+          {meta.label}
+          <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${page.customized ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
+            {page.customized ? "EDITED" : "DEFAULT TEXT"}
+          </span>
         </h2>
-        <Link href={`/${page.slug}`} target="_blank" className="text-[11px] font-semibold text-emerald-700 hover:underline">
-          View live →
+        <Link href={meta.path} target="_blank" className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 hover:underline">
+          <ExternalLink className="size-3" />
+          View {meta.path}
         </Link>
       </div>
 
+      {meta.blurb ? (
+        <p className="mt-3 flex items-start gap-2 rounded border border-slate-200 bg-slate-50/60 p-3 text-[11px] leading-5 text-slate-600">
+          <Info className="mt-0.5 size-3.5 shrink-0 text-slate-400" />
+          {meta.blurb}
+        </p>
+      ) : null}
+
       <form onSubmit={handleSave} className="mt-5 grid gap-4">
-        <label className="grid gap-2 text-xs font-semibold text-slate-800">
+        <label className="grid gap-1 text-xs font-semibold text-slate-800">
           Heading *
+          <span className="text-[10px] font-normal text-slate-400">{meta.fields.title}</span>
           <input
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             disabled={saving}
-            className="w-full min-h-10 rounded border border-input bg-white px-3 text-xs font-normal text-slate-900 outline-none transition focus:border-emerald-700"
+            className="mt-1 w-full min-h-10 rounded border border-input bg-white px-3 text-xs font-normal text-slate-900 outline-none transition focus:border-emerald-700"
           />
         </label>
-        <label className="grid gap-2 text-xs font-semibold text-slate-800">
+        <label className="grid gap-1 text-xs font-semibold text-slate-800">
           Subheading
+          <span className="text-[10px] font-normal text-slate-400">{meta.fields.subtitle}</span>
           <input
             type="text"
             value={subtitle}
             onChange={(e) => setSubtitle(e.target.value)}
             disabled={saving}
-            className="w-full min-h-10 rounded border border-input bg-white px-3 text-xs font-normal text-slate-900 outline-none transition focus:border-emerald-700"
+            className="mt-1 w-full min-h-10 rounded border border-input bg-white px-3 text-xs font-normal text-slate-900 outline-none transition focus:border-emerald-700"
           />
         </label>
-        <label className="grid gap-2 text-xs font-semibold text-slate-800">
-          Body *
-          <textarea
-            rows={10}
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            disabled={saving}
-            className="w-full rounded border border-input bg-white p-3 text-xs font-normal leading-6 text-slate-900 outline-none transition focus:border-emerald-700"
-          />
+
+        <div className="grid gap-1">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-800">Body *</span>
+            <button
+              type="button"
+              onClick={() => setPreview((p) => !p)}
+              className="inline-flex items-center gap-1 rounded border border-slate-200 px-2 py-1 text-[10px] font-bold text-slate-600 hover:border-emerald-700 hover:text-emerald-700"
+            >
+              <Eye className="size-3" />
+              {preview ? "Back to editing" : "Preview"}
+            </button>
+          </div>
+          <span className="text-[10px] font-normal text-slate-400">{meta.fields.body}</span>
+
+          {preview ? (
+            <div className="mt-1 rounded border border-slate-200 bg-slate-50/60 p-4">
+              <p className="text-lg font-bold text-slate-950">{title || <em className="text-slate-400">No heading</em>}</p>
+              {subtitle ? <p className="mt-1 text-[11px] font-semibold text-slate-500">{subtitle}</p> : null}
+              <RichText body={body} className="mt-4 text-xs leading-6 text-slate-700" />
+            </div>
+          ) : (
+            <textarea
+              rows={12}
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              disabled={saving}
+              className="mt-1 w-full rounded border border-input bg-white p-3 text-xs font-normal leading-6 text-slate-900 outline-none transition focus:border-emerald-700"
+            />
+          )}
           <span className="text-[10px] font-normal text-slate-400">
             Blank line = new paragraph. Start a line with &quot;## &quot; for a heading, &quot;- &quot; for a bullet.
           </span>
-        </label>
+        </div>
 
         <div className="flex justify-end">
           <Button type="submit" disabled={saving} className="h-9 bg-emerald-700 hover:bg-emerald-800 rounded-md text-xs font-semibold px-5">
             {saving ? <Loader2 className="size-3.5 animate-spin mr-1.5" /> : <Save className="size-3.5 mr-1.5" />}
-            Save Page
+            Save {meta.label}
           </Button>
         </div>
       </form>
@@ -192,7 +329,7 @@ function PageEditor({ page, onSaved }) {
   );
 }
 
-function FaqManager({ faqs, onChanged }) {
+function FaqManager({ faqs, defaults = [], onChanged }) {
   const [confirm, confirmDialog] = useConfirm();
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
@@ -257,12 +394,24 @@ function FaqManager({ faqs, onChanged }) {
   }
 
   return (
-    <FadeIn className="rounded-md border border-border bg-white p-6 shadow-sm">
+    <FadeIn id="faq" className="scroll-mt-6 rounded-md border border-border bg-white p-6 shadow-sm">
       {confirmDialog}
-      <h2 className="text-base font-bold text-slate-950 flex items-center gap-2 border-b border-slate-100 pb-3">
-        <HelpCircle className="size-5 text-emerald-700" />
-        FAQ ({faqs.length})
-      </h2>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+        <h2 className="text-base font-bold text-slate-950 flex items-center gap-2">
+          <HelpCircle className="size-5 text-emerald-700" />
+          FAQ ({faqs.length})
+        </h2>
+        <Link href="/faq" target="_blank" className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 hover:underline">
+          <ExternalLink className="size-3" />
+          View /faq
+        </Link>
+      </div>
+
+      <p className="mt-3 flex items-start gap-2 rounded border border-slate-200 bg-slate-50/60 p-3 text-[11px] leading-5 text-slate-600">
+        <Info className="mt-0.5 size-3.5 shrink-0 text-slate-400" />
+        Questions added here appear on the public FAQ page in the order they were added. Hide one with the
+        eye icon to take it off the site without deleting it.
+      </p>
 
       <form onSubmit={handleAdd} className="mt-5 grid gap-3 rounded border border-slate-200 bg-slate-50/60 p-4">
         <h3 className="flex items-center gap-1.5 text-xs font-bold text-slate-900">
@@ -293,16 +442,35 @@ function FaqManager({ faqs, onChanged }) {
       </form>
 
       {faqs.length === 0 ? (
-        <p className="mt-5 text-sm text-slate-500 italic text-center py-6">No FAQ items yet.</p>
+        <div className="mt-5">
+          <p className="rounded border border-amber-200 bg-amber-50 p-3 text-[11px] font-semibold leading-5 text-amber-900">
+            No FAQ items saved yet — the public page is showing these {defaults.length} built-in questions.
+            Add your own above and they replace the whole list.
+          </p>
+          <ul className="mt-3 grid gap-2">
+            {defaults.map((item, idx) => (
+              <li key={idx} className="rounded border border-dashed border-slate-200 p-3">
+                <p className="text-xs font-bold text-slate-700">{item.question}</p>
+                <p className="mt-1 text-[11px] leading-5 text-slate-500">{item.answer}</p>
+              </li>
+            ))}
+          </ul>
+        </div>
       ) : (
         <ul className="mt-5 grid gap-2">
-          {faqs.map((item) => (
+          {faqs.map((item, idx) => (
             <li key={item.id} className="flex items-start gap-3 rounded border border-slate-200 p-3">
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-bold text-slate-900">{item.question}</p>
-                <p className="mt-1 line-clamp-2 text-[11px] text-slate-500">{item.answer}</p>
-              </div>
-              <button onClick={() => handleToggle(item)} className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold ${item.isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-400"}`} title="Toggle visibility">
+              <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[9px] font-extrabold text-slate-600">
+                {idx + 1}
+              </span>
+              <details className="min-w-0 flex-1 group">
+                <summary className="cursor-pointer list-none text-xs font-bold text-slate-900">
+                  {item.question}
+                  <span className="ml-1 text-[10px] font-semibold text-emerald-700 group-open:hidden">show answer</span>
+                </summary>
+                <p className="mt-1.5 whitespace-pre-line text-[11px] leading-5 text-slate-600">{item.answer}</p>
+              </details>
+              <button onClick={() => handleToggle(item)} className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold ${item.isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-400"}`} title={item.isActive ? "Visible on site — click to hide" : "Hidden — click to show"}>
                 {item.isActive ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />}
               </button>
               <button onClick={() => handleDelete(item)} className="shrink-0 text-slate-400 hover:text-rose-700" title="Delete">

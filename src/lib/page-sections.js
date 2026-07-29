@@ -31,7 +31,16 @@ async function getSections(placement) {
           orderBy: { position: "asc" },
           include: {
             product: {
-              select: { id: true, name: true, slug: true, price: true, mrp: true },
+              // `isActive` comes along only so serializeSections can drop the
+              // link to a retired product; it never reaches the renderers.
+              select: {
+                id: true,
+                name: true,
+                slug: true,
+                price: true,
+                mrp: true,
+                isActive: true,
+              },
             },
           },
         },
@@ -306,16 +315,28 @@ async function serializeSections(sections) {
     // It falls through to the generic branch below and stays empty.
     return {
       ...section,
-      items: section.items.map((item) => ({
-        ...item,
-        product: item.product
-          ? {
-              ...item.product,
-              price: item.product.price != null ? Number(item.product.price) : null,
-              mrp: item.product.mrp != null ? Number(item.product.mrp) : null,
-            }
-          : null,
-      })),
+      items: section.items.map((item) => {
+        // A product the admin deleted is only soft-deleted (isActive = false),
+        // so the row — and this item's link to it — survives. Left attached, the
+        // card would keep pointing at /products/<slug>, which now 404s. Treating
+        // it as unlinked makes the renderers fall back to /products, exactly as
+        // they do for an item that was never linked to a product at all.
+        // (Dynamic sections never hit this: they re-query the catalog with
+        // `isActive: true`, so a retired product simply stops appearing.)
+        const product = item.product?.isActive ? item.product : null;
+        return {
+          ...item,
+          product: product
+            ? {
+                id: product.id,
+                name: product.name,
+                slug: product.slug,
+                price: product.price != null ? Number(product.price) : null,
+                mrp: product.mrp != null ? Number(product.mrp) : null,
+              }
+            : null,
+        };
+      }),
     };
   });
 }

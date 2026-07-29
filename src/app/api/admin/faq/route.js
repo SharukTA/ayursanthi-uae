@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { DEFAULT_FAQS } from "@/lib/pages";
 import {
   cleanString,
   jsonError,
@@ -11,6 +12,8 @@ import {
 export const runtime = "nodejs";
 
 // GET /api/admin/faq — all FAQ items (active and inactive) for the admin list.
+// `defaults` is the built-in list the public FAQ page falls back to while no
+// items exist, so the admin can see exactly what customers are reading today.
 export async function GET() {
   const { error } = await requireAdmin();
   if (error) return error;
@@ -18,7 +21,7 @@ export async function GET() {
   const items = await prisma.faqItem.findMany({
     orderBy: { sortOrder: "asc" },
   });
-  return Response.json({ items });
+  return Response.json({ items, defaults: DEFAULT_FAQS });
 }
 
 // POST /api/admin/faq — create a FAQ item, appended to the end by default.

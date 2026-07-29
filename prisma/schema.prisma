@@ -144,8 +144,13 @@ model Category {
 
 model Product {
   id               String                   @id @default(cuid())
-  categoryId       String
-  category         Category                 @relation(fields: [categoryId], references: [id])
+  // Optional: a product may be uncategorized. Nothing in the storefront requires
+  // a category — cards, search, the PDF and the buy-box all fall back to showing
+  // no category label — so the admin can list a product before deciding where it
+  // belongs. `onDelete: SetNull` is what makes deleting a category safe: its
+  // products are simply left uncategorized instead of blocking the delete.
+  categoryId       String?
+  category         Category?                @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   name             String
   slug             String                   @unique
   sku              String                   @unique

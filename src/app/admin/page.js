@@ -90,7 +90,7 @@ export default async function AdminDashboardPage() {
               <Link href="/admin/products">Inventory Portal</Link>
             </Button>
             <Button asChild variant="secondary" className="bg-white border-2 border-white text-[#0f1111] hover:bg-[#f8fafc] shadow-lg shadow-black/30 h-9 rounded font-bold">
-              <Link href="/admin/pages">Pages &amp; FAQ</Link>
+              <Link href="/admin/pages">About US Page ,Terms &amp; FAQ</Link>
             </Button>
             <Button asChild variant="secondary" className="bg-white border-2 border-white text-[#0f1111] hover:bg-[#f8fafc] shadow-lg shadow-black/30 h-9 rounded font-bold">
               <Link href="/admin/settings">Settings</Link>
@@ -224,10 +224,15 @@ export default async function AdminDashboardPage() {
                 },
                 {
                   title: "Pages & FAQ",
-                  desc: "Edit the About and Terms page text, and manage the frequently asked questions list.",
+                  desc: "Edit the text of the static pages and manage the questions on the FAQ page.",
                   href: "/admin/pages",
                   icon: FileText,
-                  color: "bg-sky-100 text-sky-800"
+                  color: "bg-sky-100 text-sky-800",
+                  covers: [
+                    { label: "About Us", path: "/about" },
+                    { label: "Terms & Conditions", path: "/terms" },
+                    { label: "FAQ", path: "/faq" }
+                  ]
                 },
                 {
                   title: "Email Log",
@@ -260,6 +265,19 @@ export default async function AdminDashboardPage() {
                         <ArrowRight className="size-4 opacity-0 group-hover:opacity-100 transition-opacity" />
                       </h4>
                       <p className="mt-1 text-[11px] leading-5 text-slate-500">{portal.desc}</p>
+                      {portal.covers ? (
+                        <ul className="mt-2 flex flex-wrap gap-1.5">
+                          {portal.covers.map((item) => (
+                            <li
+                              key={item.path}
+                              className="inline-flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-bold text-slate-600"
+                            >
+                              {item.label}
+                              <span className="font-mono font-medium text-slate-400">{item.path}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
                     </div>
                   </Link>
                 );

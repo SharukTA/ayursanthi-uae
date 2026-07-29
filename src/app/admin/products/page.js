@@ -273,8 +273,10 @@ export default function AdminProductsPage() {
   const handleSubmitProduct = async (e) => {
     e.preventDefault();
 
-    if (!name.trim() || !sku.trim() || !categoryId || !price) {
-      toast.error("Please fill in all required fields (Name, SKU, Category, Price).");
+    // Category is deliberately NOT checked here — a product can be saved
+    // uncategorized and given a category later (or never).
+    if (!name.trim() || !sku.trim() || !price) {
+      toast.error("Please fill in all required fields (Name, SKU, Price).");
       return;
     }
 
@@ -308,7 +310,9 @@ export default function AdminProductsPage() {
       const payload = {
         name: name.trim(),
         sku: sku.trim().toUpperCase(),
-        categoryId,
+        // Always sent (even empty) so editing can clear a category back to
+        // "Uncategorized"; the API reads "" as null.
+        categoryId: categoryId || "",
         price: Number(price),
         mrp: mrp ? Number(mrp) : undefined,
         shippingFee: shippingFee ? Number(shippingFee) : 0,
@@ -460,16 +464,18 @@ export default function AdminProductsPage() {
                   />
                 </label>
 
+                {/* Optional: a product can be saved with no category at all and
+                    categorized later. Deleting a category simply returns its
+                    products to this "Uncategorized" state. */}
                 <label className="grid gap-2 min-w-0 text-xs font-semibold text-slate-800">
-                  Category *
+                  Category (Optional)
                   <select
                     value={categoryId}
                     onChange={(e) => setCategoryId(e.target.value)}
                     disabled={submitting}
-                    required
                     className="w-full min-w-0 min-h-10 rounded border border-input bg-white px-3 text-xs font-normal outline-none transition focus:border-emerald-700"
                   >
-                    <option value="">Select...</option>
+                    <option value="">Uncategorized</option>
                     {categories.map((cat) => (
                       <option key={cat.id} value={cat.id}>
                         {cat.name}

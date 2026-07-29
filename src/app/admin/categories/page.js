@@ -159,33 +159,59 @@ export default function AdminCategoriesPage() {
     }
   };
 
-  const handleDeleteCategory = async (id, catName) => {
+  const handleDeleteCategory = async (cat) => {
+    const catName = cat.name;
+    const productCount = cat._count?.products || 0;
+    const subCount = cat.subcategories?.length || 0;
+
+    // Spell out exactly what happens to what's inside it — nothing is deleted
+    // along with the category, so the admin should not have to guess.
+    const consequences = [
+      productCount
+        ? `${productCount} product${productCount === 1 ? "" : "s"} will stay in the store, just uncategorized.`
+        : null,
+      subCount
+        ? `${subCount} subcategor${subCount === 1 ? "y" : "ies"} will become top-level categor${subCount === 1 ? "y" : "ies"}.`
+        : null,
+    ].filter(Boolean);
+
     const ok = await confirm({
-      title: "Disable category?",
-      description: `Category "${catName}" will be disabled and hidden from the store. You can re-enable it later.`,
-      confirmLabel: "Disable category",
+      title: "Delete category?",
+      description: [
+        `Category "${catName}" will be permanently deleted.`,
+        ...consequences,
+        "This cannot be undone.",
+      ].join(" "),
+      confirmLabel: "Delete category",
     });
     if (!ok) {
       return;
     }
 
-    const toastId = toast.loading(`Disabling category ${catName}...`);
+    const toastId = toast.loading(`Deleting category ${catName}...`);
 
     try {
-      const res = await fetch(`/api/admin/categories/${id}`, {
+      const res = await fetch(`/api/admin/categories/${cat.id}`, {
         method: "DELETE",
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.message || "Failed to disable category.");
+        throw new Error(data.message || "Failed to delete category.");
       }
 
-      toast.success(`Category "${catName}" disabled successfully.`, { id: toastId });
+      toast.success(data.message || `Category "${catName}" deleted.`, { id: toastId });
+
+      // The form may have been editing (or parented to) the category that just
+      // went away — reset so it can't submit a dangling id.
+      if (editingId === cat.id || parentId === cat.id) {
+        resetForm();
+      }
+
       await fetchCategories();
     } catch (error) {
-      toast.error(error.message || "Error disabling category.", { id: toastId });
+      toast.error(error.message || "Error deleting category.", { id: toastId });
     }
   };
 
@@ -358,10 +384,9 @@ export default function AdminCategoriesPage() {
                             <Pencil className="size-4" />
                           </button>
                           <button
-                            onClick={() => handleDeleteCategory(cat.id, cat.name)}
-                            disabled={!cat.isActive}
-                            className="text-slate-500 hover:text-rose-700 disabled:opacity-30 disabled:hover:text-slate-500 transition"
-                            title="Disable Category"
+                            onClick={() => handleDeleteCategory(cat)}
+                            className="text-slate-500 hover:text-rose-700 transition"
+                            title="Delete Category"
                           >
                             <Trash2 className="size-4" />
                           </button>
@@ -442,10 +467,9 @@ export default function AdminCategoriesPage() {
                               <Pencil className="size-4" />
                             </button>
                             <button
-                              onClick={() => handleDeleteCategory(cat.id, cat.name)}
-                              disabled={!cat.isActive}
-                              className="text-slate-500 hover:text-rose-700 disabled:opacity-30 disabled:hover:text-slate-500 transition"
-                              title="Disable Category"
+                              onClick={() => handleDeleteCategory(cat)}
+                              className="text-slate-500 hover:text-rose-700 transition"
+                              title="Delete Category"
                             >
                               <Trash2 className="size-4" />
                             </button>

@@ -90,12 +90,28 @@ export default async function ProductsPage({ searchParams }) {
     featured,
   });
 
-  const categories = await prisma.category.findMany({
-    where: { isActive: true },
-  });
-  const categoryName = categorySlug
-    ? categories.find((c) => c.slug === categorySlug)?.name || categorySlug
-    : "";
+  // Wrapped so the catalog still renders if this secondary query fails — the
+  // facet sidebar can live without its category list, the results cannot.
+  let categories = [];
+  try {
+    categories = await prisma.category.findMany({
+      where: { isActive: true },
+      orderBy: { name: "asc" },
+    });
+  } catch {
+    categories = [];
+  }
+
+  const matchedCategory = categorySlug
+    ? categories.find((c) => c.slug === categorySlug)
+    : null;
+  // Still label the chip with the raw slug when the category is gone, so the
+  // filter is visible and — more importantly — removable.
+  const categoryName = categorySlug ? matchedCategory?.name || categorySlug : "";
+  // A `?category=` that matches nothing: a bookmark or shared link to a category
+  // that has since been deleted. The catalog stays fully usable; we just say so
+  // and offer the one-click way back to everything.
+  const categoryMissing = Boolean(categorySlug) && !matchedCategory;
 
   // Result-count summary uses the full match `total`, not just the first page.
   const resultSummary = `${
@@ -255,6 +271,20 @@ export default async function ProductsPage({ searchParams }) {
                   {sortDropdown}
                 </div>
               </div>
+
+              {/* The requested collection no longer exists — explain it inline
+                  instead of leaving a "No results" wall with no reason. */}
+              {categoryMissing ? (
+                <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3">
+                  <p className="text-xs font-semibold text-amber-900 sm:text-sm">
+                    The collection “{categorySlug}” is no longer available.{" "}
+                    <Link href={buildHref({ category: "" })} className="underline">
+                      Show all products
+                    </Link>
+                    .
+                  </p>
+                </div>
+              ) : null}
 
               {/* Active-filter chips */}
               {activeChips.length > 0 ? (

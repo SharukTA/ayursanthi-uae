@@ -72,6 +72,19 @@ export function ProductCard({
   // the text block below adds its own height.
   aspect = "aspect-square",
   layout = "overlay",
+  // How a still fills the stacked layout's photo box. "contain" (the default)
+  // shows the product whole, at the cost of blank bands either side whenever the
+  // upload's shape doesn't match `aspect`. "cover" fills the box edge to edge —
+  // right when the box is close enough to the upload's ratio that the crop is
+  // just margin. Video always covers, whichever is passed: clips are shot 9:16
+  // and would letterbox badly.
+  mediaFit = "contain",
+  // Viewport widths the photo will occupy. The default assumes the usual row
+  // density (two-up on phones, three-up on tablets, four-up on desktop); a
+  // caller that renders the card wider than that — e.g. a carousel holding a
+  // single product — must say so, or the optimizer picks a variant sized for a
+  // card half the width and the photo lands soft.
+  sizes = "(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw",
 }) {
   // Primary media, rendered by <ProductMedia> so stills go through the image
   // optimizer and clips stay unloaded until hover. The data layer already
@@ -103,18 +116,17 @@ export function ProductCard({
             "Shop now" CTA a real <button>. See the overlay layout below. */}
         <Link href={href} className="absolute inset-0 z-10" aria-label={product.name} />
 
-        {/* Photo. Stills are contained so the product is never cropped; video is
-            shot 9:16 and would letterbox, so it fills the frame instead — the
-            same rule the list row uses. */}
+        {/* Photo. Stills follow `mediaFit`; video is shot 9:16 and would
+            letterbox, so it always fills the frame — the same rule the list row
+            uses. */}
         <div className={`relative ${aspect} w-full shrink-0 overflow-hidden bg-[#f7fafa]`}>
           <ProductMedia
             media={primaryMedia}
             alt={product.name}
-            // Stills are contained so the product is never cropped; a clip is
-            // shot 9:16 and would letterbox, so it fills the frame instead.
-            fit={primaryMedia.mediaType === "VIDEO" ? "cover" : "contain"}
-            // Two-up on phones, three-up on tablets, four-up on desktop.
-            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+            // Stills follow the caller's `mediaFit`; a clip is shot 9:16 and
+            // would letterbox, so it fills the frame regardless.
+            fit={primaryMedia.mediaType === "VIDEO" ? "cover" : mediaFit}
+            sizes={sizes}
             className="transition-transform duration-500 group-hover:scale-105"
           />
           {/* Badges float over the photo, top-left */}
@@ -134,8 +146,10 @@ export function ProductCard({
           </div>
         </div>
 
-        {/* White text block — nothing here sits over the photo. */}
-        <div className="flex flex-1 flex-col p-2.5 sm:p-3">
+        {/* White text block — nothing here sits over the photo. Its vertical
+            rhythm is deliberately tight: every line here is short, so the card's
+            height was going into padding rather than content. */}
+        <div className="flex flex-1 flex-col p-2 sm:p-2.5">
           {category ? (
             <p className="text-[10px] font-bold uppercase tracking-wider text-[#565959]">
               {category}
@@ -154,7 +168,7 @@ export function ProductCard({
             </p>
           ) : null}
 
-          <div className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1">
+          <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1">
             {reviewCount > 0 ? (
               <>
                 <span className="text-xs font-bold text-slate-700">{rating.toFixed(1)}</span>
@@ -172,7 +186,7 @@ export function ProductCard({
           </div>
 
           {/* Price + CTA pinned to the bottom so they line up across the row. */}
-          <div className="mt-auto pt-2">
+          <div className="mt-auto pt-1.5">
             <div className="flex flex-wrap items-baseline gap-x-2">
               <span className="text-base font-extrabold text-[#0f1111] sm:text-lg">
                 {formatMoney(price)}
@@ -198,7 +212,7 @@ export function ProductCard({
               </p>
             ) : null}
 
-            <ShopNowButton href={href} size="sm" className="mt-2 w-full" />
+            <ShopNowButton href={href} size="sm" className="mt-1.5 w-full" />
           </div>
         </div>
       </div>
@@ -219,7 +233,7 @@ export function ProductCard({
         media={primaryMedia}
         alt={product.name}
         fit="cover"
-        sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+        sizes={sizes}
         className="transition-transform duration-500 group-hover:scale-[1.06]"
       />
 

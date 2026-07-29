@@ -5,7 +5,9 @@ import {
   prismaErrorResponse,
   readBoolean,
   requireAdmin,
+  resolveCategoryId,
   slugify,
+  uniqueSlug,
 } from "@/lib/admin-api";
 
 export const runtime = "nodejs";
@@ -66,11 +68,14 @@ export async function POST(request) {
   try {
     const body = await request.json();
     const name = cleanString(body.name);
-    const slug = slugify(body.slug || body.name);
+    const baseSlug = slugify(body.slug || body.name);
 
-    if (!name || !slug) {
+    if (!name || !baseSlug) {
       return jsonError("Category name is required.");
     }
+
+    // Duplicate names are allowed; the slug gets a "-1", "-2" … suffix instead.
+    const slug = await uniqueSlug(baseSlug, "category");
 
     const category = await prisma.category.create({
       data: {
@@ -78,7 +83,9 @@ export async function POST(request) {
         slug,
         description: cleanString(body.description),
         imageUrl: cleanString(body.imageUrl),
-        parentId: cleanString(body.parentId),
+        // Null (root category) when omitted or when the chosen parent has since
+        // been deleted — see resolveCategoryId.
+        parentId: await resolveCategoryId(body.parentId),
         isActive: readBoolean(body.isActive, true),
       },
       include: {
