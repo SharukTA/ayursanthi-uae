@@ -7,7 +7,7 @@ export function SiteFooter() {
   // Amazon-neutral, so this can no longer lean on a colour-family mapping and
   // pins the colour itself. See globals.css.
   return (
-    <footer className="surface-brand relative border-t border-white/10 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_-12px_40px_-20px_rgba(12,38,38,0.6)]">
+    <footer className="surface-brand relative mt-8 sm:mt-12 border-t border-white/10 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_-12px_40px_-20px_rgba(12,38,38,0.6)]">
       {/* Soft gradient seam that fades the footer smoothly into the page above */}
       <span
         aria-hidden="true"

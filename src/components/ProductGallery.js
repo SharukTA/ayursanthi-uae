@@ -182,7 +182,7 @@ export function ProductGallery({ media = [], productName = "" }) {
                             playsInline
                             preload="metadata"
                             onError={() => markPosterFailed(index)}
-                            className="pointer-events-none size-full object-contain"
+                            className="pointer-events-none size-full object-cover"
                           />
                         )}
                         {/* Sits above the poster, and is all that's left when
@@ -203,10 +203,7 @@ export function ProductGallery({ media = [], productName = "" }) {
                       <ImageFill
                         src={item.url}
                         alt={item.altText || productName}
-                        // `contain`, not `cover`: a product photo that isn't
-                        // square must never have its edges cropped in the main
-                        // view — this is the shot the buyer is judging.
-                        fit="contain"
+                        fit="cover"
                         // The detail page hard-caps this column at 360px on
                         // mobile and 500px above it, so asking for viewport
                         // widths would over-fetch on every large phone.

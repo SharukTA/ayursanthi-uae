@@ -72,13 +72,9 @@ export function ProductCard({
   // the text block below adds its own height.
   aspect = "aspect-square",
   layout = "overlay",
-  // How a still fills the stacked layout's photo box. "contain" (the default)
-  // shows the product whole, at the cost of blank bands either side whenever the
-  // upload's shape doesn't match `aspect`. "cover" fills the box edge to edge —
-  // right when the box is close enough to the upload's ratio that the crop is
-  // just margin. Video always covers, whichever is passed: clips are shot 9:16
-  // and would letterbox badly.
-  mediaFit = "contain",
+  // How a still fills the stacked layout's photo box. "cover" (the default)
+  // fills the box edge to edge so there are no white/grey side bars.
+  mediaFit = "cover",
   // Viewport widths the photo will occupy. The default assumes the usual row
   // density (two-up on phones, three-up on tablets, four-up on desktop); a
   // caller that renders the card wider than that — e.g. a carousel holding a
@@ -381,7 +377,7 @@ export function ProductListRow({ product, categoryName, rating = 0, reviewCount 
         <ProductMedia
           media={primaryMedia}
           alt={product.name}
-          fit={primaryMedia.mediaType === "VIDEO" ? "cover" : "contain"}
+          fit="cover"
           // Fixed-width tile (160px, 176px from sm up) — no need to ever fetch
           // more than a 2x variant of that.
           sizes="176px"

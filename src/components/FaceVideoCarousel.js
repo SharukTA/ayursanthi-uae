@@ -177,7 +177,7 @@ export function FaceVideoCarousel({ items = [], onDominantColor, heroLayout = fa
           <div className="mt-7">
             <Button
               asChild
-              className="h-12 rounded-full bg-emerald-600 px-8 text-base text-white hover:bg-emerald-500"
+              className="h-12 rounded-full bg-[#ffd814] text-[#0f1111] hover:bg-[#f7ca00] px-8 text-base font-bold shadow-md border border-[#fcd200]"
             >
               <Link href={activeItem?.href || "/products"}>
                 Shop now <ArrowRight className="size-4" />
@@ -207,12 +207,19 @@ export function FaceVideoCarousel({ items = [], onDominantColor, heroLayout = fa
                 /* Portrait on phones (Amazon-app style) — a 16:9 card at 72% of a
                    phone's width is only ~150px tall and the overlay swallows it.
                    16:9 returns at sm, and lg stretches to the hero row height. */
-                className={`group relative aspect-[3/4] overflow-hidden rounded-2xl border border-black/15 bg-[#232f3e] shadow-2xl transition-[transform,opacity] duration-300 sm:aspect-video lg:aspect-auto lg:h-full lg:min-h-[460px] ${
+                className={`group relative aspect-[3/4] overflow-hidden rounded-2xl border border-black/15 bg-[#232f3e] shadow-2xl transition-[transform,opacity,box-shadow] duration-300 hover:shadow-emerald-900/20 sm:aspect-video lg:aspect-auto lg:h-full lg:min-h-[460px] ${
                   index === selectedIndex
                     ? ""
                     : "scale-[0.94] opacity-70 sm:scale-100 sm:opacity-100"
                 }`}
               >
+                {/* Clickable link spanning the whole video card */}
+                <Link
+                  href={item.href || "/products"}
+                  className="absolute inset-0 z-20 cursor-pointer"
+                  aria-label={item.name || "View product details"}
+                />
+
                 {/* Background video */}
                 <video
                   ref={(el) => (videoRefs.current[index] = el)}
@@ -278,14 +285,9 @@ export function FaceVideoCarousel({ items = [], onDominantColor, heroLayout = fa
                       </p>
                     ) : null}
                   </div>
-                  <Button
-                    asChild
-                    className="h-10 shrink-0 rounded-full bg-emerald-600 px-5 text-white hover:bg-emerald-500"
-                  >
-                    <Link href={item.href || "/products"}>
-                      Shop <ArrowRight className="size-4" />
-                    </Link>
-                  </Button>
+                  <div className="h-10 shrink-0 inline-flex items-center justify-center gap-1.5 rounded-full bg-[#ffd814] px-5 text-sm font-bold text-[#0f1111] transition-colors group-hover:bg-[#f7ca00] shadow-md border border-[#fcd200]">
+                    Shop now <ArrowRight className="size-4" />
+                  </div>
                 </div>
               </article>
             </div>
