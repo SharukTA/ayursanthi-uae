@@ -42,6 +42,46 @@ Ayursanthi Wellness shall not be liable for any direct, indirect, incidental, or
 // Slugs the admin can edit in /admin/pages.
 export const EDITABLE_PAGE_SLUGS = Object.keys(DEFAULT_PAGES);
 
+// Optional extra sections on the About page, in the order they render below the
+// brand story. Unlike DEFAULT_PAGES these have NO built-in content: until an
+// admin saves one there is no row, and the public page simply omits the whole
+// section. They are stored as ordinary Page rows so they reuse the same editor,
+// API and isActive toggle as the core pages.
+export const ABOUT_OPTIONAL_SECTIONS = [
+  { slug: "about-vision", label: "Our Vision", suggestedTitle: "Our Vision" },
+  { slug: "about-mission", label: "Our Mission", suggestedTitle: "Our Mission" },
+];
+
+export const OPTIONAL_PAGE_SLUGS = ABOUT_OPTIONAL_SECTIONS.map((s) => s.slug);
+
+// Everything /api/admin/pages will accept a write for.
+export const ALL_EDITABLE_PAGE_SLUGS = [...EDITABLE_PAGE_SLUGS, ...OPTIONAL_PAGE_SLUGS];
+
+// Slugs that may be saved with no heading at all — their title renders as an
+// h2 inside the page body (the h1 is fixed markup), so dropping it just means
+// the prose starts without a heading. /terms is excluded: its title sits in a
+// bordered icon block that would read as broken when empty.
+export const TITLE_OPTIONAL_SLUGS = ["about", ...OPTIONAL_PAGE_SLUGS];
+
+// The optional About sections that should actually render, in display order.
+// A section is skipped when the admin never added it (no row), hid it
+// (isActive false), or saved it with no body text. The heading is optional —
+// a section with body text and no heading renders as bare prose.
+export async function getAboutSections() {
+  try {
+    const rows = await prisma.page.findMany({
+      where: { slug: { in: OPTIONAL_PAGE_SLUGS } },
+    });
+    const bySlug = Object.fromEntries(rows.map((row) => [row.slug, row]));
+
+    return OPTIONAL_PAGE_SLUGS.map((slug) => bySlug[slug])
+      .filter((row) => row?.isActive && row.body?.trim())
+      .map((row) => ({ slug: row.slug, title: row.title?.trim() || "", body: row.body }));
+  } catch {
+    return [];
+  }
+}
+
 // Read one page, falling back to the built-in default if no active row exists.
 export async function getPage(slug) {
   const fallback = DEFAULT_PAGES[slug] || { slug, title: "", subtitle: "", body: "" };
@@ -50,7 +90,9 @@ export async function getPage(slug) {
     if (!page || !page.isActive) return fallback;
     return {
       slug: page.slug,
-      title: page.title || fallback.title,
+      // Where the heading is optional, a saved row wins outright: an admin who
+      // cleared the field meant "no heading", not "fall back to the built-in".
+      title: page.title || (TITLE_OPTIONAL_SLUGS.includes(slug) ? "" : fallback.title),
       subtitle: page.subtitle ?? fallback.subtitle,
       body: page.body || fallback.body,
     };

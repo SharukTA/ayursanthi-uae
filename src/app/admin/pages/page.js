@@ -17,6 +17,7 @@ import {
   ExternalLink,
   ScrollText,
   Info,
+  LayoutList,
 } from "lucide-react";
 import { FadeIn, PageReveal } from "@/components/Animated";
 import { SiteHeader } from "@/components/SiteHeader";
@@ -24,6 +25,7 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { Button } from "@/components/ui/button";
 import { RichText } from "@/components/RichText";
 import { useConfirm } from "@/components/ConfirmDialog";
+import { TermsSectionEditor } from "@/components/TermsSectionEditor";
 
 // What each editable slug actually is on the public site. Keeps the admin from
 // having to guess which of the three fields lands where.
@@ -33,10 +35,11 @@ const PAGE_META = {
     icon: FileText,
     path: "/about",
     blurb:
-      "The brand-story block on the About page. The Vision / Mission cards and the twelve Kalpas grid below it are fixed layout and are not editable here.",
+      "The brand-story block on the About page. Extra sections such as Our Vision and Our Mission are optional and are managed separately, just below.",
+    titleOptional: true,
     fields: {
-      title: "Heading shown above the brand story",
-      subtitle: "Line under the “About Ayursanthi” hero title",
+      title: "Heading shown above the brand story — leave blank for no heading",
+      subtitle: "Line under the “About Ayursanthi” page title",
       body: "Brand-story paragraphs",
     },
   },
@@ -71,6 +74,7 @@ export default function AdminPagesPage() {
   const [authChecked, setAuthChecked] = useState(false);
   const [loading, setLoading] = useState(true);
   const [pages, setPages] = useState([]);
+  const [sections, setSections] = useState([]);
   const [faqs, setFaqs] = useState([]);
   const [faqDefaults, setFaqDefaults] = useState([]);
 
@@ -99,6 +103,7 @@ export default function AdminPagesPage() {
     const res = await fetch("/api/admin/pages");
     const data = await res.json();
     setPages(data.pages || []);
+    setSections(data.sections || []);
   }
   async function loadFaqs() {
     const res = await fetch("/api/admin/faq");
@@ -120,6 +125,8 @@ export default function AdminPagesPage() {
   }
 
   const activeFaqs = faqs.filter((f) => f.isActive).length;
+  // Optional About blocks that are actually on the public page right now.
+  const liveSections = sections.filter((s) => s.added && s.isActive).length;
 
   return (
     <main className="min-h-screen bg-slate-50 text-white flex flex-col">
@@ -137,9 +144,9 @@ export default function AdminPagesPage() {
               Pages &amp; FAQ
             </h1>
             <p className="mt-1 text-sm text-slate-300">
-              Three things live here: the <strong className="font-semibold text-white">About Us</strong> story,
-              the <strong className="font-semibold text-white">Terms &amp; Conditions</strong> policy, and
-              the <strong className="font-semibold text-white">FAQ</strong> list.
+              Everything here is site copy: the <strong className="font-semibold text-white">About Us</strong> story
+              and its optional extra sections, the <strong className="font-semibold text-white">Terms &amp; Conditions</strong> policy,
+              and the <strong className="font-semibold text-white">FAQ</strong> list.
             </p>
           </PageReveal>
         </div>
@@ -147,8 +154,9 @@ export default function AdminPagesPage() {
 
       <section className="mx-auto max-w-4xl px-4 py-10 sm:px-6 lg:px-8 flex-1 w-full grid gap-8">
         {/* What lives on this screen */}
-        <FadeIn className="grid gap-3 sm:grid-cols-3">
-          {pages.map((page) => {
+        <FadeIn className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {pages.find((p) => p.slug === "about") && (() => {
+            const page = pages.find((p) => p.slug === "about");
             const meta = metaFor(page.slug);
             const Icon = meta.icon;
             return (
@@ -162,7 +170,52 @@ export default function AdminPagesPage() {
                 statusTone={page.customized ? "text-emerald-700 bg-emerald-50" : "text-slate-500 bg-slate-100"}
               />
             );
-          })}
+          })()}
+          <SummaryCard
+            icon={LayoutList}
+            label="About sections"
+            anchor="#about-sections"
+            livePath="/about"
+            status={
+              liveSections === 0
+                ? "None added — optional"
+                : `${liveSections} section${liveSections === 1 ? "" : "s"} on the page`
+            }
+            statusTone={liveSections === 0 ? "text-slate-500 bg-slate-100" : "text-emerald-700 bg-emerald-50"}
+          />
+          {pages.find((p) => p.slug === "terms") && (() => {
+            const page = pages.find((p) => p.slug === "terms");
+            const meta = metaFor(page.slug);
+            const Icon = meta.icon;
+            return (
+              <SummaryCard
+                key={page.slug}
+                icon={Icon}
+                label={meta.label}
+                anchor={`#page-${page.slug}`}
+                livePath={meta.path}
+                status={page.customized ? "Edited by you" : "Built-in default text"}
+                statusTone={page.customized ? "text-emerald-700 bg-emerald-50" : "text-slate-500 bg-slate-100"}
+              />
+            );
+          })()}
+          {pages
+            .filter((p) => p.slug !== "about" && p.slug !== "terms")
+            .map((page) => {
+              const meta = metaFor(page.slug);
+              const Icon = meta.icon;
+              return (
+                <SummaryCard
+                  key={page.slug}
+                  icon={Icon}
+                  label={meta.label}
+                  anchor={`#page-${page.slug}`}
+                  livePath={meta.path}
+                  status={page.customized ? "Edited by you" : "Built-in default text"}
+                  statusTone={page.customized ? "text-emerald-700 bg-emerald-50" : "text-slate-500 bg-slate-100"}
+                />
+              );
+            })}
           <SummaryCard
             icon={HelpCircle}
             label="FAQ"
@@ -177,10 +230,35 @@ export default function AdminPagesPage() {
           />
         </FadeIn>
 
-        {pages.map((page) => (
-          <PageEditor key={page.slug} page={page} onSaved={loadPages} />
-        ))}
+        {/* 1. Core About Us story editor */}
+        {pages.find((p) => p.slug === "about") && (
+          <PageEditor
+            key="about"
+            page={pages.find((p) => p.slug === "about")}
+            onSaved={loadPages}
+          />
+        )}
 
+        {/* 2. Optional About page sections */}
+        <AboutSectionsManager sections={sections} onChanged={loadPages} />
+
+        {/* 3. Terms & Conditions builder */}
+        {pages.find((p) => p.slug === "terms") && (
+          <TermsSectionEditor
+            key="terms"
+            page={pages.find((p) => p.slug === "terms")}
+            onSaved={loadPages}
+          />
+        )}
+
+        {/* Any extra pages if added in the future */}
+        {pages
+          .filter((p) => p.slug !== "about" && p.slug !== "terms")
+          .map((page) => (
+            <PageEditor key={page.slug} page={page} onSaved={loadPages} />
+          ))}
+
+        {/* 4. FAQ Manager */}
         <FaqManager faqs={faqs} defaults={faqDefaults} onChanged={loadFaqs} />
       </section>
 
@@ -262,7 +340,7 @@ function PageEditor({ page, onSaved }) {
 
       <form onSubmit={handleSave} className="mt-5 grid gap-4">
         <label className="grid gap-1 text-xs font-semibold text-slate-800">
-          Heading *
+          Heading {meta.titleOptional ? null : "*"}
           <span className="text-[10px] font-normal text-slate-400">{meta.fields.title}</span>
           <input
             type="text"
@@ -326,6 +404,185 @@ function PageEditor({ page, onSaved }) {
         </div>
       </form>
     </FadeIn>
+  );
+}
+
+// Optional extra blocks on /about (Our Vision, Our Mission). Each one only
+// exists on the public page once it has been saved here — an untouched section
+// renders nothing at all, which is the intended default.
+function AboutSectionsManager({ sections, onChanged }) {
+  const [confirm, confirmDialog] = useConfirm();
+
+  return (
+    <FadeIn id="about-sections" className="scroll-mt-6 rounded-md border border-border bg-white p-6 shadow-sm">
+      {confirmDialog}
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+        <h2 className="text-base font-bold text-slate-950 flex items-center gap-2">
+          <LayoutList className="size-5 text-emerald-700" />
+          About page sections
+          <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold text-slate-500">
+            OPTIONAL
+          </span>
+        </h2>
+        <Link href="/about" target="_blank" className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 hover:underline">
+          <ExternalLink className="size-3" />
+          View /about
+        </Link>
+      </div>
+
+      <p className="mt-3 flex items-start gap-2 rounded border border-slate-200 bg-slate-50/60 p-3 text-[11px] leading-5 text-slate-600">
+        <Info className="mt-0.5 size-3.5 shrink-0 text-slate-400" />
+        These blocks appear under the brand story, in the order shown. They are entirely optional — leave one
+        untouched and it never appears on the site. Only the text is required; skip the heading and the block
+        renders as plain paragraphs. Use the eye icon to take a block off temporarily, or remove it to go back
+        to nothing.
+      </p>
+
+      <div className="mt-5 grid gap-4">
+        {sections.map((section) => (
+          <OptionalSectionEditor
+            key={section.slug}
+            section={section}
+            confirm={confirm}
+            onChanged={onChanged}
+          />
+        ))}
+      </div>
+    </FadeIn>
+  );
+}
+
+function OptionalSectionEditor({ section, confirm, onChanged }) {
+  const [title, setTitle] = useState(section.title || "");
+  const [body, setBody] = useState(section.body || "");
+  const [saving, setSaving] = useState(false);
+
+  const live = section.added && section.isActive;
+
+  async function handleSave(e) {
+    e.preventDefault();
+    if (!body.trim()) {
+      toast.error("Add some text for this section, or remove it.");
+      return;
+    }
+    setSaving(true);
+    const toastId = toast.loading("Saving section...");
+    try {
+      const res = await fetch(`/api/admin/pages/${section.slug}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: title.trim(), body: body.trim(), isActive: true }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to save section.");
+      toast.success(`${section.label} is now on the About page.`, { id: toastId });
+      await onChanged();
+    } catch (error) {
+      toast.error(error.message || "Error saving section.", { id: toastId });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleToggle() {
+    try {
+      const res = await fetch(`/api/admin/pages/${section.slug}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: !section.isActive }),
+      });
+      if (!res.ok) throw new Error("Failed to update section.");
+      await onChanged();
+    } catch (error) {
+      toast.error(error.message);
+    }
+  }
+
+  async function handleRemove() {
+    const ok = await confirm({
+      title: `Remove “${section.label}”?`,
+      description:
+        "The section and its text are deleted and the About page goes back to not showing it at all. You can always add it again later.",
+      confirmLabel: "Remove section",
+    });
+    if (!ok) return;
+    const toastId = toast.loading("Removing...");
+    try {
+      const res = await fetch(`/api/admin/pages/${section.slug}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to remove section.");
+      setTitle("");
+      setBody("");
+      toast.success("Section removed.", { id: toastId });
+      await onChanged();
+    } catch (error) {
+      toast.error(error.message, { id: toastId });
+    }
+  }
+
+  return (
+    <form onSubmit={handleSave} className="grid gap-3 rounded border border-slate-200 bg-slate-50/60 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="flex items-center gap-1.5 text-xs font-bold text-slate-900">
+          {section.label}
+          <span
+            className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${
+              live
+                ? "bg-emerald-50 text-emerald-700"
+                : section.added
+                  ? "bg-amber-50 text-amber-800"
+                  : "bg-slate-100 text-slate-500"
+            }`}
+          >
+            {live ? "ON THE PAGE" : section.added ? "HIDDEN" : "NOT ADDED"}
+          </span>
+        </h3>
+
+        {section.added ? (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleToggle}
+              title={section.isActive ? "Visible on site — click to hide" : "Hidden — click to show"}
+              className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${section.isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-400"}`}
+            >
+              {section.isActive ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />}
+            </button>
+            <button
+              type="button"
+              onClick={handleRemove}
+              title="Remove section"
+              className="text-slate-400 hover:text-rose-700"
+            >
+              <Trash2 className="size-3.5" />
+            </button>
+          </div>
+        ) : null}
+      </div>
+
+      <input
+        type="text"
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        disabled={saving}
+        placeholder={`Heading (optional) — e.g. “${section.suggestedTitle}”`}
+        className="w-full min-h-10 rounded border border-input bg-white px-3 text-xs font-normal text-slate-900 outline-none transition focus:border-emerald-700"
+      />
+      <textarea
+        rows={6}
+        value={body}
+        onChange={(e) => setBody(e.target.value)}
+        disabled={saving}
+        placeholder="Paragraphs for this section. Blank line = new paragraph."
+        className="w-full rounded border border-input bg-white p-3 text-xs font-normal leading-6 text-slate-900 outline-none transition focus:border-emerald-700"
+      />
+
+      <div className="flex justify-end">
+        <Button type="submit" disabled={saving} className="h-9 bg-emerald-700 hover:bg-emerald-800 rounded text-[11px] font-semibold px-4">
+          {saving ? <Loader2 className="size-3.5 animate-spin mr-1.5" /> : <Save className="size-3.5 mr-1.5" />}
+          {section.added ? "Save changes" : `Add ${section.label}`}
+        </Button>
+      </div>
+    </form>
   );
 }
 
