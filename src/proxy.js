@@ -19,6 +19,12 @@ import { decryptSession } from "@/lib/auth";
 // `app/admin/layout.js` (which re-checks the role against the database) and in
 // every `/api/**` route via `requireAdmin()` / `getSession()`.
 
+// Site-wide kill switch. Set MAINTENANCE_MODE=true (env var, not code) to send
+// every page request to /maintenance while leaving /api untouched (matcher
+// below already skips it) so webhooks/cron keep firing. Checked first and
+// returns early so it can't be fought by the auth redirects further down.
+const MAINTENANCE_MODE = process.env.MAINTENANCE_MODE === "true";
+
 // Signed-out users are redirected away from these.
 const PROTECTED_PREFIXES = ["/dashboard", "/checkout"];
 
@@ -41,6 +47,10 @@ function homeFor(session) {
 
 export default function proxy(request) {
   const { pathname } = request.nextUrl;
+
+  if (MAINTENANCE_MODE && pathname !== "/maintenance") {
+    return NextResponse.rewrite(new URL("/maintenance", request.nextUrl));
+  }
 
   // decryptSession returns null for a missing, tampered, or expired token, so an
   // invalid cookie is treated exactly like being signed out.
