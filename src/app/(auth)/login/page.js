@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { Logo3D } from "@/components/Logo3D";
+import { PasswordField } from "@/components/PasswordField";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -90,14 +91,15 @@ export default function LoginPage() {
 
           <label className="mt-4 grid gap-2 text-sm font-semibold text-slate-900">
             Enter password
-            <input
-              type="password"
+            <PasswordField
               name="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               disabled={loading}
               required
+              autoComplete="current-password"
               className="min-h-12 w-full rounded-md border border-slate-300 bg-white px-4 text-sm font-normal text-slate-900 outline-none transition focus:border-[#007185] focus:ring-4 focus:ring-[#007185]/25 disabled:opacity-60"
+              buttonClassName="text-slate-500 hover:text-slate-900"
             />
           </label>
 

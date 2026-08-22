@@ -4,7 +4,8 @@ import {
   cleanString,
   jsonError,
   prismaErrorResponse,
-  readBoolean,  readInteger,
+  readBoolean,
+  readInteger,
   readMoney,
   requireAdmin,
   resolveCategoryId,
@@ -110,12 +111,13 @@ export async function POST(request) {
     const body = await request.json();
     const name = cleanString(body.name);
     const baseSlug = slugify(body.slug || body.name);
+    // Optional — null means the product is listed without a catalogue code.
     const sku = cleanString(body.sku);
     const price = readMoney(body.price);
     const mrp = readMoney(body.mrp);
 
-    if (!name || !baseSlug || !sku || !price) {
-      return jsonError("Name, slug, sku, and valid price are required.");
+    if (!name || !baseSlug || !price) {
+      return jsonError("Name, slug, and valid price are required.");
     }
 
     // Duplicate names are allowed; the slug gets a "-1", "-2" … suffix instead.

@@ -19,6 +19,15 @@ export const EMAIL_MAX_LENGTH = 254; // RFC 5321 maximum address length.
 // country's actual numbering plan (see src/lib/geo/phone-rules.js).
 const PHONE_RE = /^\+?\d{7,15}$/;
 
+// Affiliate ID (a.k.a. referral code). Minted as up-to-4 letters + a 4-character
+// tail, so 5–8 characters in practice; the bounds below are deliberately a
+// little wider than that so a hand-typed or legacy code is never rejected by
+// shape alone. Case and surrounding whitespace are not significant — every code
+// is normalised to trimmed uppercase before it is stored or looked up.
+const REFERRAL_CODE_RE = /^[A-Z0-9]+$/;
+export const REFERRAL_CODE_MIN_LENGTH = 4;
+export const REFERRAL_CODE_MAX_LENGTH = 16;
+
 export const PASSWORD_MIN_LENGTH = 8;
 export const NAME_MAX_LENGTH = 80;
 
@@ -87,8 +96,45 @@ export function validatePassword(password) {
 }
 
 /**
+ * Normalise an affiliate ID to the single form it is stored and compared in:
+ * trimmed, uppercased, with internal spaces and dashes removed (people paste
+ * "shar-001f" or "SHAR 001F"). Returns "" for a blank value.
+ */
+export function normalizeReferralCode(code) {
+  return String(code || "")
+    .trim()
+    .replace(/[\s-]/g, "")
+    .toUpperCase();
+}
+
+/**
+ * Shape check for an affiliate ID. Optional: a blank value is not an error,
+ * because entering someone else's code is never required to sign up.
+ *
+ * This only rules out codes that could not possibly exist. Whether a
+ * well-formed code belongs to a real account is a database question, answered
+ * server-side in the register route — the client cannot be trusted with it and
+ * must not be handed a way to enumerate accounts either.
+ */
+export function validateReferralCode(code) {
+  const normalized = normalizeReferralCode(code);
+  if (!normalized) return null;
+  if (
+    normalized.length < REFERRAL_CODE_MIN_LENGTH ||
+    normalized.length > REFERRAL_CODE_MAX_LENGTH ||
+    !REFERRAL_CODE_RE.test(normalized)
+  ) {
+    return "That affiliate ID doesn't look right. Please check it and try again.";
+  }
+  return null;
+}
+
+/**
  * Validate a full registration payload. Returns a map of field -> message for
  * any fields that failed; an empty object means the payload is valid.
+ *
+ * Phone is required at signup: it is the fallback contact for a delivery and
+ * doubles as a login identifier, so an account without one is a dead end.
  */
 export function validateRegistration({ name, email, phone, password }) {
   const errors = {};
@@ -96,7 +142,7 @@ export function validateRegistration({ name, email, phone, password }) {
   if (nameError) errors.name = nameError;
   const emailError = validateEmail(email);
   if (emailError) errors.email = emailError;
-  const phoneError = validatePhone(phone);
+  const phoneError = validatePhone(phone, { required: true });
   if (phoneError) errors.phone = phoneError;
   const passwordError = validatePassword(password);
   if (passwordError) errors.password = passwordError;

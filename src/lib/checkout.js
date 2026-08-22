@@ -17,10 +17,14 @@ import { getFreeShippingThreshold } from "@/lib/settings";
  * @param {string} args.userId           the buying customer
  * @param {Array<{productId: string, quantity: number}>} args.cart
  * @param {object} args.shippingAddress  validated address snapshot
+ * @param {boolean} [args.clearAccountCart=true]  whether this purchase came out
+ *   of the saved account cart, and should therefore empty the lines it bought.
+ *   False for a Buy Now, and for a basket built in the browser while signed out
+ *   — those are separate lists, and the saved cart must survive them untouched.
  * @returns {Promise<{status: string, message?: string, order?: object}>}
  *   status: created | empty_cart | unavailable | out_of_stock
  */
-export async function placeCodOrder({ userId, cart, shippingAddress }) {
+export async function placeCodOrder({ userId, cart, shippingAddress, clearAccountCart = true }) {
   if (!Array.isArray(cart) || cart.length === 0) {
     return { status: "empty_cart", message: "Your cart is empty." };
   }
@@ -120,11 +124,19 @@ export async function placeCodOrder({ userId, cart, shippingAddress }) {
       },
     });
 
-    // Clear only what was actually bought — a "Buy Now" checkout must leave the
-    // rest of the server-side cart alone.
-    await tx.cartItem.deleteMany({
-      where: { userId, productId: { in: items.map((it) => it.productId) } },
-    });
+    // Empty only the lines this order actually consumed, and only when the
+    // order came out of the saved cart in the first place.
+    //
+    // A Buy Now, or a basket built in the browser while signed out, is a
+    // different list that merely happens to name some of the same products.
+    // Deleting the saved lines for those would throw away items the shopper
+    // never bought and never saw on this screen — they would simply vanish from
+    // the cart on another device.
+    if (clearAccountCart) {
+      await tx.cartItem.deleteMany({
+        where: { userId, productId: { in: items.map((it) => it.productId) } },
+      });
+    }
 
     return created;
   });

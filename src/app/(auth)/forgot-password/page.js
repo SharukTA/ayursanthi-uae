@@ -4,8 +4,10 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Loader2, Eye, EyeOff, CheckCircle2, ArrowLeft } from "lucide-react";
+import { Loader2, CheckCircle2, ArrowLeft } from "lucide-react";
 import { Logo3D } from "@/components/Logo3D";
+import { PasswordField } from "@/components/PasswordField";
+import { validatePassword } from "@/lib/validation";
 
 // Amazon-style 3-step password reset:
 //   email    -> submit the account email, we send a 6-digit OTP
@@ -28,7 +30,6 @@ export default function ForgotPasswordPage() {
   const [otp, setOtp] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
 
   const inputClass =
     "min-h-12 w-full rounded-md border border-slate-300 bg-white px-4 text-sm font-normal text-slate-900 outline-none transition focus:border-[#007185] focus:ring-4 focus:ring-[#007185]/25 disabled:opacity-60";
@@ -91,8 +92,9 @@ export default function ForgotPasswordPage() {
   // Step 3 — set the new password (consumes the OTP).
   const handleResetPassword = async (e) => {
     e.preventDefault();
-    if (newPassword.length < 8) {
-      toast.error("Password must be at least 8 characters long.");
+    const passwordError = validatePassword(newPassword);
+    if (passwordError) {
+      toast.error(passwordError);
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -254,34 +256,24 @@ export default function ForgotPasswordPage() {
 
               <label className="mt-6 grid gap-2 text-sm font-semibold text-slate-900">
                 New password
-                <div className="relative">
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    disabled={loading}
-                    required
-                    className={`${inputClass} pr-11`}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((s) => !s)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#565959] transition hover:text-[#007185]"
-                    aria-label={showPassword ? "Hide password" : "Show password"}
-                  >
-                    {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-                  </button>
-                </div>
+                <PasswordField
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  disabled={loading}
+                  required
+                  autoComplete="new-password"
+                  className={inputClass}
+                />
               </label>
 
               <label className="mt-4 grid gap-2 text-sm font-semibold text-slate-900">
                 Re-enter password
-                <input
-                  type={showPassword ? "text" : "password"}
+                <PasswordField
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   disabled={loading}
                   required
+                  autoComplete="new-password"
                   className={inputClass}
                 />
                 {confirmPassword.length > 0 && newPassword !== confirmPassword && (

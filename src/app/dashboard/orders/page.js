@@ -18,6 +18,7 @@ import { OrderRefunds } from "@/components/OrderRefunds";
 import { OrderProgress } from "@/components/OrderProgress";
 import { canCancelOrder } from "@/lib/order-policy";
 import { formatMoney } from "@/lib/currency";
+import { formatAddressLines } from "@/lib/address";
 
 // Amazon renders the order status as a bold line above the items ("Delivered
 // 12 July", "Cancelled", …). Greens collapse to ink in this theme, so every
@@ -432,14 +433,11 @@ export default function OrdersPage() {
                             Shipping Address
                           </h4>
                           <p className="text-xs leading-6 text-[#0f1111]">
-                            {addr.fullName}
-                            {addr.phone ? ` · ${addr.phone}` : ""}
-                            <br />
-                            {addr.line1}
-                            {addr.line2 ? `, ${addr.line2}` : ""}
-                            <br />
-                            {addr.city}, {addr.state} — {addr.postalCode}
-                            {addr.country ? `, ${addr.country}` : ""}
+                            {formatAddressLines(addr).map((line, i) => (
+                              <span key={i} className="block">
+                                {line}
+                              </span>
+                            ))}
                           </p>
                         </div>
                       )}

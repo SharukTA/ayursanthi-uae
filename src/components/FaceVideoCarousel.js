@@ -266,17 +266,22 @@ export function FaceVideoCarousel({ items = [], onDominantColor, heroLayout = fa
                 {/* Product info overlay — hidden on the lg hero, where the copy
                     moves to the left panel and the card shows video only. */}
                 <div
-                  className={`absolute inset-x-0 bottom-0 flex items-end justify-between gap-4 p-5 sm:p-6 ${
+                  /* Phones stack the copy above a full-width button: the card is
+                     only ~72% of a narrow viewport, so a long product name in a
+                     side-by-side row squeezed the (shrink-0) button off the
+                     card's clipped edge. The row returns at sm, where there's
+                     room for both. */
+                  className={`absolute inset-x-0 bottom-0 flex flex-col gap-3 p-4 sm:flex-row sm:items-end sm:justify-between sm:gap-4 sm:p-6 ${
                     heroLayout ? "lg:hidden" : ""
                   }`}
                 >
-                  <div>
+                  <div className="min-w-0">
                     {item.label ? (
-                      <p className="text-xs font-bold uppercase tracking-wider text-white/70">
+                      <p className="truncate text-xs font-bold uppercase tracking-wider text-white/70">
                         {item.label}
                       </p>
                     ) : null}
-                    <h3 className="mt-1 text-xl font-bold text-white sm:text-2xl">
+                    <h3 className="mt-1 text-lg font-bold leading-snug text-white break-words line-clamp-2 sm:text-2xl">
                       {item.name}
                     </h3>
                     {item.price ? (
@@ -285,7 +290,7 @@ export function FaceVideoCarousel({ items = [], onDominantColor, heroLayout = fa
                       </p>
                     ) : null}
                   </div>
-                  <div className="h-10 shrink-0 inline-flex items-center justify-center gap-1.5 rounded-full bg-[#ffd814] px-5 text-sm font-bold text-[#0f1111] transition-colors group-hover:bg-[#f7ca00] shadow-md border border-[#fcd200]">
+                  <div className="h-10 w-full shrink-0 inline-flex items-center justify-center gap-1.5 rounded-full bg-[#ffd814] px-5 text-sm font-bold text-[#0f1111] transition-colors group-hover:bg-[#f7ca00] shadow-md border border-[#fcd200] sm:w-auto">
                     Shop now <ArrowRight className="size-4" />
                   </div>
                 </div>

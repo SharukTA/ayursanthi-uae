@@ -18,6 +18,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import { formatAddress } from "@/lib/address";
 import {
   escapeHtml,
   formatMoney,
@@ -70,21 +71,6 @@ const ORDER_FOR_EMAIL = {
   items: true,
   user: { select: { name: true, email: true } },
 };
-
-/** Format the stored address snapshot into a readable block. */
-function formatAddress(snapshot) {
-  if (!snapshot || typeof snapshot !== "object") return null;
-  return [
-    snapshot.fullName,
-    snapshot.line1,
-    snapshot.line2,
-    [snapshot.city, snapshot.state].filter(Boolean).join(", "),
-    [snapshot.postalCode, snapshot.country].filter(Boolean).join(" "),
-    snapshot.phone,
-  ]
-    .filter(Boolean)
-    .join("\n");
-}
 
 // ---------------------------------------------------------------------------
 // Order placed

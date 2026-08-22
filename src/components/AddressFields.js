@@ -143,7 +143,7 @@ export function StateField({
         aria-invalid={error ? "true" : undefined}
         className={`${className} ${borderClass}`}
       >
-        <option value="">Choose a state</option>
+        <option value="">Select {placeholder.toLowerCase()}</option>
         {states.map((s) => (
           <option key={s} value={s}>
             {s}

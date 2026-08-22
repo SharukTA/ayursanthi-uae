@@ -273,10 +273,11 @@ export default function AdminProductsPage() {
   const handleSubmitProduct = async (e) => {
     e.preventDefault();
 
-    // Category is deliberately NOT checked here — a product can be saved
-    // uncategorized and given a category later (or never).
-    if (!name.trim() || !sku.trim() || !price) {
-      toast.error("Please fill in all required fields (Name, SKU, Price).");
+    // Category and SKU are deliberately NOT checked here — a product can be
+    // saved uncategorized and with no catalogue code, and given either later
+    // (or never).
+    if (!name.trim() || !price) {
+      toast.error("Please fill in all required fields (Name, Price).");
       return;
     }
 
@@ -309,6 +310,8 @@ export default function AdminProductsPage() {
 
       const payload = {
         name: name.trim(),
+        // Always sent (even empty) so editing can clear a SKU back to none;
+        // the API reads "" as null.
         sku: sku.trim().toUpperCase(),
         // Always sent (even empty) so editing can clear a category back to
         // "Uncategorized"; the API reads "" as null.
@@ -452,13 +455,12 @@ export default function AdminProductsPage() {
                 </label>
 
                 <label className="grid gap-2 min-w-0 text-xs font-semibold text-slate-800">
-                  Product SKU *
+                  Product SKU (Optional)
                   <input
                     type="text"
                     value={sku}
                     onChange={(e) => setSku(e.target.value)}
                     disabled={submitting}
-                    required
                     placeholder="e.g. AHO002"
                     className="w-full min-w-0 min-h-10 rounded border border-input bg-white px-3 text-xs font-normal outline-none transition focus:border-emerald-700 uppercase"
                   />
@@ -853,7 +855,9 @@ export default function AdminProductsPage() {
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <p className="text-sm font-bold text-slate-900 break-words">{prod.name}</p>
-                          <p className="mt-0.5 font-mono text-[10px] text-slate-500">{prod.sku}</p>
+                          <p className="mt-0.5 font-mono text-[10px] text-slate-500">
+                            {prod.sku || "No SKU"}
+                          </p>
                         </div>
                         <div className="flex shrink-0 items-center gap-2">
                           <button
@@ -926,7 +930,9 @@ export default function AdminProductsPage() {
                     {products.map((prod) => (
                       <tr key={prod.id} className="hover:bg-slate-50/50">
                         <td className="py-4 font-bold text-slate-900">{prod.name}</td>
-                        <td className="py-4 font-mono text-[10px] text-slate-500">{prod.sku}</td>
+                        <td className="py-4 font-mono text-[10px] text-slate-500">
+                          {prod.sku || "—"}
+                        </td>
                         <td className="py-4">
                           <span className="rounded bg-slate-100 px-2 py-0.5 text-[10px] text-slate-700 font-semibold">
                             {prod.category?.name || "Uncategorized"}

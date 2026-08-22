@@ -78,6 +78,27 @@ model User {
   passwordHash String
   role         UserRole @default(CUSTOMER)
 
+  // ── Affiliate / referral ──────────────────────────────────────────────────
+  // The shopper-facing "affiliate ID". Minted once at signup (see
+  // src/lib/referral.js) and never changed — it is the handle other people type
+  // into the register form, so rotating it would orphan every share link
+  // already in the wild. @unique is what makes it usable as a lookup key.
+  //
+  // Nullable because not every account has one: staff are not in the program at
+  // all, and a row created outside the signup route has not been minted one yet
+  // (the referrals API does that on first read). Whether an account SHOULD have
+  // one is decided by role at read time, not by this column being set.
+  referralCode String?  @unique
+  // Who referred THIS user, resolved from the code they typed at signup. One
+  // level only: there is no chain to walk, A referred B and that is the whole
+  // relationship. Immutable after signup — an existing account cannot be
+  // retro-attributed to a referrer.
+  referredById String?
+  referredBy   User?    @relation("UserReferrals", fields: [referredById], references: [id], onDelete: SetNull)
+  // The other side: everyone who signed up with this user's code. This is what
+  // /dashboard/referrals lists.
+  referrals    User[]   @relation("UserReferrals")
+
   // Amazon's "Turn off Browsing History" switch. While false we neither record
   // new views nor show the shopper their history back — existing rows are kept
   // (removing them is a separate, explicit action) but nothing reads them.
@@ -91,6 +112,9 @@ model User {
   passwordResetOtps PasswordResetOtp[]
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
+
+  // Every referrals page reads one referrer's downline, newest first.
+  @@index([referredById, createdAt])
 }
 
 // One-time password used by the Amazon-style forgot/reset password flow.
@@ -153,7 +177,13 @@ model Product {
   category         Category?                @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   name             String
   slug             String                   @unique
-  sku              String                   @unique
+  // Optional: a product may have no SKU. Nothing in the storefront or checkout
+  // keys off it — it is an admin-facing catalogue reference, and the cart, order
+  // lines and PDF all identify a product by id/slug — so a listing can go live
+  // before the warehouse has assigned a code. Still @unique: Postgres allows any
+  // number of NULLs in a unique index, so "no SKU" never collides, while two
+  // products can't share a real code.
+  sku              String?                  @unique
   shortDescription String?
   description      String?
   price            Decimal                  @db.Decimal(10, 2)
@@ -269,20 +299,20 @@ model CartItem {
 }
 
 model Order {
-  id              String          @id @default(cuid())
-  orderNumber     String          @unique
+  id              String        @id @default(cuid())
+  orderNumber     String        @unique
   userId          String
-  user            User            @relation(fields: [userId], references: [id])
-  status          OrderStatus     @default(PENDING)
-  paymentStatus   PaymentStatus   @default(PENDING)
-  subtotal        Decimal         @db.Decimal(10, 2)
-  shipping        Decimal         @default(0) @db.Decimal(10, 2)
-  total           Decimal         @db.Decimal(10, 2)
+  user            User          @relation(fields: [userId], references: [id])
+  status          OrderStatus   @default(PENDING)
+  paymentStatus   PaymentStatus @default(PENDING)
+  subtotal        Decimal       @db.Decimal(10, 2)
+  shipping        Decimal       @default(0) @db.Decimal(10, 2)
+  total           Decimal       @db.Decimal(10, 2)
   // Money already sent back to the customer for this order. Cancellation is the
   // only thing that puts money back (the store does not accept returns), so this
   // is the cancellation refund and paymentStatus flips to REFUNDED once it
   // reaches `total`.
-  refundedTotal   Decimal         @default(0) @db.Decimal(10, 2)
+  refundedTotal   Decimal       @default(0) @db.Decimal(10, 2)
   addressSnapshot Json?
   // Courier consignment details, filled in by the admin when the order ships.
   // Both are free text: the store hands parcels to whichever courier is
@@ -297,8 +327,8 @@ model Order {
   cancelReason    String?
   items           OrderItem[]
   payments        Payment[]
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 }
 
 model OrderItem {

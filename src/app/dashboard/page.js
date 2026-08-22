@@ -11,8 +11,10 @@ import {
   RefreshCw,
   User,
   KeyRound,
+  Users,
 } from "lucide-react";
 import { FadeIn, PageReveal, Stagger, StaggerItem } from "@/components/Animated";
+import { useSession } from "@/components/SessionProvider";
 import { formatMoney } from "@/lib/currency";
 
 // Amazon's "Your Account" hub is a grid of large cards, each an icon + title +
@@ -37,9 +39,20 @@ const ACCOUNT_CARDS = [
     title: "Your Profile",
     desc: "Edit your name, phone, and personal details",
   },
+  {
+    href: "/dashboard/referrals",
+    icon: Users,
+    title: "My Referrals",
+    desc: "Share your affiliate ID and see who signed up with it",
+    // Staff accounts are not in the affiliate program and have no ID to share.
+    customerOnly: true,
+  },
 ];
 
 export default function DashboardPage() {
+  // Seeded by the root layout on the server, so the card list is right on the
+  // first paint rather than flickering in after a fetch.
+  const { session } = useSession();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -116,7 +129,9 @@ export default function DashboardPage() {
 
       {/* Account hub cards — Amazon's "Your Account" grid */}
       <Stagger className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {ACCOUNT_CARDS.map((card) => {
+        {ACCOUNT_CARDS.filter(
+          (card) => !card.customerOnly || session?.role !== "ADMIN"
+        ).map((card) => {
           const Icon = card.icon;
           return (
             <StaggerItem key={card.href}>

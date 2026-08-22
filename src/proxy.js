@@ -4,7 +4,7 @@ import { decryptSession } from "@/lib/auth";
 // Centralised route gate. Runs before every page request and redirects users who
 // manually type a URL they are not allowed to be on — in BOTH directions:
 //
-//   • signed out  → /admin/*, /dashboard/*, /checkout   ⇒ sent to /login
+//   • signed out  → /admin/*, /dashboard/*              ⇒ sent to /login
 //   • customer    → /admin/*                            ⇒ sent to /
 //   • signed in   → /login, /register, /forgot-password ⇒ sent to /admin or /dashboard
 //
@@ -26,7 +26,13 @@ import { decryptSession } from "@/lib/auth";
 const MAINTENANCE_MODE = process.env.MAINTENANCE_MODE === "true";
 
 // Signed-out users are redirected away from these.
-const PROTECTED_PREFIXES = ["/dashboard", "/checkout"];
+//
+// /checkout is deliberately NOT here. A guest who has picked a product is the
+// worst possible person to bounce to a login page, so checkout hosts its own
+// inline account step instead (see app/checkout/page.js) and a visitor is
+// allowed to reach it signed out. Nothing is weakened by that: POST /api/orders
+// still refuses an anonymous request, which is where the boundary actually is.
+const PROTECTED_PREFIXES = ["/dashboard"];
 
 // Additionally require role === "ADMIN".
 const ADMIN_PREFIXES = ["/admin"];

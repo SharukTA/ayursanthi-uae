@@ -14,6 +14,7 @@ import {
   Menu,
   X,
   History,
+  Users,
 } from "lucide-react";
 import { clearGuestCart, notifyCartChanged } from "@/lib/cart-client";
 
@@ -21,9 +22,16 @@ const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, exact: true },
   { href: "/dashboard/profile", label: "My Profile", icon: User },
   { href: "/dashboard/orders", label: "My Orders", icon: ShoppingBag },
+  // Customers only — staff accounts are not in the affiliate program.
+  { href: "/dashboard/referrals", label: "My Referrals", icon: Users, customerOnly: true },
   { href: "/dashboard/browsing-history", label: "Browsing History", icon: History },
   { href: "/dashboard/change-password", label: "Change Password", icon: KeyRound },
 ];
+
+/** The nav this account should see: staff-only entries filtered out. */
+function visibleNavItems(session) {
+  return navItems.filter((item) => !item.customerOnly || session?.role !== "ADMIN");
+}
 
 function SidebarBody({ session, pathname, onLogout, onLinkClick }) {
   return (
@@ -46,7 +54,7 @@ function SidebarBody({ session, pathname, onLogout, onLinkClick }) {
 
       {/* Navigation */}
       <nav className="mt-3 rounded-md border border-border bg-white shadow-sm overflow-hidden">
-        {navItems.map((item) => {
+        {visibleNavItems(session).map((item) => {
           const Icon = item.icon;
           const isActive = item.exact
             ? pathname === item.href
@@ -85,10 +93,11 @@ export function DashboardSidebar({ session }) {
   const pathname = usePathname();
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const items = visibleNavItems(session);
   const activeItem =
-    navItems.find((item) =>
+    items.find((item) =>
       item.exact ? pathname === item.href : pathname.startsWith(item.href)
-    ) ?? navItems[0];
+    ) ?? items[0];
 
   // Close drawer on route change
   useEffect(() => {

@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { ProductActions } from "@/components/ProductActions";
 import { ProductGallery } from "@/components/ProductGallery";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
-import { DeliveryEstimator } from "@/components/DeliveryEstimator";
+import { DeliveryInfo } from "@/components/DeliveryInfo";
 import { OffersBox } from "@/components/OffersBox";
 import { AnimatedHeading, AnimatedReveal } from "@/components/AnimatedText";
 import { ProductCard, RatingStars, summarizeReviews } from "@/components/ProductCard";
@@ -297,9 +297,13 @@ export default async function ProductDetailPage({ params }) {
                   <span className="font-bold">{product.netQuantity}</span>
                 </p>
               ) : null}
-              <p className="mt-2 text-xs font-medium text-[#565959]">
-                SKU: <span className="font-mono">{product.sku}</span>
-              </p>
+              {/* SKU is optional — a product with no catalogue code simply
+                  shows no SKU line rather than an empty "SKU:" label. */}
+              {product.sku ? (
+                <p className="mt-2 text-xs font-medium text-[#565959]">
+                  SKU: <span className="font-mono">{product.sku}</span>
+                </p>
+              ) : null}
             </div>
 
             {/* Price Frame */}
@@ -370,8 +374,9 @@ export default async function ProductDetailPage({ params }) {
               Download details as PDF
             </a>
 
-            {/* Delivery estimator — pincode → estimated window + Cash on Delivery. */}
-            <DeliveryEstimator />
+            {/* Delivery facts — courier, Cash on Delivery, status emails. No
+                date estimate: an external courier owns the schedule. */}
+            <DeliveryInfo />
 
             {/* Value Badges */}
             <div className="mt-8 grid gap-4 border-t border-slate-100 pt-6 sm:grid-cols-3">

@@ -4,7 +4,8 @@ import {
   cleanString,
   jsonError,
   prismaErrorResponse,
-  readBoolean,  readInteger,
+  readBoolean,
+  readInteger,
   readMoney,
   requireAdmin,
   resolveCategoryId,
@@ -133,14 +134,10 @@ export async function PATCH(request, { params }) {
       });
     }
 
+    // SKU is optional: an empty value clears it back to "no code" rather than
+    // being refused, so a code entered by mistake can be taken off again.
     if ("sku" in body) {
-      const sku = cleanString(body.sku);
-
-      if (!sku) {
-        return jsonError("Product SKU cannot be empty.");
-      }
-
-      data.sku = sku;
+      data.sku = cleanString(body.sku);
     }
 
     if ("shortDescription" in body) {

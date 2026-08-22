@@ -2,24 +2,29 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { KeyRound, Loader2, Eye, EyeOff, CheckCircle2 } from "lucide-react";
+import { KeyRound, Loader2, CheckCircle2 } from "lucide-react";
 import { FadeIn, PageReveal } from "@/components/Animated";
+import { PasswordField } from "@/components/PasswordField";
 import { Button } from "@/components/ui/button";
+import { PASSWORD_MIN_LENGTH, validatePassword } from "@/lib/validation";
 
 export default function ChangePasswordPage() {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [saving, setSaving] = useState(false);
-  const [showCurrent, setShowCurrent] = useState(false);
-  const [showNew, setShowNew] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
   const [success, setSuccess] = useState(false);
 
+  // Graded against the same validatePassword the API enforces, so the bar can
+  // never read "Good" for a password the server is about to reject.
   const passwordStrength = () => {
     if (!newPassword) return null;
-    if (newPassword.length < 6) return { label: "Too short", color: "bg-rose-500", width: "w-1/4" };
-    if (newPassword.length < 8) return { label: "Weak", color: "bg-amber-500", width: "w-2/4" };
+    if (newPassword.length < PASSWORD_MIN_LENGTH) {
+      return { label: "Too short", color: "bg-rose-500", width: "w-1/4" };
+    }
+    if (validatePassword(newPassword)) {
+      return { label: "Weak", color: "bg-amber-500", width: "w-2/4" };
+    }
     if (newPassword.length < 12) return { label: "Good", color: "bg-indigo-500", width: "w-3/4" };
     return { label: "Strong", color: "bg-emerald-500", width: "w-full" };
   };
@@ -35,8 +40,9 @@ export default function ChangePasswordPage() {
       return;
     }
 
-    if (newPassword.length < 6) {
-      toast.error("Password must be at least 6 characters.");
+    const passwordError = validatePassword(newPassword);
+    if (passwordError) {
+      toast.error(passwordError);
       return;
     }
 
@@ -98,47 +104,29 @@ export default function ChangePasswordPage() {
           {/* Current password */}
           <label className="grid gap-2 text-xs font-semibold text-[#0f1111]">
             Current Password
-            <div className="relative">
-              <input
-                type={showCurrent ? "text" : "password"}
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                required
-                disabled={saving}
-                placeholder="Enter your current password"
-                className="w-full min-h-11 rounded border border-[#d5d9d9] bg-white px-3 pr-10 text-sm font-normal text-[#0f1111] placeholder:text-[#565959] outline-none transition focus:border-[#007185] focus:ring-4 focus:ring-[#007185]/25 disabled:opacity-60"
-              />
-              <button
-                type="button"
-                onClick={() => setShowCurrent(!showCurrent)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#565959] hover:text-[#007185] transition"
-              >
-                {showCurrent ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-              </button>
-            </div>
+            <PasswordField
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              required
+              disabled={saving}
+              autoComplete="current-password"
+              placeholder="Enter your current password"
+              className="w-full min-h-11 rounded border border-[#d5d9d9] bg-white px-3 text-sm font-normal text-[#0f1111] placeholder:text-[#565959] outline-none transition focus:border-[#007185] focus:ring-4 focus:ring-[#007185]/25 disabled:opacity-60"
+            />
           </label>
 
           {/* New password */}
           <label className="grid gap-2 text-xs font-semibold text-[#0f1111]">
             New Password
-            <div className="relative">
-              <input
-                type={showNew ? "text" : "password"}
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                required
-                disabled={saving}
-                placeholder="Minimum 6 characters"
-                className="w-full min-h-11 rounded border border-[#d5d9d9] bg-white px-3 pr-10 text-sm font-normal text-[#0f1111] placeholder:text-[#565959] outline-none transition focus:border-[#007185] focus:ring-4 focus:ring-[#007185]/25 disabled:opacity-60"
-              />
-              <button
-                type="button"
-                onClick={() => setShowNew(!showNew)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#565959] hover:text-[#007185] transition"
-              >
-                {showNew ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-              </button>
-            </div>
+            <PasswordField
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              required
+              disabled={saving}
+              autoComplete="new-password"
+              placeholder={`At least ${PASSWORD_MIN_LENGTH} characters, with a letter and a number`}
+              className="w-full min-h-11 rounded border border-[#d5d9d9] bg-white px-3 text-sm font-normal text-[#0f1111] placeholder:text-[#565959] outline-none transition focus:border-[#007185] focus:ring-4 focus:ring-[#007185]/25 disabled:opacity-60"
+            />
             {/* Strength indicator */}
             {strength && (
               <div className="mt-0.5 flex items-center gap-2">
@@ -157,30 +145,21 @@ export default function ChangePasswordPage() {
           {/* Confirm password */}
           <label className="grid gap-2 text-xs font-semibold text-[#0f1111]">
             Confirm New Password
-            <div className="relative">
-              <input
-                type={showConfirm ? "text" : "password"}
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                required
-                disabled={saving}
-                placeholder="Repeat your new password"
-                className={`w-full min-h-11 rounded border bg-white px-3 pr-10 text-sm font-normal text-[#0f1111] placeholder:text-[#565959] outline-none transition focus:ring-4 focus:ring-[#007185]/25 disabled:opacity-60 ${
-                  confirmPassword.length > 0
-                    ? passwordsMatch
-                      ? "border-[#adb1b8] focus:border-[#007185]"
-                      : "border-rose-500 focus:border-rose-600"
-                    : "border-[#d5d9d9] focus:border-[#007185]"
-                }`}
-              />
-              <button
-                type="button"
-                onClick={() => setShowConfirm(!showConfirm)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#565959] hover:text-[#007185] transition"
-              >
-                {showConfirm ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-              </button>
-            </div>
+            <PasswordField
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              required
+              disabled={saving}
+              autoComplete="new-password"
+              placeholder="Repeat your new password"
+              className={`w-full min-h-11 rounded border bg-white px-3 text-sm font-normal text-[#0f1111] placeholder:text-[#565959] outline-none transition focus:ring-4 focus:ring-[#007185]/25 disabled:opacity-60 ${
+                confirmPassword.length > 0
+                  ? passwordsMatch
+                    ? "border-[#adb1b8] focus:border-[#007185]"
+                    : "border-rose-500 focus:border-rose-600"
+                  : "border-[#d5d9d9] focus:border-[#007185]"
+              }`}
+            />
             {confirmPassword.length > 0 && !passwordsMatch && (
               <p className="text-[11px] font-medium text-rose-600">Passwords do not match.</p>
             )}

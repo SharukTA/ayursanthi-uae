@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { formatMoney, getBrandContext } from "@/lib/email";
 import { getSiteSettings } from "@/lib/settings";
 import { OrderInvoiceDocument } from "@/components/OrderInvoiceDocument";
+import { formatAddressLines } from "@/lib/address";
 
 /**
  * Builds the commercial invoice for an order.
@@ -25,17 +26,13 @@ const PAYMENT_STATUS_COPY = {
   REFUNDED: "Refunded",
 };
 
-/** Flatten the stored address snapshot into printable lines. */
+/**
+ * Flatten the stored address snapshot into printable lines. An order with no
+ * snapshot at all still has to render, hence the em-dash placeholder.
+ */
 function addressLines(snapshot) {
-  if (!snapshot || typeof snapshot !== "object") return ["—"];
-  return [
-    snapshot.fullName,
-    snapshot.line1,
-    snapshot.line2,
-    [snapshot.city, snapshot.state].filter(Boolean).join(", "),
-    [snapshot.postalCode, snapshot.country].filter(Boolean).join(" "),
-    snapshot.phone ? `Phone: ${snapshot.phone}` : null,
-  ].filter(Boolean);
+  const lines = formatAddressLines(snapshot);
+  return lines.length > 0 ? lines : ["—"];
 }
 
 /**

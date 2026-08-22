@@ -2,8 +2,7 @@ import { getSession } from "@/lib/auth";
 import { placeCodOrder } from "@/lib/checkout";
 import { sendNewOrderAdminEmail, sendOrderPlacedEmail } from "@/lib/email-orders";
 import { queueEmail } from "@/lib/email-queue";
-import { validatePhone } from "@/lib/validation";
-import { countryUsesPostalCode } from "@/lib/geo/postal";
+import { validateShippingAddress } from "@/lib/address";
 
 export const runtime = "nodejs";
 
@@ -30,38 +29,27 @@ export async function POST(request) {
     }
 
     const body = await request.json();
-    const { cart, shippingAddress } = body;
+    const { cart, shippingAddress, cartSource } = body;
+
+    // Which list the shopper checked out. Only "account" — the saved cart —
+    // gets its purchased lines removed; "guest" (a browser cart built while
+    // signed out) and "buynow" leave the saved cart exactly as it was. Nothing
+    // security-sensitive rides on this: the worst a bad value can do is leave a
+    // stale line in the shopper's own cart, so an unknown value falls back to
+    // the historical behaviour.
 
     if (!cart || !Array.isArray(cart) || cart.length === 0) {
       return Response.json({ message: "Your cart is empty." }, { status: 400 });
     }
 
-    // The postal code is only required where the country actually has one — the
-    // UAE has no postal-code system, so demanding one here would reject every
-    // genuine local address. Mirrors the checkout form; see lib/geo/postal.js.
-    const postalRequired = countryUsesPostalCode(shippingAddress?.countryCode);
-
-    if (
-      !shippingAddress ||
-      !shippingAddress.fullName ||
-      !shippingAddress.phone ||
-      !shippingAddress.line1 ||
-      !shippingAddress.city ||
-      !shippingAddress.state ||
-      (postalRequired && !shippingAddress.postalCode) ||
-      !shippingAddress.country
-    ) {
-      return Response.json(
-        { message: "Please provide all required shipping address fields." },
-        { status: 400 }
-      );
-    }
-
-    // Re-validate the phone server-side so a hand-crafted request can't store an
-    // unusable delivery contact number — the courier needs it to collect cash.
-    const phoneError = validatePhone(shippingAddress.phone, { required: true });
-    if (phoneError) {
-      return Response.json({ message: phoneError }, { status: 400 });
+    // Re-validated server-side against the very rules the checkout form used,
+    // so a hand-crafted request can't store an address nobody can deliver to —
+    // no contact number the courier can dial, no building, no emirate. There is
+    // no postal code in the shape at all: the UAE has no postal-code system.
+    // See lib/address.js.
+    const addressError = validateShippingAddress(shippingAddress);
+    if (addressError) {
+      return Response.json({ message: addressError }, { status: 400 });
     }
 
     const result = await placeCodOrder({
@@ -71,6 +59,7 @@ export async function POST(request) {
         quantity: item.quantity,
       })),
       shippingAddress,
+      clearAccountCart: cartSource !== "guest" && cartSource !== "buynow",
     });
 
     if (result.status !== "created") {

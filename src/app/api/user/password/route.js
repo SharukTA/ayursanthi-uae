@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { getSession, hashPassword, verifyPassword } from "@/lib/auth";
 import { sendSecurityAlertEmail } from "@/lib/email-security";
 import { queueEmail } from "@/lib/email-queue";
+import { validatePassword } from "@/lib/validation";
 
 export const runtime = "nodejs";
 
@@ -21,11 +22,11 @@ export async function PUT(request) {
     );
   }
 
-  if (newPassword.length < 6) {
-    return Response.json(
-      { message: "New password must be at least 6 characters." },
-      { status: 400 }
-    );
+  // The shared rule, not a local one: changing a password must not be a way to
+  // land on something weaker than register or reset would have allowed.
+  const passwordError = validatePassword(newPassword);
+  if (passwordError) {
+    return Response.json({ message: passwordError }, { status: 400 });
   }
 
   // name/email are read here purely so the security alert below can be sent

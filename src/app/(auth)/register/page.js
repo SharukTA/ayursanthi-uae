@@ -1,13 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { Logo3D } from "@/components/Logo3D";
+import { PasswordField } from "@/components/PasswordField";
 import { PhoneField } from "@/components/PhoneField";
-import { validateRegistration } from "@/lib/validation";
+import {
+  validateRegistration,
+  validateReferralCode,
+  normalizeReferralCode,
+  REFERRAL_CODE_MAX_LENGTH,
+} from "@/lib/validation";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -15,8 +21,21 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
+  // Affiliate ID of the customer who referred them. Optional, and offered only
+  // here — the inline signup inside checkout deliberately leaves it out so a
+  // purchase in progress is never held up by a code someone has to go and find.
+  const [referralCode, setReferralCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
+
+  // Prefill from a shared link (/register?ref=SHAR7K2D), which is what the
+  // "Copy link" button on /dashboard/referrals hands out. Read from the URL in
+  // an effect rather than with useSearchParams: this page is one big client
+  // component, so that hook would force the whole route out of prerendering.
+  useEffect(() => {
+    const ref = new URLSearchParams(window.location.search).get("ref");
+    if (ref) setReferralCode(normalizeReferralCode(ref));
+  }, []);
 
   // Clear a field's error as soon as the user edits it.
   const clearError = (field) =>
@@ -26,6 +45,10 @@ export default function RegisterPage() {
     e.preventDefault();
 
     const fieldErrors = validateRegistration({ name, email, phone, password });
+    // Shape only. Whether the ID belongs to a real account is decided by the
+    // server, which is the only side that can look it up.
+    const referralError = validateReferralCode(referralCode);
+    if (referralError) fieldErrors.referralCode = referralError;
     if (Object.keys(fieldErrors).length > 0) {
       setErrors(fieldErrors);
       toast.error(Object.values(fieldErrors)[0]);
@@ -43,8 +66,9 @@ export default function RegisterPage() {
         body: JSON.stringify({
           name: name.trim(),
           email: email.trim(),
-          phone: phone.trim() || undefined,
+          phone: phone.trim(),
           password,
+          referralCode: normalizeReferralCode(referralCode),
         }),
       });
 
@@ -145,7 +169,7 @@ export default function RegisterPage() {
           </label>
 
           <label className="mt-4 grid gap-2 text-sm font-semibold text-slate-900">
-            <span>Mobile number <span className="font-normal text-slate-400">(optional)</span></span>
+            <span>Mobile number <span className="text-red-600">*</span></span>
             <PhoneField
               name="phone"
               value={phone}
@@ -154,6 +178,7 @@ export default function RegisterPage() {
                 clearError("phone");
               }}
               disabled={loading}
+              required
               error={!!errors.phone}
               defaultCountry="AE"
               placeholder="Mobile number"
@@ -165,8 +190,7 @@ export default function RegisterPage() {
 
           <label className="mt-4 grid gap-2 text-sm font-semibold text-slate-900">
             <span>Password <span className="text-red-600">*</span></span>
-            <input
-              type="password"
+            <PasswordField
               name="password"
               value={password}
               onChange={(e) => {
@@ -175,6 +199,7 @@ export default function RegisterPage() {
               }}
               disabled={loading}
               required
+              autoComplete="new-password"
               aria-invalid={errors.password ? "true" : undefined}
               placeholder="At least 8 characters, with a letter and number"
               className={`min-h-12 w-full rounded-md border bg-white px-4 text-sm font-normal text-slate-900 outline-none transition focus:ring-4 disabled:opacity-60 ${
@@ -182,9 +207,48 @@ export default function RegisterPage() {
                   ? "border-red-500 focus:border-red-500 focus:ring-red-500/15"
                   : "border-slate-300 focus:border-[#007185] focus:ring-[#007185]/25"
               }`}
+              buttonClassName="text-slate-500 hover:text-slate-900"
             />
             {errors.password && (
               <span className="text-xs font-normal text-red-600">{errors.password}</span>
+            )}
+          </label>
+
+          <label className="mt-4 grid gap-2 text-sm font-semibold text-slate-900">
+            <span>
+              Affiliate ID{" "}
+              <span className="font-normal text-slate-500">(optional)</span>
+            </span>
+            <input
+              type="text"
+              name="referralCode"
+              value={referralCode}
+              onChange={(e) => {
+                // Normalise as they type, so what they see is exactly
+                // what gets looked up.
+                setReferralCode(normalizeReferralCode(e.target.value));
+                clearError("referralCode");
+              }}
+              disabled={loading}
+              maxLength={REFERRAL_CODE_MAX_LENGTH}
+              autoComplete="off"
+              autoCapitalize="characters"
+              spellCheck={false}
+              aria-invalid={errors.referralCode ? "true" : undefined}
+              aria-describedby="referral-code-hint"
+              placeholder="e.g. SHAR7K2D"
+              className={`min-h-12 w-full rounded-md border bg-white px-4 font-mono text-sm font-normal uppercase tracking-widest text-slate-900 outline-none transition focus:ring-4 disabled:opacity-60 ${
+                errors.referralCode
+                  ? "border-red-500 focus:border-red-500 focus:ring-red-500/15"
+                  : "border-slate-300 focus:border-[#007185] focus:ring-[#007185]/25"
+              }`}
+            />
+            {errors.referralCode ? (
+              <span className="text-xs font-normal text-red-600">{errors.referralCode}</span>
+            ) : (
+              <span id="referral-code-hint" className="text-xs font-normal text-slate-500">
+                Referred by someone? Enter their affiliate ID to be added to their referrals.
+              </span>
             )}
           </label>
 

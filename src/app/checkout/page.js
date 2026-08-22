@@ -15,15 +15,12 @@ import {
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { CheckoutBanner } from "@/components/CheckoutBanner";
+import { PasswordField } from "@/components/PasswordField";
 import { PhoneField } from "@/components/PhoneField";
 import { CountrySelect, StateField } from "@/components/AddressFields";
-import { validatePhone } from "@/lib/validation";
+import { validateRegistration } from "@/lib/validation";
 import { getCountry } from "@/lib/geo/countries";
-import {
-  countryUsesPostalCode,
-  postalCodeLabel,
-  subdivisionLabel,
-} from "@/lib/geo/postal";
+import { formatAddressSummary, validateShippingAddress } from "@/lib/address";
 import {
   calculateOrderTotals,
   FREE_SHIPPING_THRESHOLD,
@@ -58,24 +55,23 @@ const FIELD =
 
 const FIELD_LABEL = "grid gap-1 min-w-0 text-[13px] font-bold text-[#0f1111]";
 
+// The same field, with its contents pushed to the bottom of the grid cell. The
+// address labels are long enough that some wrap to two lines ("Building Name /
+// Tower / Villa Community"); without this, the input under a wrapped label sits
+// lower than the one beside it and the row looks broken.
+const ADDRESS_FIELD_LABEL = `${FIELD_LABEL} content-end`;
+
+// <PhoneField> styles its own shell and inner input, so it needs FIELD split in
+// two to match the plain inputs around it.
+const PHONE_SHELL =
+  "h-9 w-full bg-white shadow-[inset_0_1px_2px_rgba(15,17,17,0.15)] transition focus-within:border-[#e77600] focus-within:shadow-[0_0_3px_2px_rgba(228,121,17,0.5)]";
+const PHONE_INPUT = "px-3 text-[13px] text-[#0f1111]";
+
 // The yellow primary CTA. A bare <button> on purpose — the shared <Button>
 // variants are themed for dark surfaces, and the global CTA rules in globals.css
 // only rewrite emerald/white buttons, so this keeps full control of the look.
 const YELLOW_CTA =
   "inline-flex w-full items-center justify-center gap-2 rounded-lg border border-[#fcd200] bg-[#ffd814] px-4 text-[13px] font-bold text-[#0f1111] shadow-[0_2px_5px_rgba(15,17,17,0.15)] transition hover:bg-[#f7ca00] disabled:cursor-not-allowed disabled:opacity-60";
-
-// The site already presents delivery as a plain client-side estimate (see
-// DeliveryEstimator) — the review step reuses the same 3–6 day window so both
-// screens promise the shopper the same thing.
-function estimatedDeliveryWindow() {
-  const start = new Date();
-  start.setDate(start.getDate() + 3);
-  const end = new Date();
-  end.setDate(end.getDate() + 6);
-  const fmt = (d) =>
-    d.toLocaleDateString("en-AE", { weekday: "short", day: "numeric", month: "short" });
-  return `${fmt(start)} – ${fmt(end)}`;
-}
 
 // Alias kept so the JSX below reads the same; the formatting itself is shared
 // with the cart, the invoice and the order emails via lib/currency.js.
@@ -110,30 +106,69 @@ export default function CheckoutPage() {
   const [session, setSession] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
 
+  // ── The inline account step (guests only) ──────────────────────────────────
+  // A signed-out shopper authenticates here rather than being sent to /login,
+  // so a purchase never leaves this page. Both tabs post to the very same
+  // endpoints /login and /register use, which is what keeps validation, password
+  // hashing, the welcome email and the session cookie identical no matter where
+  // the account was created.
+  const [authMode, setAuthMode] = useState("register");
+  const [authBusy, setAuthBusy] = useState(false);
+  const [accountErrors, setAccountErrors] = useState({});
+
+  // "I'm new here" tab. There is no referral field here on purpose — that
+  // belongs to the full signup on /register, not to a mid-purchase form.
+  const [acctName, setAcctName] = useState("");
+  const [acctEmail, setAcctEmail] = useState("");
+  const [acctPhone, setAcctPhone] = useState("");
+  const [acctPassword, setAcctPassword] = useState("");
+
+  // "I already have an account" tab.
+  const [loginIdentifier, setLoginIdentifier] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+
+  // The account step sits above the address step, so the name and mobile typed
+  // there seed the shipping fields — until the shopper edits those directly, at
+  // which point the mirror stops rather than overwriting their correction.
+  const shippingNameDirty = useRef(false);
+  const shippingPhoneDirty = useRef(false);
+  const shippingEmailDirty = useRef(false);
+
   const [cart, setCart] = useState([]);
   const [cartLoaded, setCartLoaded] = useState(false);
+
+  // Which list the basket on screen came out of: "account" (the saved cart),
+  // "guest" (a cart built in this browser while signed out) or "buynow" (a
+  // single item that belongs to no cart at all). A purchase empties only the
+  // list it came from, so buying a browser cart cannot delete the saved cart's
+  // items — and vice versa — even when both name the same product.
+  const [basketSource, setBasketSource] = useState(null);
 
   // "Buy Now" from a product page checks out a single item independently of the
   // shopping cart. When set, this checkout totals only the buy-now item and
   // leaves the cart (and its total) completely untouched.
   const [buyNowMode, setBuyNowMode] = useState(false);
 
-  // Address Fields. `country` is an ISO2 code, defaulting to the UAE — the
-  // store's home market, so the overwhelming majority of shoppers never touch
-  // the selector. The snapshot sent to the server carries the readable country
-  // name plus the code.
+  // Address fields, declared in the order the form asks for them. `country` is
+  // an ISO2 code defaulting to the UAE — the store's home market, so the
+  // overwhelming majority of shoppers never touch the selector. The snapshot
+  // sent to the server carries the readable country name plus the code.
+  //
+  // There is deliberately no postal-code field: the UAE has no postal-code
+  // system, and the building / community / villa number / landmark set below is
+  // what a courier here actually navigates by. See lib/address.js.
   const [fullName, setFullName] = useState("");
+  const [emirate, setEmirate] = useState("");
+  const [area, setArea] = useState("");
   const [phone, setPhone] = useState("");
-  const [line1, setLine1] = useState("");
-  const [line2, setLine2] = useState("");
-  const [city, setCity] = useState("");
+  const [phone2, setPhone2] = useState("");
+  const [building, setBuilding] = useState("");
+  const [street, setStreet] = useState("");
+  const [unit, setUnit] = useState("");
+  const [landmark, setLandmark] = useState("");
   const [country, setCountry] = useState("AE");
-  const [state, setState] = useState("");
-  const [postalCode, setPostalCode] = useState("");
-
-  // The UAE and several other markets have no postal codes, so the field is
-  // optional there. The order API applies the same rule server-side.
-  const needsPostalCode = countryUsesPostalCode(country);
+  const [email, setEmail] = useState("");
+  const [whatsapp, setWhatsapp] = useState("");
 
   // Cash on Delivery is currently the only way to pay — no online gateway.
   const [paymentMethod, setPaymentMethod] = useState("COD");
@@ -161,6 +196,9 @@ export default function CheckoutPage() {
         if (data.loggedIn) {
           setSession(data.session);
           setFullName(data.session.name || "");
+          // The account's own address is the obvious place to send the order
+          // confirmation; it stays editable for this particular delivery.
+          setEmail(data.session.email || "");
         }
       } catch (e) {
         console.error("Auth check failed.");
@@ -181,13 +219,14 @@ export default function CheckoutPage() {
         if (isBuyNow) {
           const item = readBuyNowItem();
           setCart(item ? [item] : []);
+          setBasketSource("buynow");
           return;
         }
-        // Checkout is gated on being signed in, so in practice this is always
-        // the account cart — read live from the database, with any cart built
-        // while signed out already merged in (see lib/cart-client.js).
-        const { items } = await getCart();
+        // Either the saved account cart or, for a signed-out visitor, the cart
+        // in their own browser — getCart() reports which one it handed back.
+        const { items, source } = await getCart();
         setCart(items);
+        setBasketSource(source === "guest" ? "guest" : "account");
       } catch {
         console.error("Failed to load cart.");
       } finally {
@@ -242,49 +281,206 @@ export default function CheckoutPage() {
     bookingItems,
     freeShipThreshold
   );
-  const deliveryWindow = estimatedDeliveryWindow();
+
+  // Any in-flight work that must lock the form — creating the account and
+  // placing the order are two phases of the same click.
+  const busy = submitting || authBusy;
+
+  // Guests get an extra step 1 (their account), which pushes the rest down one.
+  const stepNo = (n) => String(session ? n : n + 1);
+
+  // Server-side field errors from the account step, shown under their input.
+  const fieldError = (field) =>
+    accountErrors[field] ? (
+      <span className="text-[12px] font-normal text-[#c40000]">{accountErrors[field]}</span>
+    ) : null;
 
   const buildShippingAddress = () => ({
     fullName: fullName.trim(),
+    emirate: emirate.trim(),
+    area: area.trim(),
     phone: phone.trim(),
-    line1: line1.trim(),
-    line2: line2.trim() || undefined,
-    city: city.trim(),
-    state: state.trim(),
-    postalCode: postalCode.trim(),
+    phone2: phone2.trim() || undefined,
+    building: building.trim(),
+    street: street.trim(),
+    unit: unit.trim(),
+    landmark: landmark.trim(),
     country: getCountry(country)?.name || "",
     countryCode: country,
+    email: email.trim(),
+    whatsapp: whatsapp.trim(),
   });
 
-  const onOrderSuccess = (data) => {
+  const clearAccountError = (field) =>
+    setAccountErrors((prev) => (prev[field] ? { ...prev, [field]: undefined } : prev));
+
+  /**
+   * Create an account for a guest on the "I'm new here" tab.
+   *
+   * Posts to the same /api/auth/register the standalone signup page uses, so the
+   * user row, the password rules, the welcome email and the session cookie are
+   * all exactly what a normal signup would produce.
+   *
+   * @returns {Promise<object|null>} the new user, or null if it could not be created
+   */
+  const registerGuest = async () => {
+    const fieldErrors = validateRegistration({
+      name: acctName,
+      email: acctEmail,
+      phone: acctPhone,
+      password: acctPassword,
+    });
+    if (Object.keys(fieldErrors).length > 0) {
+      setAccountErrors(fieldErrors);
+      toast.error(Object.values(fieldErrors)[0]);
+      return null;
+    }
+    setAccountErrors({});
+
+    const res = await fetch("/api/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: acctName.trim(),
+        email: acctEmail.trim(),
+        phone: acctPhone.trim(),
+        password: acctPassword,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      if (data.errors && typeof data.errors === "object") setAccountErrors(data.errors);
+
+      // They are already a customer. Carrying them over to the sign-in tab with
+      // the identifier prefilled is the difference between a one-click recovery
+      // and a dead end halfway through a purchase.
+      if (/already registered/i.test(data.message || "")) {
+        setAuthMode("login");
+        setLoginIdentifier(data.errors?.email ? acctEmail.trim() : acctPhone.trim());
+        setAccountErrors({});
+        toast.error(`${data.message} Please sign in to finish your order.`);
+        return null;
+      }
+
+      toast.error(data.message || "Could not create your account.");
+      return null;
+    }
+
+    toast.success("Account created.", {
+      description: data.welcomeEmailSent
+        ? `A welcome letter is on its way to ${acctEmail.trim()}.`
+        : undefined,
+    });
+    return data.user;
+  };
+
+  /** Sign a returning customer in from the "I already have an account" tab. */
+  const loginGuest = async () => {
+    if (!loginIdentifier.trim() || !loginPassword) {
+      toast.error("Please enter both your Login ID and password.");
+      return null;
+    }
+
+    const res = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ identifier: loginIdentifier, password: loginPassword }),
+    });
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      toast.error(data.message || "Invalid login credentials.");
+      return null;
+    }
+
+    toast.success(`Welcome back, ${data.user?.name || "there"}.`);
+    return data.user;
+  };
+
+  /**
+   * Run the account step for a guest: register, or sign in.
+   *
+   * Deliberately does NOT re-read the cart afterwards. What the shopper is
+   * buying was decided before they identified themselves — it is the basket
+   * already on screen — and the order is sent from that frozen list, so signing
+   * in can never add, remove or re-total a line behind their back.
+   *
+   * That means a cart built while signed out is checked out on its own even when
+   * the account has its own saved cart. The two are not combined here: the saved
+   * cart is left untouched for later, and whatever is left in the browser cart
+   * after this purchase merges the next time the shopper opens /cart.
+   *
+   * @returns {Promise<boolean>} true if the order may be placed on this click
+   */
+  const completeAccountStep = async () => {
+    setAuthBusy(true);
+    try {
+      const user = authMode === "register" ? await registerGuest() : await loginGuest();
+      if (!user) return false;
+
+      setSession({
+        userId: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      });
+
+      // An admin who signs in here cannot buy anything — the orders API answers
+      // 403. Setting the session above swaps the page over to the admin notice
+      // instead of letting them submit into a rejection they can't act on. No
+      // order follows, so the header can be told straight away.
+      if (user.role === "ADMIN") {
+        window.dispatchEvent(new Event("authUpdate"));
+        return false;
+      }
+
+      return true;
+    } catch {
+      toast.error("We could not set up your account. Please try again.");
+      return false;
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
+  const onOrderSuccess = (data, purchasedItems) => {
     toast.success("Order Placed Successfully!");
-    if (buyNowMode) {
-      // Buy-now never touched the cart — just discard the one-off item.
+
+    // Tidy up only the list that was actually bought from. Every other basket
+    // the shopper owns is left exactly as they left it.
+    if (basketSource === "buynow") {
+      // Belongs to no cart at all — just discard the one-off item.
       clearBuyNowItem();
       notifyCartChanged();
+    } else if (basketSource === "guest") {
+      // Bought out of this browser's cart: drop those lines from it. The saved
+      // account cart is untouched, and whatever is left here merges into the
+      // account the next time the shopper opens /cart.
+      finalizePurchase(purchasedItems.map((item) => item.productId));
     } else {
-      // The account cart already had the purchased lines removed inside the
-      // order transaction (lib/checkout.js), and anything left unticked was
-      // deliberately kept. This only prunes a browser copy.
-      finalizePurchase(bookingItems.map((item) => item.productId));
+      // Bought out of the saved cart, whose lines the order transaction has
+      // already removed (lib/checkout.js); anything left unticked was kept on
+      // purpose. A browser cart, if one somehow exists, is a different basket
+      // and is deliberately left alone.
+      notifyCartChanged();
     }
     setPlacedOrderDetails({
       orderNumber: data.orderNumber,
       totalAmount: total,
-      address: [line1, city, state].filter(Boolean).join(", ") + (postalCode ? ` - ${postalCode}` : ""),
-      delivery: deliveryWindow,
+      address: formatAddressSummary(buildShippingAddress()),
     });
     setOrderSuccess(true);
   };
 
   // Cash on Delivery: a single call creates the order. Nothing is charged now —
   // the customer pays the courier on delivery.
-  const submitCodOrder = async () => {
+  const submitCodOrder = async (itemsBeingBought) => {
     setSubmitting(true);
     const toastId = toast.loading("Placing your order...");
 
     try {
-      const cartPayload = bookingItems.map((item) => ({
+      const cartPayload = itemsBeingBought.map((item) => ({
         productId: item.productId,
         quantity: item.quantity,
       }));
@@ -295,13 +491,14 @@ export default function CheckoutPage() {
         body: JSON.stringify({
           cart: cartPayload,
           shippingAddress: buildShippingAddress(),
+          cartSource: basketSource,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Could not place your order.");
 
       toast.dismiss(toastId);
-      onOrderSuccess(data);
+      onOrderSuccess(data, itemsBeingBought);
     } catch (error) {
       toast.error(error.message || "Something went wrong placing your order.", { id: toastId });
     } finally {
@@ -309,46 +506,64 @@ export default function CheckoutPage() {
     }
   };
 
-  const handlePlaceOrder = async (e) => {
-    e.preventDefault();
+  // A single click now spans two round trips — create the account, then place
+  // the order. That is a wide enough window for a double-click to run the whole
+  // sequence twice before `busy` has re-rendered the button as disabled, which
+  // would mean two accounts attempted and, worse, two orders. The latch is a ref
+  // because it has to take effect synchronously, which state cannot.
+  const placingRef = useRef(false);
 
-    if (!session) {
-      toast.error("Please login to complete checkout.");
-      return;
-    }
+  const runPlaceOrder = async () => {
+    // Captured before the account step runs. This exact list is what the shopper
+    // is looking at, and it is what gets ordered — identifying yourself is not
+    // allowed to change the basket.
+    const itemsBeingBought = bookingItems;
 
-    if (bookingItems.length === 0) {
+    if (itemsBeingBought.length === 0) {
       toast.error("Please select at least one product to check out.");
       return;
     }
 
-    if (!country) {
-      toast.error("Please select your country.");
+    // Exactly the rules /api/orders re-applies server-side - both sides import
+    // them from lib/address.js, so the form can never accept an address the
+    // server will then turn away.
+    const addressError = validateShippingAddress(buildShippingAddress());
+    if (addressError) {
+      toast.error(addressError);
       return;
     }
 
-    if (
-      !fullName.trim() ||
-      !phone.trim() ||
-      !line1.trim() ||
-      !city.trim() ||
-      !state.trim() ||
-      (needsPostalCode && !postalCode.trim())
-    ) {
-      toast.error("Please complete all shipping address fields.");
-      return;
-    }
-
-    // The phone is required here so the courier has a usable contact number for
-    // the delivery and the cash collection.
-    const phoneError = validatePhone(phone, { required: true });
-    if (phoneError) {
-      toast.error(phoneError);
-      return;
+    // Everything about the order checks out. Only now is the account created
+    // or signed in to — doing it earlier would leave a stray user behind every
+    // time someone abandoned the form at the address step.
+    let signedInHere = false;
+    if (!session) {
+      const readyToOrder = await completeAccountStep();
+      if (!readyToOrder) return;
+      signedInHere = true;
     }
 
     // Cash on Delivery is the only payment option right now.
-    await submitCodOrder();
+    await submitCodOrder(itemsBeingBought);
+
+    // Only now tell the header it has a signed-in shopper. Its cart badge
+    // refreshes on this event, and that refresh merges any browser cart into the
+    // account — a merge that must not be racing the order, or it can land after
+    // the order cleared the purchased lines and put them back. By this point a
+    // successful order has already pruned what was bought from the browser cart,
+    // so the merge that follows only carries what genuinely remains.
+    if (signedInHere) window.dispatchEvent(new Event("authUpdate"));
+  };
+
+  const handlePlaceOrder = async (e) => {
+    e.preventDefault();
+    if (placingRef.current) return;
+    placingRef.current = true;
+    try {
+      await runPlaceOrder();
+    } finally {
+      placingRef.current = false;
+    }
   };
 
   if (!authChecked) {
@@ -361,35 +576,9 @@ export default function CheckoutPage() {
     );
   }
 
-  // Not Logged In screen
-  if (!session) {
-    return (
-      <CheckoutShell>
-        <div className="w-full max-w-md rounded-lg border border-[#d5d9d9] bg-white p-6 text-center shadow-sm">
-          <Lock className="mx-auto size-10 text-[#565959]" />
-          <h2 className="mt-4 text-xl font-bold text-[#0f1111]">Secure Checkout Required</h2>
-          <p className="mt-2 text-[13px] text-[#565959]">
-            You must be logged in as a registered customer to complete your order booking.
-          </p>
-          <div className="mt-6 flex flex-col gap-3">
-            <Link href="/login" className={`${YELLOW_CTA} h-9`}>
-              Log In Account
-              <ChevronRight className="size-4" />
-            </Link>
-            <Link
-              href="/register"
-              className="text-[13px] font-semibold text-[#007185] transition hover:text-[#c7511f] hover:underline"
-            >
-              Create new account instead
-            </Link>
-          </div>
-        </div>
-      </CheckoutShell>
-    );
-  }
-
-  // Admins manage the catalog and cannot book products.
-  if (session.role === "ADMIN") {
+  // Admins manage the catalog and cannot book products. Reached either by an
+  // admin opening /checkout directly, or by one signing in at the account step.
+  if (session?.role === "ADMIN") {
     return (
       <CheckoutShell>
         <div className="w-full max-w-md rounded-lg border border-[#d5d9d9] bg-white p-6 text-center shadow-sm">
@@ -450,12 +639,6 @@ export default function CheckoutPage() {
                 </dd>
               </div>
               <div className="flex justify-between gap-4 py-3">
-                <dt className="shrink-0 text-[#565959]">Estimated delivery</dt>
-                <dd className="text-right font-bold text-[#0f1111]">
-                  {placedOrderDetails.delivery}
-                </dd>
-              </div>
-              <div className="flex justify-between gap-4 py-3">
                 <dt className="shrink-0 text-[#565959]">Shipping to</dt>
                 <dd className="text-right leading-5 text-[#0f1111]">
                   {placedOrderDetails.address}
@@ -509,15 +692,21 @@ export default function CheckoutPage() {
     </>
   );
 
+  // The CTA names both phases of the click, so a guest knows an account is about
+  // to be created before they press it rather than after.
   const placeOrderButton = (
-    <button type="submit" disabled={submitting} className={`${YELLOW_CTA} h-9`}>
-      {submitting ? (
+    <button type="submit" disabled={busy} className={`${YELLOW_CTA} h-9`}>
+      {busy ? (
         <>
           <Loader2 className="size-4 animate-spin" />
-          Placing your order...
+          {authBusy ? "Setting up your account..." : "Placing your order..."}
         </>
-      ) : (
+      ) : session ? (
         "Place your order"
+      ) : authMode === "register" ? (
+        "Create account & place order"
+      ) : (
+        "Sign in & place order"
       )}
     </button>
   );
@@ -582,119 +771,355 @@ export default function CheckoutPage() {
           >
             {/* ─────────── Left column: the numbered checkout steps ─────────── */}
             <div className="min-w-0">
-              {/* Step 1 — Shipping address */}
-              <section className="border-b border-[#e7e7e7] pb-6">
-                <StepHeading step="1" title="Shipping address" />
+              {/* Step 1 (guests only) — Account.
+                  Signed-out shoppers used to be bounced to /login from here,
+                  which is the worst moment to take someone off the page. They
+                  now create an account or sign in inline and carry on. */}
+              {!session && (
+                <section className="border-b border-[#e7e7e7] pb-6">
+                  <StepHeading step="1" title="Your account" />
+                  <p className="mt-1.5 text-[13px] text-[#565959]">
+                    Your order is saved to an account so you can track the delivery
+                    and download the invoice afterwards.
+                  </p>
+
+                  <div role="tablist" aria-label="Account" className="mt-4 flex gap-2">
+                    {[
+                      { id: "register", label: "I am new here" },
+                      { id: "login", label: "I already have an account" },
+                    ].map((tab) => (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={authMode === tab.id}
+                        disabled={busy}
+                        onClick={() => {
+                          setAuthMode(tab.id);
+                          setAccountErrors({});
+                        }}
+                        className={`h-9 flex-1 rounded-[3px] border px-2 text-[13px] font-bold transition disabled:opacity-60 sm:flex-none sm:px-5 ${
+                          authMode === tab.id
+                            ? "border-[#e77600] bg-[#fff8f0] text-[#0f1111] shadow-[0_0_3px_1px_rgba(228,121,17,0.35)]"
+                            : "border-[#d5d9d9] bg-white text-[#565959] hover:bg-[#f7fafa]"
+                        }`}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {authMode === "register" ? (
+                    <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                      <label className={FIELD_LABEL}>
+                        Your name *
+                        <input
+                          type="text"
+                          value={acctName}
+                          onChange={(e) => {
+                            setAcctName(e.target.value);
+                            clearAccountError("name");
+                            // Seed the shipping name until they edit it there.
+                            if (!shippingNameDirty.current) setFullName(e.target.value);
+                          }}
+                          disabled={busy}
+                          required
+                          autoComplete="name"
+                          aria-invalid={accountErrors.name ? "true" : undefined}
+                          placeholder="First and last name"
+                          className={FIELD}
+                        />
+                        {fieldError("name")}
+                      </label>
+
+                      <label className={FIELD_LABEL}>
+                        Email *
+                        <input
+                          type="email"
+                          value={acctEmail}
+                          onChange={(e) => {
+                            setAcctEmail(e.target.value);
+                            clearAccountError("email");
+                            // Seed the shipping email until they edit it there.
+                            if (!shippingEmailDirty.current) setEmail(e.target.value);
+                          }}
+                          disabled={busy}
+                          required
+                          autoComplete="email"
+                          aria-invalid={accountErrors.email ? "true" : undefined}
+                          placeholder="you@example.com"
+                          className={FIELD}
+                        />
+                        {fieldError("email")}
+                      </label>
+
+                      <label className={FIELD_LABEL}>
+                        Mobile number *
+                        <PhoneField
+                          value={acctPhone}
+                          onChange={(v) => {
+                            setAcctPhone(v);
+                            clearAccountError("phone");
+                            if (!shippingPhoneDirty.current) setPhone(v);
+                          }}
+                          disabled={busy}
+                          required
+                          error={!!accountErrors.phone}
+                          defaultCountry={country}
+                          placeholder="Mobile number"
+                          borderClassName="border-[#888c8c]"
+                          className={PHONE_SHELL}
+                          inputClassName={PHONE_INPUT}
+                        />
+                        {fieldError("phone")}
+                      </label>
+
+                      <label className={FIELD_LABEL}>
+                        Create a password *
+                        <PasswordField
+                          value={acctPassword}
+                          onChange={(e) => {
+                            setAcctPassword(e.target.value);
+                            clearAccountError("password");
+                          }}
+                          disabled={busy}
+                          required
+                          autoComplete="new-password"
+                          aria-invalid={accountErrors.password ? "true" : undefined}
+                          placeholder="At least 8 characters, with a letter and number"
+                          className={FIELD}
+                        />
+                        {accountErrors.password ? (
+                          fieldError("password")
+                        ) : (
+                          <span className="text-[12px] font-normal text-[#565959]">
+                            You&apos;ll use this to sign in and track this order.
+                          </span>
+                        )}
+                      </label>
+                    </div>
+                  ) : (
+                    <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                      <label className={FIELD_LABEL}>
+                        Email or mobile number *
+                        <input
+                          type="text"
+                          value={loginIdentifier}
+                          onChange={(e) => setLoginIdentifier(e.target.value)}
+                          disabled={busy}
+                          required
+                          autoComplete="username"
+                          placeholder="you@example.com"
+                          className={FIELD}
+                        />
+                      </label>
+
+                      <label className={FIELD_LABEL}>
+                        Password *
+                        <PasswordField
+                          value={loginPassword}
+                          onChange={(e) => setLoginPassword(e.target.value)}
+                          disabled={busy}
+                          required
+                          autoComplete="current-password"
+                          placeholder="Your account password"
+                          className={FIELD}
+                        />
+                        <Link
+                          href="/forgot-password"
+                          className="text-[12px] font-normal text-[#007185] transition hover:text-[#c7511f] hover:underline"
+                        >
+                          Forgot your password?
+                        </Link>
+                      </label>
+                    </div>
+                  )}
+                </section>
+              )}
+
+              {/* Shipping address — step 1 signed in, step 2 for a guest. */}
+              <section
+                className={`border-b border-[#e7e7e7] pb-6 ${session ? "" : "pt-6"}`}
+              >
+                <StepHeading step={stepNo(1)} title="Shipping address" />
 
                 <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                  <label className={FIELD_LABEL}>
-                    Full name *
+                  <label className={ADDRESS_FIELD_LABEL}>
+                    Full Name *
                     <input
                       type="text"
                       value={fullName}
-                      onChange={(e) => setFullName(e.target.value)}
-                      disabled={submitting}
+                      onChange={(e) => {
+                        shippingNameDirty.current = true;
+                        setFullName(e.target.value);
+                      }}
+                      disabled={busy}
                       required
+                      autoComplete="name"
                       placeholder="Enter recipient name"
                       className={FIELD}
                     />
                   </label>
 
-                  <label className={FIELD_LABEL}>
-                    Mobile number *
+                  {/* The seven emirates for a UAE delivery. Ship anywhere else
+                      and the same control falls back to that country's state
+                      list, or to free text where we have none — geo/states.js. */}
+                  <label className={ADDRESS_FIELD_LABEL}>
+                    Emirate / City *
+                    <StateField
+                      country={country}
+                      value={emirate}
+                      onChange={setEmirate}
+                      disabled={busy}
+                      placeholder="Emirate / City"
+                      className={FIELD}
+                    />
+                  </label>
+
+                  <label className={ADDRESS_FIELD_LABEL}>
+                    Area / District *
+                    <input
+                      type="text"
+                      value={area}
+                      onChange={(e) => setArea(e.target.value)}
+                      disabled={busy}
+                      required
+                      placeholder="e.g. Al Barsha 1, Al Nahda"
+                      className={FIELD}
+                    />
+                  </label>
+
+                  <label className={ADDRESS_FIELD_LABEL}>
+                    Mobile Number (1) *
                     <PhoneField
                       value={phone}
-                      onChange={setPhone}
-                      disabled={submitting}
+                      onChange={(v) => {
+                        shippingPhoneDirty.current = true;
+                        setPhone(v);
+                      }}
+                      disabled={busy}
                       required
                       defaultCountry={country}
-                      placeholder="Enter phone number"
+                      placeholder="Primary mobile number"
                       borderClassName="border-[#888c8c]"
-                      className="h-9 w-full bg-white shadow-[inset_0_1px_2px_rgba(15,17,17,0.15)] transition focus-within:border-[#e77600] focus-within:shadow-[0_0_3px_2px_rgba(228,121,17,0.5)]"
-                      inputClassName="px-3 text-[13px] text-[#0f1111]"
+                      className={PHONE_SHELL}
+                      inputClassName={PHONE_INPUT}
                     />
                   </label>
 
-                  <label className={`${FIELD_LABEL} sm:col-span-2`}>
-                    Flat, House no., Building, Company, Apartment *
-                    <input
-                      type="text"
-                      value={line1}
-                      onChange={(e) => setLine1(e.target.value)}
-                      disabled={submitting}
-                      required
-                      placeholder="Flat, House, Building, Street name"
-                      className={FIELD}
-                    />
-                  </label>
-
-                  <label className={`${FIELD_LABEL} sm:col-span-2`}>
-                    Area, Street, Sector, Village{" "}
+                  {/* A second number is what saves a delivery when the first one
+                      goes unanswered, so it is offered but never demanded. */}
+                  <label className={ADDRESS_FIELD_LABEL}>
+                    Mobile Number (2){" "}
                     <span className="font-normal text-[#565959]">(optional)</span>
+                    <PhoneField
+                      value={phone2}
+                      onChange={setPhone2}
+                      disabled={busy}
+                      defaultCountry={country}
+                      placeholder="Alternate mobile number"
+                      borderClassName="border-[#888c8c]"
+                      className={PHONE_SHELL}
+                      inputClassName={PHONE_INPUT}
+                    />
+                  </label>
+
+                  <label className={ADDRESS_FIELD_LABEL}>
+                    Building Name / Tower / Villa Community *
                     <input
                       type="text"
-                      value={line2}
-                      onChange={(e) => setLine2(e.target.value)}
-                      disabled={submitting}
-                      placeholder="Apartment, Colony, Area, Landmark"
+                      value={building}
+                      onChange={(e) => setBuilding(e.target.value)}
+                      disabled={busy}
+                      required
+                      placeholder="e.g. Marina Heights Tower"
                       className={FIELD}
                     />
                   </label>
 
-                  <label className={FIELD_LABEL}>
-                    Country / Region *
+                  <label className={`${ADDRESS_FIELD_LABEL} sm:col-span-2`}>
+                    Sub-Cluster / Phase / Street Name *
+                    <input
+                      type="text"
+                      value={street}
+                      onChange={(e) => setStreet(e.target.value)}
+                      disabled={busy}
+                      required
+                      placeholder="e.g. Cluster D, Phase 2, Al Wasl Road"
+                      className={FIELD}
+                    />
+                  </label>
+
+                  <label className={ADDRESS_FIELD_LABEL}>
+                    Apartment / Villa / Office Number *
+                    <input
+                      type="text"
+                      value={unit}
+                      onChange={(e) => setUnit(e.target.value)}
+                      disabled={busy}
+                      required
+                      placeholder="e.g. Apt 1204, Villa 27, Office 5"
+                      className={FIELD}
+                    />
+                  </label>
+
+                  <label className={ADDRESS_FIELD_LABEL}>
+                    Nearest Landmark *
+                    <input
+                      type="text"
+                      value={landmark}
+                      onChange={(e) => setLandmark(e.target.value)}
+                      disabled={busy}
+                      required
+                      placeholder="e.g. Mall of the Emirates"
+                      className={FIELD}
+                    />
+                  </label>
+
+                  <label className={ADDRESS_FIELD_LABEL}>
+                    Country *
                     <CountrySelect
                       value={country}
                       onChange={(code) => {
                         setCountry(code);
-                        // The state list changes with the country — clear any
-                        // stale selection so it can't carry over.
-                        setState("");
+                        // The emirate/state list changes with the country, so a
+                        // choice made against the old one must not carry over.
+                        setEmirate("");
                       }}
-                      disabled={submitting}
+                      disabled={busy}
                       buttonClassName={FIELD}
                     />
                   </label>
 
-                  <label className={FIELD_LABEL}>
-                    {subdivisionLabel(country)} *
-                    <StateField
-                      country={country}
-                      value={state}
-                      onChange={setState}
-                      disabled={submitting}
-                      placeholder={subdivisionLabel(country)}
-                      className={FIELD}
-                    />
-                  </label>
-
-                  <label className={FIELD_LABEL}>
-                    Town / City *
+                  <label className={ADDRESS_FIELD_LABEL}>
+                    E mail *
                     <input
-                      type="text"
-                      value={city}
-                      onChange={(e) => setCity(e.target.value)}
-                      disabled={submitting}
+                      type="email"
+                      value={email}
+                      onChange={(e) => {
+                        shippingEmailDirty.current = true;
+                        setEmail(e.target.value);
+                      }}
+                      disabled={busy}
                       required
-                      placeholder="City name"
+                      autoComplete="email"
+                      placeholder="you@example.com"
                       className={FIELD}
                     />
                   </label>
 
-                  {/* The UAE (and the other markets in geo/postal.js) has no
-                      postal-code system, so this stays optional there rather
-                      than blocking a perfectly valid local address. */}
-                  <label className={FIELD_LABEL}>
-                    {postalCodeLabel(country)}
-                    {needsPostalCode ? " *" : " (optional)"}
-                    <input
-                      type="text"
-                      value={postalCode}
-                      onChange={(e) => setPostalCode(e.target.value)}
-                      disabled={submitting}
-                      required={needsPostalCode}
-                      placeholder={postalCodeLabel(country)}
-                      className={FIELD}
+                  <label className={ADDRESS_FIELD_LABEL}>
+                    Whatsapp Number *
+                    <PhoneField
+                      value={whatsapp}
+                      onChange={setWhatsapp}
+                      disabled={busy}
+                      required
+                      defaultCountry={country}
+                      placeholder="WhatsApp number"
+                      borderClassName="border-[#888c8c]"
+                      className={PHONE_SHELL}
+                      inputClassName={PHONE_INPUT}
                     />
                   </label>
                 </div>
@@ -702,7 +1127,7 @@ export default function CheckoutPage() {
 
               {/* Step 2 — Payment method */}
               <section className="border-b border-[#e7e7e7] py-6">
-                <StepHeading step="2" title="Payment method" />
+                <StepHeading step={stepNo(2)} title="Payment method" />
 
                 <div className="mt-4 overflow-hidden rounded-lg border border-[#d5d9d9]">
                   <div className="border-b border-[#e7e7e7] bg-[#f0f2f2] px-4 py-2 text-[13px] font-bold text-[#0f1111]">
@@ -726,7 +1151,7 @@ export default function CheckoutPage() {
                           value={gateway.id}
                           checked={paymentMethod === gateway.id}
                           onChange={() => setPaymentMethod(gateway.id)}
-                          disabled={submitting}
+                          disabled={busy}
                           className="mt-0.5 size-4 accent-[#007185]"
                         />
                         <span className="min-w-0">
@@ -746,16 +1171,16 @@ export default function CheckoutPage() {
 
               {/* Step 3 — Review items and delivery */}
               <section className="border-b border-[#e7e7e7] py-6">
-                <StepHeading step="3" title="Review items and delivery" />
+                <StepHeading step={stepNo(3)} title="Review items and delivery" />
 
                 <div className="mt-4 rounded-lg border border-[#d5d9d9]">
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-[#e7e7e7] px-4 py-3">
                     <Truck className="size-4 shrink-0 text-[#565959]" />
                     <span className="text-[15px] font-bold text-[#067d62]">
-                      Estimated delivery: {deliveryWindow}
+                      {shipping === 0 ? "FREE Delivery" : `Delivery ${money(shipping)}`}
                     </span>
                     <span className="text-[12px] text-[#565959]">
-                      {shipping === 0 ? "FREE Delivery" : `Delivery ${money(shipping)}`}
+                      Shipped by our courier partner — we&apos;ll email you when it&apos;s on its way
                     </span>
                   </div>
 
@@ -888,17 +1313,22 @@ export default function CheckoutPage() {
 
                 <button
                   type="submit"
-                  disabled={submitting}
+                  disabled={busy}
                   tabIndex={showStickyBar ? 0 : -1}
                   className={`${YELLOW_CTA} h-9 sm:w-auto sm:px-10`}
                 >
-                  {submitting ? (
+                  {busy ? (
                     <>
                       <Loader2 className="size-4 animate-spin" />
                       Processing...
                     </>
-                  ) : (
+                  ) : session ? (
                     <>Place your order · {money(total)}</>
+                  ) : (
+                    <>
+                      {authMode === "register" ? "Create account" : "Sign in"} &amp; order ·{" "}
+                      {money(total)}
+                    </>
                   )}
                 </button>
               </div>
