@@ -20,6 +20,33 @@ export const runtime = "nodejs";
 // command. MP4 (H.264) plays everywhere.
 const VIDEO_TYPES = ["video/mp4", "video/webm", "video/ogg"];
 // Accepted image types for the imageUrl fields (deals, promo banners, etc.).
+//
+// `image/svg+xml` is accepted deliberately — admins do upload vector artwork
+// (logos, payment marks) and rasterising it would lose the point of having it.
+//
+// It carries a caveat worth knowing, because an SVG is a document rather than a
+// picture: it can contain <script> and event handlers, and those RUN if the file
+// is navigated to directly. Through an <img> tag — which is how every one of
+// these is rendered — nothing executes.
+//
+// Two things keep that harmless today, and both are load-bearing:
+//
+//   1. Uploads are admin-only (requireAdmin above), so posting one already
+//      requires an admin account.
+//   2. R2 serves them from its own origin (pub-….r2.dev), NOT from
+//      ayurshoppee.ae. Script in an SVG therefore runs somewhere with no access
+//      to this site's cookies — and the session cookie is host-only, so it is
+//      never sent to another host anyway.
+//
+// Point 2 is the fragile one. Moving the bucket onto a subdomain of the site
+// (media.ayurshoppee.ae) would break it: a page there can set a cookie scoped to
+// the parent domain, which is a session-fixation route, and it can phish under
+// the real brand name. If the bucket ever moves to a custom domain, keep it on a
+// separate registrable domain, or serve uploads with
+// `Content-Disposition: attachment` so an SVG downloads instead of rendering.
+//
+// Note the CSP in next.config.mjs does NOT cover this: R2 serves its own
+// responses with its own headers and never sees that policy.
 const IMAGE_TYPES = [
   "image/jpeg",
   "image/png",

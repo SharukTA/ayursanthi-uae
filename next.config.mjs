@@ -22,8 +22,93 @@ const r2Host = (() => {
   }
 })();
 
+// Content-Security-Policy, assembled here so the R2 host is filled in from the
+// same env var everything else uses.
+//
+// Two directives carry most of the weight. `frame-ancestors 'none'` stops the
+// site being framed, which is what makes a clickjacked "Place order" or "Cancel
+// order" click impossible. `default-src 'self'` means an injected tag pointing
+// at an attacker's host fetches nothing.
+//
+// 'unsafe-inline' is present for scripts and styles because Next.js inlines both
+// the hydration bootstrap and the RSC flight payload into the HTML, and there is
+// no nonce plumbed through this app. It weakens the XSS half of the policy — but
+// the app has no dangerouslySetInnerHTML and no eval anywhere, so the realistic
+// injection routes are closed at the source, and the host allowlist still blocks
+// exfiltration to a third party. Adding a nonce via proxy.js is the upgrade path.
+function contentSecurityPolicy() {
+  const media = ["'self'", "data:", "blob:", r2Host && `https://${r2Host}`, "https://images.pexels.com"]
+    .filter(Boolean)
+    .join(" ");
+
+  return [
+    "default-src 'self'",
+    // 'unsafe-eval' is dev-only: the React refresh runtime needs it, production
+    // builds do not.
+    `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "production" ? "" : " 'unsafe-eval'"}`,
+    "style-src 'self' 'unsafe-inline'",
+    `img-src ${media}`,
+    `media-src ${media}`,
+    "font-src 'self' data:",
+    // The admin media uploader PUTs bytes straight from the browser to the
+    // bucket using a presigned URL (src/lib/storage/client.js), so the R2 origin
+    // has to be reachable by fetch — without it every upload fails as a CSP
+    // violation rather than as an HTTP error.
+    `connect-src 'self'${r2Host ? ` https://${r2Host}` : ""}`,
+    // Nothing on the site embeds a frame, and nothing may embed the site.
+    "frame-src 'none'",
+    "frame-ancestors 'none'",
+    "object-src 'none'",
+    // Confines <base> and form posts, so an injected tag cannot re-point
+    // relative URLs or aim a form at somebody else's server.
+    "base-uri 'self'",
+    "form-action 'self'",
+    "upgrade-insecure-requests",
+  ].join("; ");
+}
+
 const nextConfig = {
   reactCompiler: true,
+
+  // "X-Powered-By: Next.js" only ever tells an attacker what to target.
+  poweredByHeader: false,
+
+  // Response headers for every route. These are the browser-enforced half of the
+  // site's security posture — the server-side half lives in requireAdmin() and
+  // getSession(). Applied to "/:path*" so API responses carry them too.
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "Content-Security-Policy", value: contentSecurityPolicy() },
+          // Two years, subdomains included, and preload-eligible. Vercel already
+          // redirects http→https; this is what stops the very first request of a
+          // session going out in plaintext to be intercepted.
+          {
+            key: "Strict-Transport-Security",
+            value: "max-age=63072000; includeSubDomains; preload",
+          },
+          // Stops the browser second-guessing a Content-Type — the mechanism
+          // that turns an innocently-typed upload into an executable script.
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          // Belt and braces with frame-ancestors above, for anything that still
+          // only understands the older header.
+          { key: "X-Frame-Options", value: "DENY" },
+          // Send the full URL only to ourselves. Order pages carry ids and
+          // Stripe session ids in the query string, and those must not travel to
+          // a third party in a Referer header.
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          // The site asks for none of these, so nothing embedded in it may ask
+          // either.
+          {
+            key: "Permissions-Policy",
+            value: "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()",
+          },
+        ],
+      },
+    ];
+  },
 
   images: {
     // Only hosts listed here may be optimized; anything else returns 400. Admins

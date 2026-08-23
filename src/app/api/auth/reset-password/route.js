@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { hashPassword } from "@/lib/auth";
+import { hashPassword, revokeSessionsData } from "@/lib/auth";
 import { sendSecurityAlertEmail } from "@/lib/email-security";
 import { queueEmail } from "@/lib/email-queue";
 import { validatePassword } from "@/lib/validation";
@@ -9,6 +9,12 @@ import {
   findActiveOtp,
   OTP_MAX_ATTEMPTS,
 } from "@/lib/reset-otp";
+import {
+  clientIp,
+  consumeRateLimit,
+  rateLimitedResponse,
+  RATE_LIMITS,
+} from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -22,6 +28,20 @@ export const runtime = "nodejs";
  */
 export async function POST(request) {
   try {
+    // Shares its bucket with verify-reset-otp: both spend guesses against the
+    // same 6-digit code, so they must draw on one allowance or an attacker just
+    // moves their guessing to whichever endpoint is not counted.
+    const limit = await consumeRateLimit({
+      key: `otp:ip:${clientIp(request)}`,
+      ...RATE_LIMITS.otpAttempt,
+    });
+    if (!limit.allowed) {
+      return rateLimitedResponse(
+        limit.retryAfter,
+        "Too many attempts. Please wait a few minutes and try again."
+      );
+    }
+
     const { identifier, otp, newPassword } = await request.json();
 
     if (!identifier || !otp || !newPassword) {
@@ -68,7 +88,12 @@ export async function POST(request) {
     await prisma.$transaction([
       prisma.user.update({
         where: { id: user.id },
-        data: { passwordHash: hashPassword(newPassword) },
+        // Revoking sessions in the SAME statement as the password write is the
+        // point of the reset. A session is a self-contained encrypted cookie, so
+        // changing the password alone does nothing to one an attacker already
+        // holds — they would keep the account for the remaining days of its life,
+        // which is precisely the situation the victim is resetting to escape.
+        data: { passwordHash: hashPassword(newPassword), ...revokeSessionsData() },
       }),
       prisma.passwordResetOtp.update({
         where: { id: record.id },

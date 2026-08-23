@@ -104,6 +104,19 @@ model User {
   // (removing them is a separate, explicit action) but nothing reads them.
   browsingHistoryEnabled Boolean @default(true)
 
+  // ── Session revocation ────────────────────────────────────────────────────
+  // Any session token minted before this instant is refused (see getSession in
+  // src/lib/auth.js). Moved to "now" by every password change and every
+  // password reset, which is what actually kicks out a stolen cookie — sessions
+  // are self-contained encrypted cookies, so without this stamp there is
+  // nothing server-side to invalidate and a thief keeps the account for the
+  // remaining 7 days of the token's life.
+  //
+  // Null means "nothing has ever been revoked", so every otherwise-valid token
+  // passes. That is the correct reading for every account that predates this
+  // column — it must not sign the whole customer base out on deploy.
+  sessionsValidFrom DateTime?
+
   addresses         Address[]
   cartItems         CartItem[]
   orders            Order[]
@@ -501,4 +514,21 @@ model EmailLog {
   @@index([createdAt])
   @@index([orderId])
   @@index([status, createdAt])
+}
+
+// Fixed-window counters for the auth rate limiter (src/lib/rate-limit.js).
+//
+// Lives in the database rather than in process memory because production is
+// serverless: instances are many, short-lived, and share nothing else. `key`
+// is the primary key so the whole check is a single atomic upsert.
+//
+// Rows are disposable — they are swept once their window closes, and losing the
+// table costs nothing but a reset of the counters.
+model RateLimit {
+  key       String   @id
+  count     Int      @default(1)
+  expiresAt DateTime
+
+  // Drives the opportunistic sweep of closed windows.
+  @@index([expiresAt])
 }

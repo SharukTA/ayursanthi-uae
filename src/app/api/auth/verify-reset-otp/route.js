@@ -5,6 +5,12 @@ import {
   findActiveOtp,
   OTP_MAX_ATTEMPTS,
 } from "@/lib/reset-otp";
+import {
+  clientIp,
+  consumeRateLimit,
+  rateLimitedResponse,
+  RATE_LIMITS,
+} from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -19,6 +25,20 @@ export const runtime = "nodejs";
  */
 export async function POST(request) {
   try {
+    // The 5-attempt cap on the OTP row is per code. This is per host, and closes
+    // the gap that cap leaves: burn five guesses, request a fresh code, repeat.
+    // A 6-digit code is only safe while the number of guesses stays small.
+    const limit = await consumeRateLimit({
+      key: `otp:ip:${clientIp(request)}`,
+      ...RATE_LIMITS.otpAttempt,
+    });
+    if (!limit.allowed) {
+      return rateLimitedResponse(
+        limit.retryAfter,
+        "Too many attempts. Please wait a few minutes and try again."
+      );
+    }
+
     const { identifier, otp } = await request.json();
 
     if (!identifier || !otp) {

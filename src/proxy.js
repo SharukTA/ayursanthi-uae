@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { decryptSession } from "@/lib/auth";
+import { decryptSession } from "@/lib/session-token";
 
 // Centralised route gate. Runs before every page request and redirects users who
 // manually type a URL they are not allowed to be on — in BOTH directions:
@@ -7,6 +7,11 @@ import { decryptSession } from "@/lib/auth";
 //   • signed out  → /admin/*, /dashboard/*              ⇒ sent to /login
 //   • customer    → /admin/*                            ⇒ sent to /
 //   • signed in   → /login, /register, /forgot-password ⇒ sent to /admin or /dashboard
+//
+// It reads decryptSession from lib/session-token.js rather than lib/auth.js:
+// that module is deliberately free of Prisma and next/headers, so this file —
+// which runs on EVERY page request, prefetches included — does not drag Prisma
+// Client into the request path. lib/auth.js re-exports the same function.
 //
 // NOTE (Next.js 16): this file is `proxy.js`, not `middleware.js` — Middleware
 // was renamed to Proxy in v16. It runs on the Node.js runtime by default, so

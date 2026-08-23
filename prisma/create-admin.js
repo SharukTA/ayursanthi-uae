@@ -19,14 +19,22 @@ const crypto = require("crypto");
 
 const prisma = new PrismaClient();
 
-// Same PBKDF2 scheme as src/lib/auth.js (salt:hash, 1000 rounds, sha512, 64
-// bytes) so the password verifies correctly at login. Keep these in sync.
+// Same PBKDF2 scheme as src/lib/auth.js — pbkdf2$sha512$<rounds>$<salt>$<hash>,
+// 210,000 rounds (the OWASP floor for SHA-512), 64-byte output — so the password
+// verifies correctly at login. Keep these in sync; this file cannot import the
+// real one because it is CommonJS and runs outside the Next.js module graph.
+//
+// The round count is written into the string rather than assumed at verify time,
+// which is what lets src/lib/auth.js raise it later without invalidating rows
+// written here.
+const PBKDF2_ITERATIONS = 210000;
+
 function hashPassword(password) {
   const salt = crypto.randomBytes(16).toString("hex");
   const hash = crypto
-    .pbkdf2Sync(password, salt, 1000, 64, "sha512")
+    .pbkdf2Sync(password, salt, PBKDF2_ITERATIONS, 64, "sha512")
     .toString("hex");
-  return `${salt}:${hash}`;
+  return `pbkdf2$sha512$${PBKDF2_ITERATIONS}$${salt}$${hash}`;
 }
 
 async function main() {
@@ -55,7 +63,11 @@ async function main() {
   if (existing) {
     await prisma.user.update({
       where: { email },
-      data: { passwordHash, role: "ADMIN", name },
+      // Resetting an admin's password here revokes their existing sessions too,
+      // for the same reason the reset flow does: this script is how you recover
+      // an account you believe is compromised, and that is worthless if the
+      // cookie already issued for it keeps working.
+      data: { passwordHash, role: "ADMIN", name, sessionsValidFrom: new Date() },
     });
     console.log(`Updated existing user to ADMIN: ${email}`);
   } else {

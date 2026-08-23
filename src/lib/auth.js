@@ -1,145 +1,126 @@
 import crypto from "crypto";
+import { cache } from "react";
 import { cookies } from "next/headers";
+import { prisma } from "@/lib/prisma";
+import {
+  decryptSession,
+  encryptSession,
+  SESSION_MAX_AGE_SECONDS,
+} from "@/lib/session-token";
 
-// How long a session stays valid. Enforced server-side via the `exp` claim
-// below — NOT just by the cookie's maxAge, which the client controls and can
-// simply be edited or replayed after it "expires".
-const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7; // 7 days
+// The token crypto itself lives in session-token.js (a prisma-free leaf module
+// so proxy.js can use it without pulling Prisma Client into the request path).
+// Re-exported here so existing importers keep working unchanged.
+export { decryptSession, encryptSession, SESSION_MAX_AGE_SECONDS };
 
-// The signing/encryption key is derived lazily and cached, so a missing secret
-// fails auth closed rather than crashing the whole app at import time.
-let cachedKey = null;
+// ── Password hashing ────────────────────────────────────────────────────────
+//
+// Format: pbkdf2$sha512$<iterations>$<saltHex>$<hashHex>
+//
+// The iteration count is stored INSIDE the hash rather than read from the
+// constant below at verify time. That is what makes raising it safe: every row
+// is verified at the cost it was written with, so old and new hashes coexist and
+// nobody is locked out. `needsRehash()` then tells a caller that is holding the
+// correct plaintext (i.e. a successful login) to write the row back at the
+// current cost.
+const PBKDF2_DIGEST = "sha512";
+const PBKDF2_KEYLEN = 64;
+// OWASP's floor for PBKDF2-HMAC-SHA512. The previous value here was 1000, which
+// is ~200x too cheap — a stolen database of those hashes is crackable on
+// commodity hardware. Legacy rows are re-hashed at this cost on next login.
+const PBKDF2_ITERATIONS = 210000;
 
-/**
- * Derives the AES key from SESSION_SECRET.
- *
- * There is deliberately NO hardcoded production fallback: a default committed to
- * the repo is a publicly-known key, and anyone could use it to mint themselves
- * an `ADMIN` session cookie. If the secret is missing in production we throw, so
- * sessions cannot be issued or accepted at all (fail closed).
- * @returns {Buffer} 32-byte key for aes-256-gcm
- */
-function getKey() {
-  if (cachedKey) return cachedKey;
+// Rows written before the format above: "<saltHex>:<hashHex>", always 1000
+// iterations of PBKDF2-SHA512. Still accepted at login (and upgraded on the
+// spot), never written again.
+const LEGACY_ITERATIONS = 1000;
 
-  const secret = process.env.SESSION_SECRET;
-
-  if (!secret || secret.length < 32) {
-    if (process.env.NODE_ENV === "production") {
-      throw new Error(
-        "SESSION_SECRET is missing or too short (min 32 chars). Refusing to use a " +
-          "default key — generate one with: openssl rand -base64 48"
-      );
-    }
-    console.warn(
-      "[auth] SESSION_SECRET missing or too short — using an INSECURE development key. " +
-        "Set SESSION_SECRET in .env before deploying."
-    );
-    cachedKey = crypto.scryptSync("ayursanthi-development-only-key", "ayursanthi-salt", 32);
-    return cachedKey;
-  }
-
-  // Ensure key is exactly 32 bytes for aes-256-gcm
-  cachedKey = crypto.scryptSync(secret, "ayursanthi-salt", 32);
-  return cachedKey;
+function derive(password, salt, iterations) {
+  return crypto
+    .pbkdf2Sync(String(password), salt, iterations, PBKDF2_KEYLEN, PBKDF2_DIGEST)
+    .toString("hex");
 }
 
 /**
- * Hashes a plain password using PBKDF2.
- * @param {string} password 
- * @returns {string} The formatted salt:hash string
+ * Parses either hash format into one common shape.
+ * @returns {{salt: string, hash: string, iterations: number}|null}
+ */
+function parseStoredHash(storedPasswordHash) {
+  const stored = String(storedPasswordHash || "");
+  if (!stored) return null;
+
+  if (stored.startsWith("pbkdf2$")) {
+    const [, digest, iterations, salt, hash] = stored.split("$");
+    if (digest !== PBKDF2_DIGEST || !salt || !hash) return null;
+    const rounds = Number(iterations);
+    if (!Number.isInteger(rounds) || rounds < 1) return null;
+    return { salt, hash, iterations: rounds };
+  }
+
+  // Legacy "salt:hash".
+  const parts = stored.split(":");
+  if (parts.length !== 2 || !parts[0] || !parts[1]) return null;
+  return { salt: parts[0], hash: parts[1], iterations: LEGACY_ITERATIONS };
+}
+
+/**
+ * Hashes a plain password using PBKDF2, at the current cost.
+ * @param {string} password
+ * @returns {string} The formatted hash string
  */
 export function hashPassword(password) {
   const salt = crypto.randomBytes(16).toString("hex");
-  const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, "sha512").toString("hex");
-  return `${salt}:${hash}`;
+  const hash = derive(password, salt, PBKDF2_ITERATIONS);
+  return `pbkdf2$${PBKDF2_DIGEST}$${PBKDF2_ITERATIONS}$${salt}$${hash}`;
 }
 
 /**
- * Verifies a password against a stored PBKDF2 hash string.
- * @param {string} password 
- * @param {string} storedPasswordHash 
+ * Verifies a password against a stored hash, in either format.
+ *
+ * The comparison is constant-time. A plain `===` leaks, through how long it
+ * takes to fail, how many leading characters of the derived hash were right —
+ * the same class of bug the OTP path already avoids with timingSafeEqual.
+ * @param {string} password
+ * @param {string} storedPasswordHash
  * @returns {boolean} True if password matches, false otherwise
  */
 export function verifyPassword(password, storedPasswordHash) {
-  if (!storedPasswordHash || !storedPasswordHash.includes(":")) {
-    return false;
-  }
-  const [salt, originalHash] = storedPasswordHash.split(":");
-  const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, "sha512").toString("hex");
-  return hash === originalHash;
+  const parsed = parseStoredHash(storedPasswordHash);
+  if (!parsed) return false;
+
+  const candidate = Buffer.from(derive(password, parsed.salt, parsed.iterations), "hex");
+  const expected = Buffer.from(parsed.hash, "hex");
+  if (expected.length === 0 || candidate.length !== expected.length) return false;
+  return crypto.timingSafeEqual(candidate, expected);
 }
 
 /**
- * Encrypts a session payload into a secure string.
- * @param {object} payload 
- * @returns {string} Encrypted token string
+ * True when a stored hash was written at a weaker cost (or in the legacy format)
+ * than we use now. Call it only after verifyPassword() has returned true — the
+ * plaintext is needed to write the replacement.
+ * @param {string} storedPasswordHash
  */
-export function encryptSession(payload) {
-  const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv("aes-256-gcm", getKey(), iv);
-  let encrypted = cipher.update(JSON.stringify(payload), "utf8", "hex");
-  encrypted += cipher.final("hex");
-  const tag = cipher.getAuthTag().toString("hex");
-  return `${iv.toString("hex")}:${encrypted}:${tag}`;
+export function needsRehash(storedPasswordHash) {
+  const parsed = parseStoredHash(storedPasswordHash);
+  if (!parsed) return false;
+  return parsed.iterations < PBKDF2_ITERATIONS;
 }
 
-/**
- * Decrypts and validates a session token string.
- *
- * Rejects tokens that are expired or carry no `exp` claim. Tokens issued before
- * expiry was introduced have no `exp` and are therefore treated as expired —
- * those users simply log in once more.
- * @param {string} sessionToken
- * @returns {object|null} Decrypted payload, or null if invalid/expired
- */
-export function decryptSession(sessionToken) {
-  try {
-    const parts = String(sessionToken).split(":");
-    if (parts.length !== 3) return null;
-
-    const [ivHex, encrypted, tagHex] = parts;
-    const iv = Buffer.from(ivHex, "hex");
-    const tag = Buffer.from(tagHex, "hex");
-
-    // Enforce the full 12-byte IV and 128-bit auth tag.
-    //
-    // This matters: Buffer.from(x, "hex") silently stops at the first invalid
-    // character, so a token ending in non-hex yields a SHORTER tag — and Node
-    // accepts GCM tags as small as 4 bytes when authTagLength isn't pinned. An
-    // attacker could therefore truncate the tag and have GCM verify only the
-    // bytes they kept, defeating tamper detection. Both lengths are checked
-    // here and authTagLength is pinned below.
-    if (iv.length !== 12 || tag.length !== 16) return null;
-
-    const decipher = crypto.createDecipheriv("aes-256-gcm", getKey(), iv, {
-      authTagLength: 16,
-    });
-    decipher.setAuthTag(tag);
-    let decrypted = decipher.update(encrypted, "hex", "utf8");
-    decrypted += decipher.final("utf8");
-    const payload = JSON.parse(decrypted);
-
-    // Server-side expiry. Without this a captured cookie is valid forever,
-    // since the 7-day maxAge is only ever enforced by the browser.
-    if (typeof payload?.exp !== "number" || payload.exp <= Date.now()) {
-      return null;
-    }
-
-    return payload;
-  } catch (err) {
-    return null;
-  }
-}
+// ── Session cookie ──────────────────────────────────────────────────────────
 
 /**
  * Encrypts payload and stores it in an HTTP-only cookie.
- * @param {object} payload 
+ * @param {object} payload
  */
 export async function setSession(payload) {
   const issuedAt = Date.now();
-  // `exp` travels inside the encrypted (and GCM-authenticated) payload, so it
-  // cannot be tampered with, and is checked on every read in decryptSession.
+  // `iat`/`exp` travel inside the encrypted (and GCM-authenticated) payload, so
+  // they cannot be tampered with. `exp` is checked on every read in
+  // decryptSession; `iat` is what getSession() compares against the account's
+  // sessionsValidFrom stamp.
+  //
+  // Anything the caller passed through is overwritten here — including a stale
+  // `iat`/`exp` spread from an old session object, as /api/user/profile does.
   const token = encryptSession({
     ...payload,
     iat: issuedAt,
@@ -156,14 +137,68 @@ export async function setSession(payload) {
 }
 
 /**
- * Retrieves and decrypts the current user session.
+ * Reads the account's session cut-off: any token minted before this instant is
+ * refused. Moved forward by every password change and every password reset.
+ *
+ * Wrapped in React's `cache()` so the lookup happens at most once per request no
+ * matter how many components and helpers call getSession() — the root layout,
+ * the page, and any route helper all share the one result. This is the pattern
+ * the Next.js authentication guide prescribes for a session DAL.
+ */
+const readSessionFloor = cache(async (userId) => {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { sessionsValidFrom: true },
+  });
+  // A missing row means the account is gone — treat every token as invalid.
+  if (!user) return Number.POSITIVE_INFINITY;
+  return user.sessionsValidFrom ? new Date(user.sessionsValidFrom).getTime() : 0;
+});
+
+/**
+ * Retrieves, decrypts and validates the current user session.
+ *
+ * Two layers: the cryptographic check in decryptSession (authenticity +
+ * expiry), then a database check that the token was minted after the account's
+ * last password change. Without that second layer, resetting a password does
+ * nothing to a cookie an attacker already stole — they keep the account for the
+ * rest of the 7-day window, which defeats the main reason anyone resets.
+ *
  * @returns {Promise<object|null>}
  */
 export async function getSession() {
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get("session");
   if (!sessionCookie) return null;
-  return decryptSession(sessionCookie.value);
+
+  const payload = decryptSession(sessionCookie.value);
+  if (!payload?.userId) return null;
+
+  try {
+    const floor = await readSessionFloor(payload.userId);
+    // Tokens minted before sessionsValidFrom are revoked. A token with no `iat`
+    // predates the claim entirely and cannot be shown to be current, so it
+    // survives only while the account has never revoked anything.
+    const issuedAt = typeof payload.iat === "number" ? payload.iat : 0;
+    if (issuedAt < floor) return null;
+  } catch (error) {
+    // The session is cryptographically valid and we simply cannot reach the
+    // database to check for a revocation. Signing every shopper out because the
+    // DB blinked is the worse failure — and any route that goes on to read data
+    // will hit the same outage and fail on its own terms.
+    console.error("[auth] Could not verify session freshness:", error?.message || error);
+  }
+
+  return payload;
+}
+
+/**
+ * The Prisma update payload that revokes every session issued for an account up
+ * to now. Returned rather than executed so the caller can fold it into the same
+ * transaction as the password write — the two must never land separately.
+ */
+export function revokeSessionsData() {
+  return { sessionsValidFrom: new Date() };
 }
 
 /**

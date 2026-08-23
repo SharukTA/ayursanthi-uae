@@ -9,6 +9,12 @@ import {
   normalizeReferralCode,
 } from "@/lib/validation";
 import { createUniqueReferralCode, findReferrerByCode } from "@/lib/referral";
+import {
+  clientIp,
+  consumeRateLimit,
+  rateLimitedResponse,
+  RATE_LIMITS,
+} from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -50,6 +56,20 @@ async function createUserWithReferralCode(data) {
 
 export async function POST(request) {
   try {
+    // Signup is not free for us: every success sends a welcome email out of a
+    // capped Resend allowance shared with the password-reset codes. One host has
+    // no legitimate reason to create accounts in bulk.
+    const limit = await consumeRateLimit({
+      key: `register:ip:${clientIp(request)}`,
+      ...RATE_LIMITS.register,
+    });
+    if (!limit.allowed) {
+      return rateLimitedResponse(
+        limit.retryAfter,
+        "Too many accounts created from here recently. Please try again later."
+      );
+    }
+
     const body = await request.json();
     const { name, email, phone, password, referralCode } = body;
 

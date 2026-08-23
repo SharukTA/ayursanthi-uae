@@ -9,6 +9,12 @@ import {
   OTP_EXPIRY_MINUTES,
   OTP_RESEND_THROTTLE_SECONDS,
 } from "@/lib/reset-otp";
+import {
+  clientIp,
+  consumeRateLimit,
+  rateLimitedResponse,
+  RATE_LIMITS,
+} from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -27,6 +33,27 @@ export const runtime = "nodejs";
  */
 export async function POST(request) {
   try {
+    // The per-account resend throttle further down stops one inbox being spammed
+    // with codes. This is the other half: a cap on how many codes ONE HOST can
+    // cause to be sent at all, across however many different accounts it names.
+    // Without it a script can walk a list of addresses and burn the whole Resend
+    // allowance — which would take the OTP emails down with it, since they share
+    // the quota.
+    //
+    // Checked before the body is even read, and answered with a plain 429. That
+    // is not an enumeration leak: the response is identical whether or not the
+    // named account exists, exactly like the generic success below.
+    const limit = await consumeRateLimit({
+      key: `forgot:ip:${clientIp(request)}`,
+      ...RATE_LIMITS.forgotPassword,
+    });
+    if (!limit.allowed) {
+      return rateLimitedResponse(
+        limit.retryAfter,
+        "Too many password reset requests. Please wait a while and try again."
+      );
+    }
+
     const { identifier } = await request.json();
 
     if (!identifier || !String(identifier).trim()) {
