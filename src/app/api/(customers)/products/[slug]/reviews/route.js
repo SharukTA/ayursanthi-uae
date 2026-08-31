@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
+import { consumeRateLimit, rateLimitedResponse, RATE_LIMITS } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -18,6 +19,21 @@ export async function POST(request, { params }) {
   const session = await getSession();
   if (!session) {
     return Response.json({ message: "Please sign in to write a review." }, { status: 401 });
+  }
+
+  // Keyed by account, and placed before the body is read so a loop costs one
+  // indexed lookup rather than the purchase lookup and the upsert below. The
+  // verified-buyer gate already makes this hard to abuse at all; this caps the
+  // one thing it does not stop, which is rewriting the same review over and over.
+  const limit = await consumeRateLimit({
+    key: `review:user:${session.userId}`,
+    ...RATE_LIMITS.reviewPost,
+  });
+  if (!limit.allowed) {
+    return rateLimitedResponse(
+      limit.retryAfter,
+      "Too many review submissions. Please wait a while and try again."
+    );
   }
 
   let body;

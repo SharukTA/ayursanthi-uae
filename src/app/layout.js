@@ -2,7 +2,9 @@ import { Inter, Geist_Mono } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import { LenisProvider } from "@/components/LenisProvider";
 import { SessionProvider } from "@/components/SessionProvider";
+import { SettingsProvider } from "@/components/SettingsProvider";
 import { getSession } from "@/lib/auth";
+import { getSiteSettings } from "@/lib/settings";
 import "./globals.css";
 
 // Amazon ships its proprietary "Amazon Ember" typeface, which can't be
@@ -29,12 +31,13 @@ export const metadata = {
 export default async function RootLayout({ children }) {
   // Resolve the session on the server so the first paint renders the correct
   // navbar/footer for this user — no client-side fetch flash on navigation.
-  let initialSession = null;
-  try {
-    initialSession = await getSession();
-  } catch (err) {
-    initialSession = null;
-  }
+  // Resolved in parallel: neither depends on the other, and both block the
+  // layout. getSiteSettings() swallows its own DB errors and falls back to the
+  // defaults, so it never needs a try/catch here.
+  const [initialSession, settings] = await Promise.all([
+    getSession().catch(() => null),
+    getSiteSettings(),
+  ]);
 
   return (
     <html
@@ -43,9 +46,11 @@ export default async function RootLayout({ children }) {
     >
       <body className="min-h-full flex flex-col">
         <SessionProvider initialSession={initialSession}>
-          <LenisProvider>
-            {children}
-          </LenisProvider>
+          <SettingsProvider settings={settings}>
+            <LenisProvider>
+              {children}
+            </LenisProvider>
+          </SettingsProvider>
           <Toaster />
         </SessionProvider>
       </body>

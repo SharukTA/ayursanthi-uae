@@ -525,14 +525,26 @@ a[class*="bg-white/"][class*="border"]:hover,
   box-shadow: 0 4px 10px rgba(15, 17, 17, 0.14);
 }
 
-/* Translucent icon buttons living ON dark chrome (navbar / footer) — their
-   class strings contain both "bg-white/" and "border", so the light-page
-   outline rule above would force ink-on-navy at rest, leaving the icon
-   invisible. Re-assert white here. */
+/* Translucent icon buttons living ON dark chrome (navbar / footer / dark
+   heroes) — their class strings contain both "bg-white/" and "border", so the
+   light-page outline rule above would force ink-on-navy at rest, leaving the
+   icon invisible. Re-assert white here.
+
+   Note that a translucent HOVER alone is enough to trigger this: Tailwind's
+   `hover:bg-white/10` still puts the substring "bg-white/" in the class
+   attribute, so a button that is transparent at rest is caught by the same
+   selector. That is what made the "Sign in to see your coupons" button on
+   /gifts render as dark ink on a near-black hero.
+
+   bg-slate-95x is listed for the same reason it appears in the legibility
+   block above: it is how the dark image heroes are written, and it was the one
+   dark surface this carve-out had been missing. */
 .surface-navy button[class*="bg-white/"][class*="border"],
 .surface-navy a[class*="bg-white/"][class*="border"],
 .surface-brand button[class*="bg-white/"][class*="border"],
-.surface-brand a[class*="bg-white/"][class*="border"] {
+.surface-brand a[class*="bg-white/"][class*="border"],
+[class*="bg-slate-95"] button[class*="bg-white/"][class*="border"],
+[class*="bg-slate-95"] a[class*="bg-white/"][class*="border"] {
   border-color: rgba(255, 255, 255, 0.3) !important;
   color: #ffffff !important;
   background-color: transparent !important;
@@ -542,7 +554,9 @@ a[class*="bg-white/"][class*="border"]:hover,
 .surface-navy button[class*="bg-white/"][class*="border"]:hover:not(:disabled),
 .surface-navy a[class*="bg-white/"][class*="border"]:hover,
 .surface-brand button[class*="bg-white/"][class*="border"]:hover:not(:disabled),
-.surface-brand a[class*="bg-white/"][class*="border"]:hover {
+.surface-brand a[class*="bg-white/"][class*="border"]:hover,
+[class*="bg-slate-95"] button[class*="bg-white/"][class*="border"]:hover:not(:disabled),
+[class*="bg-slate-95"] a[class*="bg-white/"][class*="border"]:hover {
   background-color: rgba(255, 255, 255, 0.1) !important;
   border-color: #ffffff !important;
   color: #ffffff !important;

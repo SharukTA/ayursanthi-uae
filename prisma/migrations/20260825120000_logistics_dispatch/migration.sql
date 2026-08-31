@@ -1,0 +1,21 @@
+-- Logistics dispatch handoff.
+--
+-- Delivery is done by an external courier (SkyCom Express). Nothing in this
+-- codebase books a consignment: the shop emails the shipping address and order
+-- details to the logistics inbox, and the courier desk books it from there and
+-- sends the AWB to the customer directly.
+--
+-- That makes the dispatch email load-bearing rather than decorative — a paid
+-- order it never reached is an order nobody ships — so the send is recorded on
+-- the order itself and not left to the EmailLog audit trail alone.
+--
+-- Additive and safe on a live database: one nullable column, no backfill.
+
+-- AlterTable
+--
+-- NULL for every existing order, meaning "no dispatch instruction has been
+-- sent". Orders placed before this deployed were handled by hand, so the admin
+-- list deliberately only flags orders newer than the handoff going live (see
+-- needsLogisticsDispatch in lib/order-policy.js) rather than lighting up the
+-- whole back catalogue.
+ALTER TABLE "Order" ADD COLUMN     "logisticsNotifiedAt" TIMESTAMP(3);

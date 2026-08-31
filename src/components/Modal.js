@@ -16,8 +16,18 @@ import { X } from "lucide-react";
  *   ) : null}
  *
  * `onClose` fires on backdrop click, the close button, and the Escape key.
+ *
+ * `widthClass` / `bodyClassName` let a caller widen the card or take over its
+ * padding (the product "full details" reader needs both); the defaults are the
+ * narrow form every other caller already relies on.
  */
-export function Modal({ title, onClose, children }) {
+export function Modal({
+  title,
+  onClose,
+  children,
+  widthClass = "max-w-xs sm:max-w-lg",
+  bodyClassName = "p-4 sm:p-5",
+}) {
   // Lock body scroll and wire up Escape while the modal is open.
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -54,7 +64,7 @@ export function Modal({ title, onClose, children }) {
 
       {/* Card — narrower on phones, roomier from sm up. */}
       <div
-        className="relative flex max-h-[85vh] w-full max-w-xs flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl shadow-black/30 animate-in fade-in zoom-in-95 duration-150 sm:max-h-[90vh] sm:max-w-lg"
+        className={`relative flex max-h-[85vh] w-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl shadow-black/30 animate-in fade-in zoom-in-95 duration-150 sm:max-h-[90vh] ${widthClass}`}
       >
         <div className="flex items-center justify-between gap-4 border-b border-slate-100 px-4 py-3 sm:px-5 sm:py-4">
           <h2 className="text-sm font-bold text-slate-900 sm:text-base">{title}</h2>
@@ -67,7 +77,7 @@ export function Modal({ title, onClose, children }) {
             <X className="size-5" />
           </button>
         </div>
-        <div className="min-w-0 overflow-y-auto p-4 sm:p-5">{children}</div>
+        <div className={`min-w-0 overflow-y-auto ${bodyClassName}`}>{children}</div>
       </div>
     </div>,
     document.body

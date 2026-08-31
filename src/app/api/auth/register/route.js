@@ -9,6 +9,7 @@ import {
   normalizeReferralCode,
 } from "@/lib/validation";
 import { createUniqueReferralCode, findReferrerByCode } from "@/lib/referral";
+import { getTermsVersion } from "@/lib/pages";
 import {
   clientIp,
   consumeRateLimit,
@@ -129,12 +130,19 @@ export async function POST(request) {
     // Hash password
     const passwordHash = hashPassword(password);
 
+    // Record the acceptance carried by the submit button both signup forms show
+    // (the standalone page and the inline step in checkout, which posts here
+    // too). getTermsVersion never throws, so this cannot fail a registration.
+    const termsVersion = await getTermsVersion();
+
     const newUser = await createUserWithReferralCode({
       name: name.trim(),
       email: cleanEmail,
       phone: cleanPhone,
       passwordHash,
       referredById,
+      termsAcceptedAt: new Date(),
+      termsVersion,
     });
 
     // Set the session cookie

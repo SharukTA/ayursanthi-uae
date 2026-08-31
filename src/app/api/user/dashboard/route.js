@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
+import { CUSTOMER_VISIBLE_ORDERS } from "@/lib/order-policy";
 
 export const runtime = "nodejs";
 
@@ -12,12 +13,14 @@ export async function GET() {
   try {
     const [recentOrders, totalOrders, totalSpentAgg] = await Promise.all([
       prisma.order.findMany({
-        where: { userId: session.userId },
+        // Same filter the orders page uses, or the dashboard would promise five
+        // recent orders and link to a list that shows fewer.
+        where: { userId: session.userId, ...CUSTOMER_VISIBLE_ORDERS },
         orderBy: { createdAt: "desc" },
         take: 5,
         include: { items: true },
       }),
-      prisma.order.count({ where: { userId: session.userId } }),
+      prisma.order.count({ where: { userId: session.userId, ...CUSTOMER_VISIBLE_ORDERS } }),
       prisma.order.aggregate({
         where: { userId: session.userId, paymentStatus: "PAID" },
         _sum: { total: true },

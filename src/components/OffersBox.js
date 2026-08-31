@@ -3,7 +3,7 @@ import { formatMoney } from "@/lib/currency";
 
 // "Available offers" panel — the Amazon/Flipkart block that stacks the deals
 // applicable to a product. Every entry here is derived from real data (the
-// product's own discount, its admin-set offer badge, COD, secure dispatch), so
+// product's own discount, its admin-set offer badge, secure payment/dispatch), so
 // nothing is fabricated. Renders nothing if there are no offers to show.
 export function OffersBox({ price, mrp, offerLabel }) {
   const offers = [];
@@ -32,13 +32,13 @@ export function OffersBox({ price, mrp, offerLabel }) {
   // Always-on store promises (true site-wide), rounding out the block.
   offers.push({
     icon: Truck,
-    title: "Cash on Delivery",
-    body: "Pay in cash when your order is delivered to your door.",
+    title: "Secure online payment",
+    body: "Pay by card, Apple Pay or Google Pay — your details never touch this site.",
   });
   offers.push({
     icon: ShieldCheck,
     title: "Secure, lab-tested dispatch",
-    body: "100% organic, quality-checked and tamper-proof packaging.",
+    body: "100% natural, quality-checked and tamper-proof packaging.",
   });
 
   return (

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
-import { ShieldCheck, Leaf, Box, Download } from "lucide-react";
+import { ShieldCheck, Leaf, Box } from "lucide-react";
 import { FadeIn, PageReveal } from "@/components/Animated";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
@@ -16,6 +16,7 @@ import { ProductCard, RatingStars, summarizeReviews } from "@/components/Product
 import { ReviewForm } from "@/components/ReviewForm";
 import { ProductReviews } from "@/components/ProductReviews";
 import { ProductDescription, AboutThisItem } from "@/components/ProductDescription";
+import { ProductDetailsProvider } from "@/components/ProductFullDetails";
 import { PageSections } from "@/components/HomeSections";
 import { RecentlyViewedTracker } from "@/components/RecentlyViewedTracker";
 import { getPageSections } from "@/lib/page-sections";
@@ -214,6 +215,47 @@ export default async function ProductDetailPage({ params }) {
   // the hardcoded buy-box). Global per page-type — same on all product pages.
   const { sections: pageSections, stats: pageStats } = await getPageSections("PRODUCT");
 
+  // Reviews, flattened for the two client components that render them (the
+  // page's own panel and the full-details reader) — Dates don't survive the
+  // server→client boundary, so they cross as ISO strings.
+  const clientReviews = product.reviews.map((rev) => ({
+    id: rev.id,
+    userName: rev.user.name,
+    rating: rev.rating,
+    comment: rev.comment,
+    createdAt: rev.createdAt.toISOString(),
+  }));
+
+  // Everything the "View full details" modal reads. Built here rather than in
+  // the modal so the whole sheet is already on the page when the shopper opens
+  // it — no second round trip, no spinner. Decimals become numbers for the
+  // same serialization reason as the dates above.
+  const fullDetails = {
+    name: product.name,
+    categoryName: product.category?.name || null,
+    netQuantity: product.netQuantity || null,
+    sku: product.sku || null,
+    price: Number(product.price),
+    mrp: product.mrp != null ? Number(product.mrp) : null,
+    offerLabel: product.offerLabel || null,
+    shortDescription: product.shortDescription,
+    description: product.description,
+    ingredients,
+    avgRating,
+    reviewCount,
+    media: product.images.map((img) => ({
+      url: img.url,
+      altText: img.altText,
+      mediaType: img.mediaType,
+    })),
+    attributes: product.attributes.map((attr) => ({
+      id: attr.id,
+      label: attr.label,
+      value: attr.value,
+    })),
+    reviews: clientReviews,
+  };
+
   return (
     <main className="min-h-screen bg-slate-50 text-white flex flex-col">
       {/* Records this view in the visitor's own browser so a "Continue shopping"
@@ -243,158 +285,153 @@ export default async function ProductDetailPage({ params }) {
           ]}
         />
 
-        <div className="grid gap-6 sm:gap-10 lg:grid-cols-2">
+        {/* The provider renders no element of its own — it only shares one
+            full-details modal between its two triggers: the tile at the end of
+            the gallery's thumbnail strip (left column) and the one in
+            ProductActions' sticky bar (right column). */}
+        <ProductDetailsProvider details={fullDetails}>
+          <div className="grid gap-6 sm:gap-10 lg:grid-cols-2">
           
-          {/* Left Column: Swipeable media gallery (images + videos) */}
-          <PageReveal className="flex flex-col justify-start">
-            <div className="mx-auto w-full max-w-[360px] sm:max-w-[500px] lg:mx-0">
-              <ProductGallery
-                media={product.images.map((img) => ({
-                  url: img.url,
-                  altText: img.altText,
-                  mediaType: img.mediaType,
-                }))}
-                productName={product.name}
-              />
-            </div>
-          </PageReveal>
+            {/* Left Column: Swipeable media gallery (images + videos) */}
+            <PageReveal className="flex min-w-0 flex-col justify-start">
+              <div className="mx-auto w-full max-w-[360px] sm:max-w-[500px] lg:mx-0">
+                <ProductGallery
+                  media={product.images.map((img) => ({
+                    url: img.url,
+                    altText: img.altText,
+                    mediaType: img.mediaType,
+                  }))}
+                  productName={product.name}
+                  fullDetailsTrigger
+                />
+              </div>
+            </PageReveal>
 
-          {/* Right Column: Descriptions & Actions */}
-          <FadeIn className="flex flex-col">
-            <div>
-              {/* No pill at all when the product is uncategorized — better than
-                  an empty chip or a placeholder label. */}
-              {product.category ? (
-                <span className="rounded-md bg-emerald-50 border border-emerald-200 px-2.5 py-1 text-xs font-bold text-emerald-800">
-                  {product.category.name}
-                </span>
-              ) : null}
-              <AnimatedHeading
-                as="h1"
-                text={product.name}
-                className="mt-4 text-2xl font-bold tracking-tight text-[#0f1111] sm:text-3xl lg:text-4xl"
-              />
-              {/* Rating summary — averaged from real customer reviews below */}
-              <a href="#reviews" className="mt-3 inline-flex items-center gap-2">
-                {reviewCount > 0 ? (
-                  <span className="text-sm font-bold text-[#0f1111]">
-                    {avgRating.toFixed(1)}
+            {/* Right Column: Descriptions & Actions */}
+            <FadeIn className="flex min-w-0 flex-col">
+              <div>
+                {/* No pill at all when the product is uncategorized — better than
+                    an empty chip or a placeholder label. */}
+                {product.category ? (
+                  <span className="rounded-md bg-emerald-50 border border-emerald-200 px-2.5 py-1 text-xs font-bold text-emerald-800">
+                    {product.category.name}
                   </span>
                 ) : null}
-                <RatingStars rating={avgRating} />
-                <span className="text-xs font-medium text-[#565959] hover:underline">
-                  {reviewCount > 0
-                    ? `${reviewCount.toLocaleString("en-AE")} rating${reviewCount > 1 ? "s" : ""}`
-                    : "No ratings yet"}
-                </span>
-              </a>
-              {/* Pack size sits right under the title, the way Amazon prints
-                  "Size: 250 g" — it is what separates two otherwise identical
-                  listings of the same item. */}
-              {product.netQuantity ? (
-                <p className="mt-2 text-sm font-semibold text-[#0f1111]">
-                  Net Quantity:{" "}
-                  <span className="font-bold">{product.netQuantity}</span>
-                </p>
-              ) : null}
-              {/* SKU is optional — a product with no catalogue code simply
-                  shows no SKU line rather than an empty "SKU:" label. */}
-              {product.sku ? (
-                <p className="mt-2 text-xs font-medium text-[#565959]">
-                  SKU: <span className="font-mono">{product.sku}</span>
-                </p>
-              ) : null}
-            </div>
-
-            {/* Price Frame */}
-            <div className="mt-5 rounded-md bg-white border border-emerald-100 p-4">
-              <div className="flex items-baseline gap-3">
-                <span className="text-2xl font-extrabold text-emerald-800">
-                  {formatMoney(product.price)}
-                </span>
-                {product.mrp && (
-                  <span className="text-sm text-[#565959] line-through">
-                    {formatMoney(product.mrp)}
+                <AnimatedHeading
+                  as="h1"
+                  text={product.name}
+                  className="mt-4 text-2xl font-bold tracking-tight text-[#0f1111] sm:text-3xl lg:text-4xl"
+                />
+                {/* Rating summary — averaged from real customer reviews below */}
+                <a href="#reviews" className="mt-3 inline-flex items-center gap-2">
+                  {reviewCount > 0 ? (
+                    <span className="text-sm font-bold text-[#0f1111]">
+                      {avgRating.toFixed(1)}
+                    </span>
+                  ) : null}
+                  <RatingStars rating={avgRating} />
+                  <span className="text-xs font-medium text-[#565959] hover:underline">
+                    {reviewCount > 0
+                      ? `${reviewCount.toLocaleString("en-AE")} rating${reviewCount > 1 ? "s" : ""}`
+                      : "No ratings yet"}
                   </span>
-                )}
-                {/* Discount badge: prefer the admin-entered "Offer Badge"
-                    (product.offerLabel); fall back to the percentage computed
-                    from MRP vs. price when no badge text was provided. */}
-                {(product.offerLabel?.trim() || product.mrp) && (
-                  <span className="text-xs font-bold text-amber-800 bg-amber-100 rounded px-1.5 py-0.5">
-                    {product.offerLabel?.trim()
-                      ? product.offerLabel.trim()
-                      : `${Math.round(((Number(product.mrp) - Number(product.price)) / Number(product.mrp)) * 100)}% OFF`}
-                  </span>
-                )}
+                </a>
+                {/* Pack size sits right under the title, the way Amazon prints
+                    "Size: 250 g" — it is what separates two otherwise identical
+                    listings of the same item. */}
+                {product.netQuantity ? (
+                  <p className="mt-2 text-sm font-semibold text-[#0f1111]">
+                    Net Quantity:{" "}
+                    <span className="font-bold">{product.netQuantity}</span>
+                  </p>
+                ) : null}
+                {/* SKU is optional — a product with no catalogue code simply
+                    shows no SKU line rather than an empty "SKU:" label. */}
+                {product.sku ? (
+                  <p className="mt-2 text-xs font-medium text-[#565959]">
+                    SKU: <span className="font-mono">{product.sku}</span>
+                  </p>
+                ) : null}
               </div>
-              {/* The price above is what the shopper pays for the goods —
-                  nothing is added on top at checkout but delivery. */}
-              <p className="mt-1 text-xs font-medium text-[#565959]">
-                {TAX_INCLUSIVE_LABEL}
+
+              {/* Price Frame */}
+              <div className="mt-5 rounded-md bg-white border border-emerald-100 p-4">
+                <div className="flex items-baseline gap-3">
+                  <span className="text-2xl font-extrabold text-emerald-800">
+                    {formatMoney(product.price)}
+                  </span>
+                  {product.mrp && (
+                    <span className="text-sm text-[#565959] line-through">
+                      {formatMoney(product.mrp)}
+                    </span>
+                  )}
+                  {/* Discount badge: prefer the admin-entered "Offer Badge"
+                      (product.offerLabel); fall back to the percentage computed
+                      from MRP vs. price when no badge text was provided. */}
+                  {(product.offerLabel?.trim() || product.mrp) && (
+                    <span className="text-xs font-bold text-amber-800 bg-amber-100 rounded px-1.5 py-0.5">
+                      {product.offerLabel?.trim()
+                        ? product.offerLabel.trim()
+                        : `${Math.round(((Number(product.mrp) - Number(product.price)) / Number(product.mrp)) * 100)}% OFF`}
+                    </span>
+                  )}
+                </div>
+                {/* The price above is what the shopper pays for the goods —
+                    nothing is added on top at checkout but delivery. */}
+                <p className="mt-1 text-xs font-medium text-[#565959]">
+                  {TAX_INCLUSIVE_LABEL}
+                </p>
+              </div>
+
+              {/* Short description */}
+              <p className="mt-6 text-sm leading-6 text-[#3f4545]">
+                {product.shortDescription}
               </p>
-            </div>
 
-            {/* Short description */}
-            <p className="mt-6 text-sm leading-6 text-[#3f4545]">
-              {product.shortDescription}
-            </p>
+              {/* About this item — Amazon-style bullet summary of the key selling
+                  points, pulled from the description's bullet lists. */}
+              <AboutThisItem body={product.description} />
 
-            {/* About this item — Amazon-style bullet summary of the key selling
-                points, pulled from the description's bullet lists. */}
-            <AboutThisItem body={product.description} />
+              {/* Available offers — derived from the product's real discount /
+                  badge plus the site-wide payment & dispatch promises. */}
+              <OffersBox
+                price={Number(product.price)}
+                mrp={product.mrp != null ? Number(product.mrp) : null}
+                offerLabel={product.offerLabel}
+              />
 
-            {/* Available offers — derived from the product's real discount /
-                badge plus the site-wide COD & dispatch promises. */}
-            <OffersBox
-              price={Number(product.price)}
-              mrp={product.mrp != null ? Number(product.mrp) : null}
-              offerLabel={product.offerLabel}
-            />
+              {/* Actions (Quantity and Checkout). */}
+              <ProductActions
+                product={{
+                  ...product,
+                  price: Number(product.price),
+                  mrp: product.mrp ? Number(product.mrp) : null,
+                  shippingFee: Number(product.shippingFee ?? 0),
+                }}
+              />
 
-            {/* Actions (Quantity and Checkout). The PDF href is passed through so
-                the sticky action bar can show a Download button beside them. */}
-            <ProductActions
-              product={{
-                ...product,
-                price: Number(product.price),
-                mrp: product.mrp ? Number(product.mrp) : null,
-                shippingFee: Number(product.shippingFee ?? 0),
-              }}
-              pdfHref={`/products/${product.slug}/pdf`}
-            />
+              {/* Delivery facts — courier, secure payment, status emails. No
+                  date estimate: an external courier owns the schedule. */}
+              <DeliveryInfo />
 
-            {/* Download the full product sheet (details, images, rating, specs &
-                description) as a server-generated PDF. */}
-            <a
-              href={`/products/${product.slug}/pdf`}
-              className="mt-4 inline-flex items-center justify-center gap-2 rounded-md border border-emerald-200 bg-white px-4 py-2.5 text-sm font-semibold text-emerald-800 transition hover:border-emerald-300 hover:bg-emerald-50"
-            >
-              <Download className="size-4" />
-              Download details as PDF
-            </a>
-
-            {/* Delivery facts — courier, Cash on Delivery, status emails. No
-                date estimate: an external courier owns the schedule. */}
-            <DeliveryInfo />
-
-            {/* Value Badges */}
-            <div className="mt-8 grid gap-4 border-t border-slate-100 pt-6 sm:grid-cols-3">
-              <div className="flex items-center gap-2">
-                <Leaf className="size-4 text-[#0f1111]" />
-                <span className="text-xs font-bold text-[#0f1111]">100% Organic</span>
+              {/* Value Badges */}
+              <div className="mt-8 grid gap-4 border-t border-slate-100 pt-6 sm:grid-cols-3">
+                <div className="flex items-center gap-2">
+                  <Leaf className="size-4 text-[#0f1111]" />
+                  <span className="text-xs font-bold text-[#0f1111]">100% Natural</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="size-4 text-[#0f1111]" />
+                  <span className="text-xs font-bold text-[#0f1111]">Lab Tested</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Box className="size-4 text-[#0f1111]" />
+                  <span className="text-xs font-bold text-[#0f1111]">Secure Dispatch</span>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="size-4 text-[#0f1111]" />
-                <span className="text-xs font-bold text-[#0f1111]">Lab Tested</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Box className="size-4 text-[#0f1111]" />
-                <span className="text-xs font-bold text-[#0f1111]">Secure Dispatch</span>
-              </div>
-            </div>
-          </FadeIn>
-        </div>
+            </FadeIn>
+          </div>
+        </ProductDetailsProvider>
 
         {/* Key ingredients — its own section above the spec table, mirroring the
             way Amazon surfaces ingredients for consumables rather than burying
@@ -513,15 +550,7 @@ export default async function ProductDetailPage({ params }) {
             }
           />
 
-          <ProductReviews
-            reviews={product.reviews.map((rev) => ({
-              id: rev.id,
-              userName: rev.user.name,
-              rating: rev.rating,
-              comment: rev.comment,
-              createdAt: rev.createdAt.toISOString(),
-            }))}
-          />
+          <ProductReviews reviews={clientReviews} />
         </div>
       </section>
 

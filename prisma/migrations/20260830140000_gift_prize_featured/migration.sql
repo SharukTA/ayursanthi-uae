@@ -1,0 +1,13 @@
+-- Featured gift prizes.
+--
+-- Marks the headline items — the car, the villa — that /gifts shows large at
+-- the top of the page rather than only as a row in the roadmap table.
+--
+-- A stored flag rather than "whatever sits in the highest tier" so the store can
+-- lead with whichever prize it wants to sell the programme on, and change that
+-- without a deploy.
+--
+-- Additive and safe on a live database: one column with a default, no backfill.
+-- Every existing prize starts unfeatured, so the showcase is empty until an
+-- admin deliberately picks something.
+ALTER TABLE "GiftPrize" ADD COLUMN "isFeatured" BOOLEAN NOT NULL DEFAULT false;

@@ -16,7 +16,9 @@ import {
   LayoutTemplate,
   Settings,
   FileText,
-  Mail
+  Mail,
+  Download,
+  Gift
 } from "lucide-react";
 import { FadeIn, PageReveal, Stagger, StaggerItem } from "@/components/Animated";
 import { SiteHeader } from "@/components/SiteHeader";
@@ -124,6 +126,29 @@ export default async function AdminDashboardPage() {
             );
           })}
         </Stagger>
+
+        {/* Booked customer data export — the one place an admin can pull the
+            whole order book, with contact details and shipping addresses, out
+            of the store as a spreadsheet. */}
+        <FadeIn className="mt-8 flex flex-col gap-4 rounded-md border border-border bg-white p-6 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="flex items-center gap-2 text-base font-bold text-slate-950">
+              <Download className="size-5 text-emerald-700" />
+              Booked Customer Data
+            </h2>
+            <p className="mt-1 max-w-xl text-[11px] leading-5 text-slate-500">
+              Every order ever placed, with the customer&apos;s name, email, phone and full
+              shipping address in separate columns — ready to open in Excel or hand to a courier.
+            </p>
+          </div>
+          <a
+            href="/api/admin/orders/export"
+            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-emerald-700 px-4 py-2.5 text-sm font-bold text-white shadow-sm"
+          >
+            <Download className="size-4" />
+            Download Booked Customer Data as CSV
+          </a>
+        </FadeIn>
 
         {/* Dashboard Panels */}
         <div className="mt-10 grid gap-8 lg:grid-cols-[1.5fr_1fr]">
@@ -233,6 +258,14 @@ export default async function AdminDashboardPage() {
                     { label: "Terms & Conditions", path: "/terms" },
                     { label: "FAQ", path: "/faq" }
                   ]
+                },
+                {
+                  title: "Gifts & Draw",
+                  desc: "Prize catalogue, the published gift roadmap, and the monthly draw.",
+                  href: "/admin/gifts",
+                  icon: Gift,
+                  color: "bg-violet-100 text-violet-800",
+                  covers: [{ label: "Gifts page", path: "/gifts" }]
                 },
                 {
                   title: "Email Log",

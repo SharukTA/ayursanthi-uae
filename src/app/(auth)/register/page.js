@@ -8,6 +8,7 @@ import { Loader2 } from "lucide-react";
 import { Logo3D } from "@/components/Logo3D";
 import { PasswordField } from "@/components/PasswordField";
 import { PhoneField } from "@/components/PhoneField";
+import { TermsNotice } from "@/components/TermsNotice";
 import {
   validateRegistration,
   validateReferralCode,
@@ -266,6 +267,17 @@ export default function RegisterPage() {
               "Create account"
             )}
           </button>
+
+          {/* Acceptance rides on the button above — see components/TermsNotice.js
+              for why there is no tickbox. Sits directly under the CTA so it is
+              part of the same glance, not buried in the footer. */}
+          <div className="mt-3">
+            <TermsNotice
+              action="register"
+              className="text-xs leading-5 text-slate-500"
+              linkClassName="font-medium text-[#007185] transition hover:text-[#c7511f] hover:underline"
+            />
+          </div>
 
           <div className="mt-6 flex items-center gap-3 text-xs text-slate-500">
             <span className="h-px flex-1 bg-slate-200" />

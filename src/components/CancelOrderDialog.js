@@ -5,7 +5,13 @@ import { toast } from "sonner";
 import { Loader2, XCircle } from "lucide-react";
 import { Modal } from "@/components/Modal";
 import { Button } from "@/components/ui/button";
-import { CANCEL_REASONS } from "@/lib/order-policy";
+import {
+  CANCEL_REASONS,
+  cancelWindowEndsAt,
+  formatCancelDeadline,
+  formatCancelWindow,
+} from "@/lib/order-policy";
+import { useSiteSettings } from "@/components/SettingsProvider";
 import { formatMoney } from "@/lib/currency";
 
 /**
@@ -13,16 +19,21 @@ import { formatMoney } from "@/lib/currency";
  * Cancelling always covers the whole order here, because an order is placed and
  * dispatched as one parcel.
  *
- * The copy about money changes with what was actually collected: Cash on
- * Delivery that never shipped costs the customer nothing, while an order whose
- * cash was already taken is refunded in full.
+ * The copy about money changes with what was actually collected: an order whose
+ * payment never completed costs the customer nothing, while a paid one is
+ * refunded to the card in full.
  */
-export function CancelOrderDialog({ order, onClose, onCancelled }) {
+export function CancelOrderDialog({ order, onClose, onCancelled, onStale }) {
   const [reason, setReason] = useState("");
   const [comment, setComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   const alreadyPaid = order.paymentStatus === "PAID";
+  // The deadline is repeated here, on the last screen before the order is
+  // pulled, because this is where a shopper decides whether to cancel now or
+  // "think about it" — and after the window there is no thinking about it.
+  const { order_cancel_window_hours: windowHours } = useSiteSettings();
+  const deadline = cancelWindowEndsAt(order, windowHours);
 
   const submit = async (event) => {
     event.preventDefault();
@@ -45,6 +56,15 @@ export function CancelOrderDialog({ order, onClose, onCancelled }) {
       const data = await res.json();
       if (!res.ok) {
         toast.error(data.message || "Could not cancel this order.", { id: toastId });
+        // A closed window is not a retry: the button is gone from the list
+        // behind this sheet, so leaving the form open would only invite a
+        // second submit with the same answer. Every other refusal — a refund
+        // Stripe would not take, a network blip — keeps the form so the reason
+        // and comment already typed are not lost.
+        if (data.code === "cancel_window_closed") {
+          onStale?.();
+          onClose();
+        }
         return;
       }
 
@@ -68,9 +88,17 @@ export function CancelOrderDialog({ order, onClose, onCancelled }) {
           </p>
           <p className="mt-1.5">
             {alreadyPaid
-              ? `You have already paid for this order, so ${formatMoney(order.total)} will be refunded to you.`
-              : "You pay cash on delivery, so nothing has been charged and there is nothing to refund."}
+              ? `You paid ${formatMoney(order.total)} for this order, so it will be refunded to the card you paid with. It usually reaches your account within 5–10 business days.`
+              : "This order was never paid for, so nothing has been charged and there is nothing to refund."}
           </p>
+          {deadline ? (
+            <p className="mt-1.5 border-t border-[#d5d9d9] pt-1.5">
+              Orders can be cancelled within {formatCancelWindow(windowHours)} of being placed —
+              until{" "}
+              <span className="font-bold text-[#0f1111]">{formatCancelDeadline(deadline)}</span> for
+              this one. After that it is with our delivery partner and cannot be cancelled.
+            </p>
+          ) : null}
         </div>
 
         <div>

@@ -10,6 +10,7 @@ import {
 } from "@react-pdf/renderer";
 import { parseRichText } from "@/components/RichText";
 import { splitIngredients } from "@/lib/utils";
+import { formatStoreDate } from "@/lib/store-time";
 import { formatMoney } from "@/lib/currency";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -172,7 +173,9 @@ export function ProductPdfDocument({ product, images }) {
       : null;
   const badge = offerLabel?.trim() || (discount ? `${discount}% OFF` : null);
   const ingredients = splitIngredients(keyIngredients);
-  const printedOn = new Date().toLocaleDateString("en-AE", { day: "numeric", month: "long", year: "numeric" });
+  // Rendered by the route handler on the server, so the zone has to be named
+  // explicitly or this prints the UTC day.
+  const printedOn = formatStoreDate(new Date());
 
   return (
     <Document title={`${name} — Ayursanthi`} author="Ayursanthi">

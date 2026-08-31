@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import {
   Mail,
@@ -13,6 +13,8 @@ import {
 import { FadeIn, PageReveal, Stagger, StaggerItem } from "@/components/Animated";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
+import { SocialLinks } from "@/components/SocialLinks";
+import { useSiteSettings } from "@/components/SettingsProvider";
 import { Button } from "@/components/ui/button";
 import { AnimatedHeading, AnimatedReveal } from "@/components/AnimatedText";
 import { Tilt3D } from "@/components/Tilt3D";
@@ -22,17 +24,10 @@ export default function ContactPage() {
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
-  const [settings, setSettings] = useState(null);
-
-  // Contact details are admin-managed (Site Settings). Fetch the public copy.
-  useEffect(() => {
-    fetch("/api/settings")
-      .then((res) => res.json())
-      .then((data) => setSettings(data.settings || {}))
-      .catch(() => setSettings({}));
-  }, []);
-
-  const s = settings || {};
+  // Contact details are admin-managed (Site Settings). They arrive already
+  // resolved from the root layout, so the cards below render filled in on the
+  // first paint instead of flashing "—" while a fetch resolves.
+  const s = useSiteSettings();
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -156,10 +151,10 @@ export default function ContactPage() {
             <StaggerItem>
               <Tilt3D maxTilt={8} scale={1.03}>
                 <div className="flex items-start gap-3 rounded-md border border-border bg-white p-4">
-                  <span className="flex size-10 items-center justify-center rounded-md bg-[#232f3e] text-white">
+                  <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-[#232f3e] text-white">
                     <Phone className="size-5" />
                   </span>
-                  <div>
+                  <div className="min-w-0 wrap-anywhere">
                     <h4 className="text-sm font-bold text-[#0f1111]">Call Center</h4>
                     <p className="mt-1 text-xs font-semibold text-[#3f4545]">{s.contact_phone || "—"}</p>
                     <p className="text-[10px] font-medium text-[#565959]">{s.contact_hours || ""}</p>
@@ -171,10 +166,10 @@ export default function ContactPage() {
             <StaggerItem>
               <Tilt3D maxTilt={8} scale={1.03}>
                 <div className="flex items-start gap-3 rounded-md border border-border bg-white p-4">
-                  <span className="flex size-10 items-center justify-center rounded-md bg-[#232f3e] text-white">
+                  <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-[#232f3e] text-white">
                     <Mail className="size-5" />
                   </span>
-                  <div>
+                  <div className="min-w-0 wrap-anywhere">
                     <h4 className="text-sm font-bold text-[#0f1111]">Email Support</h4>
                     <p className="mt-1 text-xs font-semibold text-[#3f4545]">{s.contact_email || "—"}</p>
                     <p className="text-[10px] font-medium text-[#565959]">Response within 24h</p>
@@ -186,10 +181,10 @@ export default function ContactPage() {
             <StaggerItem>
               <Tilt3D maxTilt={8} scale={1.03}>
                 <div className="flex items-start gap-3 rounded-md border border-border bg-white p-4">
-                  <span className="flex size-10 items-center justify-center rounded-md bg-[#232f3e] text-white">
+                  <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-[#232f3e] text-white">
                     <MapPin className="size-5" />
                   </span>
-                  <div>
+                  <div className="min-w-0 wrap-anywhere">
                     <h4 className="text-sm font-bold text-[#0f1111]">Office Head</h4>
                     <p className="mt-1 text-xs font-semibold text-[#3f4545]">{s.contact_company || "—"}</p>
                     <p className="text-[10px] font-medium text-[#565959]">{s.contact_address || ""}</p>
@@ -201,10 +196,10 @@ export default function ContactPage() {
             <StaggerItem>
               <Tilt3D maxTilt={8} scale={1.03}>
                 <div className="flex items-start gap-3 rounded-md border border-border bg-white p-4">
-                  <span className="flex size-10 items-center justify-center rounded-md bg-[#232f3e] text-white">
+                  <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-[#232f3e] text-white">
                     <Clock className="size-5" />
                   </span>
-                  <div>
+                  <div className="min-w-0 wrap-anywhere">
                     <h4 className="text-sm font-bold text-[#0f1111]">Fulfillment</h4>
                     <p className="mt-1 text-xs font-semibold text-[#3f4545]">{s.contact_dispatch || "—"}</p>
                     <p className="text-[10px] font-medium text-[#565959]">{s.contact_address || ""}</p>
@@ -213,6 +208,17 @@ export default function ContactPage() {
               </Tilt3D>
             </StaggerItem>
           </Stagger>
+
+          {/* Renders nothing until an admin adds at least one social URL.
+              Explicit hex colours here, not text-slate-*: this is a white
+              surface, where globals.css flips the light text utilities to ink. */}
+          <SocialLinks
+            heading="Follow us"
+            className="rounded-md border border-border bg-white p-4"
+            headingClassName="text-sm font-bold text-[#0f1111]"
+            linkClassName="text-[#565959] hover:text-[#0f1111]"
+            iconClassName="size-6"
+          />
         </div>
       </section>
 

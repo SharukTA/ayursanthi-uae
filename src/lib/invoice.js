@@ -4,6 +4,8 @@ import { formatMoney, getBrandContext } from "@/lib/email";
 import { getSiteSettings } from "@/lib/settings";
 import { OrderInvoiceDocument } from "@/components/OrderInvoiceDocument";
 import { formatAddressLines } from "@/lib/address";
+import { paymentMethodLabel } from "@/lib/order-policy";
+import { formatStoreDate } from "@/lib/store-time";
 
 /**
  * Builds the commercial invoice for an order.
@@ -20,7 +22,7 @@ function invoiceNumberFor(order) {
 }
 
 const PAYMENT_STATUS_COPY = {
-  PENDING: "Pending — payable on delivery",
+  PENDING: "Pending",
   PAID: "Paid",
   FAILED: "Not collected",
   REFUNDED: "Refunded",
@@ -56,8 +58,10 @@ async function buildInvoiceData(order) {
     companyAddress,
     invoiceNumber: invoiceNumberFor(order),
     orderNumber: order.orderNumber,
-    orderDate: new Date(order.createdAt).toDateString(),
-    paymentMethod: "Cash on Delivery",
+    // Gulf time, not the render machine's. An invoice is read months later
+    // and has to agree with the day the customer remembers ordering on.
+    orderDate: formatStoreDate(order.createdAt),
+    paymentMethod: paymentMethodLabel(order),
     paymentStatus: PAYMENT_STATUS_COPY[order.paymentStatus] || order.paymentStatus,
     shipTo: addressLines(order.addressSnapshot),
     items: (order.items ?? []).map((item) => ({
@@ -86,7 +90,7 @@ async function buildInvoiceData(order) {
 export async function renderOrderInvoice(orderId) {
   const order = await prisma.order.findUnique({
     where: { id: orderId },
-    include: { items: true },
+    include: { items: true, payments: true },
   });
   if (!order) return null;
 

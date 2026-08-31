@@ -15,6 +15,7 @@ import {
   X,
   History,
   Users,
+  Gift,
 } from "lucide-react";
 import { clearGuestCart, notifyCartChanged } from "@/lib/cart-client";
 
@@ -24,6 +25,8 @@ const navItems = [
   { href: "/dashboard/orders", label: "My Orders", icon: ShoppingBag },
   // Customers only — staff accounts are not in the affiliate program.
   { href: "/dashboard/referrals", label: "My Referrals", icon: Users, customerOnly: true },
+  // Same rule: the gift draw is part of the customer programme, not staff.
+  { href: "/dashboard/gifts", label: "My Gifts", icon: Gift, customerOnly: true },
   { href: "/dashboard/browsing-history", label: "Browsing History", icon: History },
   { href: "/dashboard/change-password", label: "Change Password", icon: KeyRound },
 ];

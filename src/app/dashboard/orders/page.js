@@ -10,13 +10,19 @@ import {
   MapPin,
   CreditCard,
   RotateCcw,
+  Truck,
   XCircle,
 } from "lucide-react";
+import { toast } from "sonner";
 import { FadeIn, PageReveal } from "@/components/Animated";
 import { CancelOrderDialog } from "@/components/CancelOrderDialog";
 import { OrderRefunds } from "@/components/OrderRefunds";
-import { OrderProgress } from "@/components/OrderProgress";
-import { canCancelOrder } from "@/lib/order-policy";
+import {
+  canCancelOrder,
+  formatCancelDeadline,
+  formatCancelWindow,
+} from "@/lib/order-policy";
+import { useSiteSettings } from "@/components/SettingsProvider";
 import { formatMoney } from "@/lib/currency";
 import { formatAddressLines } from "@/lib/address";
 
@@ -34,6 +40,12 @@ const STATUS_LINE = {
 };
 
 // The bold line above the items, mirroring Amazon's wording.
+//
+// Only PENDING, CONFIRMED and CANCELLED are still written — once payment clears
+// the order is confirmed and the courier owns the rest of the journey, tracked
+// by AWB number on their side rather than reported back here. The remaining
+// entries are for orders placed under the old admin-driven ladder, which must
+// keep reading correctly forever.
 const STATUS_LINES = {
   DELIVERED: "Delivered",
   CANCELLED: "Cancelled",
@@ -44,10 +56,6 @@ const STATUS_LINES = {
   PENDING: "Order placed",
 };
 
-// Statuses where the parcel is with the courier, so a consignment number is
-// worth showing.
-const IN_TRANSIT = ["SHIPPED", "OUT_FOR_DELIVERY", "DELIVERED"];
-
 const fmtDate = (value) =>
   new Date(value).toLocaleDateString("en-AE", {
     year: "numeric",
@@ -57,13 +65,13 @@ const fmtDate = (value) =>
 
 // The tabs across the top, Amazon-style. Each carries a predicate that filters
 // the order list client-side.
+//
+// Just the two. Amazon's middle tabs slice orders by where the parcel is, and
+// this store does not know that — the courier takes it once payment clears and
+// reports back to the customer directly, by AWB. A tab that cannot say anything
+// the "Orders" tab doesn't is a tab that only makes the shopper click twice.
 const TABS = [
   { key: "ALL", label: "Orders", match: () => true },
-  {
-    key: "OPEN",
-    label: "Not yet shipped",
-    match: (o) => ["PENDING", "PROCESSING", "CONFIRMED"].includes(o.status),
-  },
   { key: "CANCELLED", label: "Cancelled orders", match: (o) => o.status === "CANCELLED" },
 ];
 
@@ -82,6 +90,37 @@ export default function OrdersPage() {
   const [tab, setTab] = useState("ALL");
   // Order currently being cancelled, or null when no sheet is open.
   const [cancelling, setCancelling] = useState(null);
+  // The live cancellation window, seeded server-side by SettingsProvider, so the
+  // deadline shown here is the one the API will enforce.
+  const { order_cancel_window_hours: windowHours } = useSiteSettings();
+  // Re-read every minute so a window that runs out while the page is open takes
+  // the button away with it, rather than leaving a shopper to click it and be
+  // told no by the server.
+  const [now, setNow] = useState(() => Date.now());
+
+  // One timer drives both: the list re-renders with the new instant, and an open
+  // cancellation sheet is shut if its order left the window while the shopper
+  // was filling it in. Without the second half they would sit in front of a form
+  // still promising a deadline that has passed, and learn otherwise only from
+  // the server's refusal.
+  //
+  // Both setState calls are inside the interval callback rather than the effect
+  // body on purpose: this effect subscribes to a clock, and the clock is what
+  // pushes the updates.
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const at = Date.now();
+      setNow(at);
+      if (cancelling && !canCancelOrder(cancelling, { windowHours, now: at }).allowed) {
+        setCancelling(null);
+        toast.error(
+          `The cancellation window for order ${cancelling.orderNumber} has just closed. ` +
+            `It is now with our delivery partner.`
+        );
+      }
+    }, 60_000);
+    return () => clearInterval(timer);
+  }, [cancelling, windowHours]);
 
   const loadOrders = useCallback(
     () =>
@@ -174,10 +213,21 @@ export default function OrdersPage() {
             const lineClass = STATUS_LINE[order.status] ?? STATUS_LINE.PENDING;
             // Same policy the API enforces — see lib/order-policy.js. The
             // button only appears when the action would actually succeed.
-            const cancellable = canCancelOrder(order);
+            //
+            // `now` is deliberately the value captured once per render rather
+            // than a fresh Date() per order: a list rendered across a window
+            // boundary should show one consistent answer, not a button that is
+            // live in the first row and expired in the third.
+            const cancellable = canCancelOrder(order, { windowHours, now });
             const firstSlug = order.items.find((i) => i.product?.slug)?.product?.slug;
 
             const statusLine = STATUS_LINES[order.status] ?? STATUS_LINES.PENDING;
+            // Paid, still live, and not one of the legacy orders already marked
+            // delivered under the old ladder — i.e. exactly the orders sitting
+            // with the courier right now.
+            const awaitingCourier =
+              order.paymentStatus === "PAID" &&
+              !["CANCELLED", "DELIVERED"].includes(order.status);
 
             return (
               <FadeIn
@@ -257,19 +307,25 @@ export default function OrdersPage() {
                         : ""}
                     </p>
 
-                    {/* The progress bar. Renders nothing for a cancelled order —
-                        that case is covered by the panel further down. */}
-                    <OrderProgress order={order} />
+                    {/* What happens next, in the shopper's terms. The store has
+                        no tracking to show: the parcel goes to an outside
+                        delivery partner as soon as the payment clears, and they
+                        issue the AWB and send it to the customer themselves (see
+                        lib/email-logistics.js). Saying so is more use than a
+                        progress bar that could only ever guess.
 
-                    {/* Courier consignment, once the parcel is actually moving.
-                        Kept as plain text: the store uses whichever courier is
-                        cheapest per route, so there is no single tracking URL
-                        to link to. */}
-                    {order.trackingNumber && IN_TRANSIT.includes(order.status) ? (
-                      <p className="mt-1 text-[13px] text-[#565959]">
-                        {order.courierName ? `${order.courierName} · ` : ""}
-                        Tracking&nbsp;
-                        <span className="font-mono text-[#0f1111]">{order.trackingNumber}</span>
+                        "email or phone" is not vagueness for its own sake — the
+                        dispatch email hands the courier desk both contacts and
+                        lets them pick, so naming one channel here would be a
+                        promise this store is in no position to keep. */}
+                    {awaitingCourier ? (
+                      <p className="mt-2 flex items-start gap-2 text-[13px] leading-snug text-[#565959]">
+                        <Truck className="mt-0.5 size-4 shrink-0 text-[#007600]" />
+                        <span>
+                          Your parcel is with our delivery partner. They will send an{" "}
+                          <span className="font-bold text-[#0f1111]">AWB tracking number</span> to
+                          your email or phone — use it on their website to follow your delivery.
+                        </span>
                       </p>
                     ) : null}
 
@@ -347,15 +403,44 @@ export default function OrdersPage() {
                     >
                       View order details
                     </button>
+                    {/* Cancelling closes a fixed time after the order is
+                        placed — the courier collects and packs the parcel then,
+                        and nothing here can stop it afterwards. The deadline is
+                        printed under the button rather than left for the shopper
+                        to work out from the order date, because it is the one
+                        piece of information that decides whether the button will
+                        still be there tomorrow. */}
                     {cancellable.allowed ? (
-                      <button
-                        type="button"
-                        onClick={() => setCancelling(order)}
-                        className={PILL_SECONDARY}
-                      >
-                        <XCircle className="size-3.5" />
-                        Cancel order
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setCancelling(order)}
+                          className={PILL_SECONDARY}
+                        >
+                          <XCircle className="size-3.5" />
+                          Cancel order
+                        </button>
+                        <p className="text-center text-[11px] leading-snug text-[#565959]">
+                          Cancel within {formatCancelWindow(windowHours)} of placing your order
+                          {cancellable.deadline ? (
+                            <>
+                              {" — by "}
+                              <span className="font-bold text-[#0f1111]">
+                                {formatCancelDeadline(cancellable.deadline)}
+                              </span>
+                            </>
+                          ) : null}
+                          . After that it is with our delivery partner.
+                        </p>
+                      </>
+                    ) : cancellable.expired ? (
+                      <p className="rounded-md bg-[#f7fafa] px-3 py-2 text-center text-[11px] leading-snug text-[#565959] ring-1 ring-[#d5d9d9]">
+                        The {formatCancelWindow(windowHours)} cancellation window closed on{" "}
+                        <span className="font-bold text-[#0f1111]">
+                          {formatCancelDeadline(cancellable.deadline)}
+                        </span>
+                        .
+                      </p>
                     ) : null}
                   </div>
                 </div>
@@ -382,9 +467,12 @@ export default function OrdersPage() {
                       </div>
                     ) : null}
 
-                    {/* Policy messaging when no action button is available */}
+                    {/* Policy messaging when no action button is available.
+                        The expired case is included: the rail above says when
+                        the window shut, this says what that means. */}
                     {!cancellable.allowed &&
-                    ["SHIPPED", "OUT_FOR_DELIVERY"].includes(order.status) ? (
+                    (cancellable.expired ||
+                      ["SHIPPED", "OUT_FOR_DELIVERY"].includes(order.status)) ? (
                       <p className="text-[11px] text-[#565959]">{cancellable.message}</p>
                     ) : null}
 
@@ -477,6 +565,10 @@ export default function OrdersPage() {
           order={cancelling}
           onClose={() => setCancelling(null)}
           onCancelled={loadOrders}
+          // The server refused because the window shut mid-form — inside the
+          // minute the tick above had not yet caught. Reload so the list drops
+          // the button, and close the sheet: there is nothing to retry.
+          onStale={loadOrders}
         />
       ) : null}
     </div>

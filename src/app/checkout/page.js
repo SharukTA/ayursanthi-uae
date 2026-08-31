@@ -4,9 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import {
-  Banknote,
+  CreditCard,
   Lock,
-  CheckCircle,
   ChevronRight,
   Loader2,
   ShoppingCart,
@@ -18,22 +17,18 @@ import { CheckoutBanner } from "@/components/CheckoutBanner";
 import { PasswordField } from "@/components/PasswordField";
 import { PhoneField } from "@/components/PhoneField";
 import { CountrySelect, StateField } from "@/components/AddressFields";
+import { PaymentMarks } from "@/components/PaymentMarks";
+import { TermsNotice } from "@/components/TermsNotice";
 import { validateRegistration } from "@/lib/validation";
 import { getCountry } from "@/lib/geo/countries";
-import { formatAddressSummary, validateShippingAddress } from "@/lib/address";
+import { validateShippingAddress } from "@/lib/address";
 import {
   calculateOrderTotals,
   FREE_SHIPPING_THRESHOLD,
   TAX_INCLUSIVE_LABEL,
 } from "@/lib/pricing";
 import { formatMoney } from "@/lib/currency";
-import {
-  clearBuyNowItem,
-  finalizePurchase,
-  getCart,
-  notifyCartChanged,
-  readBuyNowItem,
-} from "@/lib/cart-client";
+import { getCart, readBuyNowItem } from "@/lib/cart-client";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Amazon-style checkout ("secure checkout pipeline"): a white page with three
@@ -76,6 +71,13 @@ const YELLOW_CTA =
 // Alias kept so the JSX below reads the same; the formatting itself is shared
 // with the cart, the invoice and the order emails via lib/currency.js.
 const money = formatMoney;
+
+// Whether to offer online payment at all. The publishable key is the only sign
+// of Stripe the browser can see, and it is set alongside the secret key, so its
+// absence means this install has no gateway — better to hide the option than to
+// offer a button that can only fail. NEXT_PUBLIC_ vars are inlined at build
+// time, so this is a constant rather than a runtime lookup.
+const ONLINE_PAYMENT_ENABLED = Boolean(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY);
 
 // Shared shell for the interstitial screens (auth gate, admin block, success),
 // so they sit on the same white Amazon page as the checkout itself.
@@ -170,11 +172,7 @@ export default function CheckoutPage() {
   const [email, setEmail] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
 
-  // Cash on Delivery is currently the only way to pay — no online gateway.
-  const [paymentMethod, setPaymentMethod] = useState("COD");
   const [submitting, setSubmitting] = useState(false);
-  const [orderSuccess, setOrderSuccess] = useState(false);
-  const [placedOrderDetails, setPlacedOrderDetails] = useState(null);
 
   // Sentinel placed in normal flow at the bottom of the checkout content. While
   // it is off-screen (the customer hasn't scrolled down to the inline "Place
@@ -187,11 +185,49 @@ export default function CheckoutPage() {
   // until the settings fetch resolves. The server enforces the authoritative one.
   const [freeShipThreshold, setFreeShipThreshold] = useState(FREE_SHIPPING_THRESHOLD);
 
+  // Back from Stripe without paying. The reservation has already been released
+  // and nothing was charged, but the shopper has just been bounced between two
+  // sites and deserves to be told that. Said once, then the flag is stripped
+  // from the URL so a refresh does not repeat it.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("payment") !== "cancelled") return;
+
+    toast("Payment cancelled — you have not been charged.");
+
+    // Give the reserved stock straight back. Fire-and-forget: the webhook's
+    // session-expiry event does the same job for anyone who closed the tab
+    // instead of coming back here, so a failed call costs half an hour of a
+    // needlessly held reservation, nothing more.
+    const cancelledOrderId = params.get("order");
+    if (cancelledOrderId) {
+      fetch("/api/checkout/stripe/release", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId: cancelledOrderId }),
+      }).catch(() => {});
+    }
+
+    params.delete("payment");
+    params.delete("order");
+    const query = params.toString();
+    window.history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}${query ? `?${query}` : ""}`
+    );
+  }, []);
+
   // 1. Fetch Session & Cart
   useEffect(() => {
+    // Leaving the page mid-request makes the browser reject the fetch. That is
+    // not a failure, so the request is tied to the mount and the abort is told
+    // apart from a real error below.
+    const controller = new AbortController();
+
     async function checkAuth() {
       try {
-        const res = await fetch("/api/auth/session");
+        const res = await fetch("/api/auth/session", { signal: controller.signal });
         const data = await res.json();
         if (data.loggedIn) {
           setSession(data.session);
@@ -201,7 +237,12 @@ export default function CheckoutPage() {
           setEmail(data.session.email || "");
         }
       } catch (e) {
-        console.error("Auth check failed.");
+        // An abort means the visitor navigated away — nothing went wrong and
+        // there is nobody left to tell.
+        if (e?.name === "AbortError") return;
+        // The error itself, not just a sentence about it: logging a bare string
+        // threw away the only thing that could say WHY the session call failed.
+        console.error("Auth check failed:", e);
       } finally {
         setAuthChecked(true);
       }
@@ -227,8 +268,8 @@ export default function CheckoutPage() {
         const { items, source } = await getCart();
         setCart(items);
         setBasketSource(source === "guest" ? "guest" : "account");
-      } catch {
-        console.error("Failed to load cart.");
+      } catch (e) {
+        console.error("Failed to load cart:", e);
       } finally {
         // Marks the read as done so the empty state only shows once we actually
         // know the basket is empty, rather than flashing during the first paint.
@@ -237,6 +278,8 @@ export default function CheckoutPage() {
     }
 
     loadBasket();
+
+    return () => controller.abort();
   }, []);
 
   // Pull the current free-shipping threshold so the totals here match the cart
@@ -271,7 +314,7 @@ export default function CheckoutPage() {
     );
     observer.observe(el);
     return () => observer.disconnect();
-  }, [authChecked, session, orderSuccess, bookingItems.length]);
+  }, [authChecked, session, bookingItems.length]);
 
   const itemCount = bookingItems.reduce((acc, item) => acc + item.quantity, 0);
   // The order total is goods + delivery (see lib/pricing.js) — prices are
@@ -426,7 +469,7 @@ export default function CheckoutPage() {
         role: user.role,
       });
 
-      // An admin who signs in here cannot buy anything — the orders API answers
+      // An admin who signs in here cannot buy anything — the checkout API answers
       // 403. Setting the session above swaps the page over to the admin notice
       // instead of letting them submit into a rejection they can't act on. No
       // order follows, so the header can be told straight away.
@@ -444,65 +487,49 @@ export default function CheckoutPage() {
     }
   };
 
-  const onOrderSuccess = (data, purchasedItems) => {
-    toast.success("Order Placed Successfully!");
-
-    // Tidy up only the list that was actually bought from. Every other basket
-    // the shopper owns is left exactly as they left it.
-    if (basketSource === "buynow") {
-      // Belongs to no cart at all — just discard the one-off item.
-      clearBuyNowItem();
-      notifyCartChanged();
-    } else if (basketSource === "guest") {
-      // Bought out of this browser's cart: drop those lines from it. The saved
-      // account cart is untouched, and whatever is left here merges into the
-      // account the next time the shopper opens /cart.
-      finalizePurchase(purchasedItems.map((item) => item.productId));
-    } else {
-      // Bought out of the saved cart, whose lines the order transaction has
-      // already removed (lib/checkout.js); anything left unticked was kept on
-      // purpose. A browser cart, if one somehow exists, is a different basket
-      // and is deliberately left alone.
-      notifyCartChanged();
-    }
-    setPlacedOrderDetails({
-      orderNumber: data.orderNumber,
-      totalAmount: total,
-      address: formatAddressSummary(buildShippingAddress()),
-    });
-    setOrderSuccess(true);
-  };
-
-  // Cash on Delivery: a single call creates the order. Nothing is charged now —
-  // the customer pays the courier on delivery.
-  const submitCodOrder = async (itemsBeingBought) => {
+  // Online payment: reserve the order, then hand the browser over to Stripe's
+  // hosted page. Nothing is confirmed here — the order is still unpaid as we
+  // navigate away, and only the webhook (or the return page) marks it paid.
+  //
+  // No cart is cleared on this path either. The shopper has not paid yet, and
+  // an abandoned payment has to leave their basket exactly as they left it; the
+  // tidying happens on the success page once the money is actually in.
+  //
+  // Resolves true once the redirect is under way, which tells the caller this
+  // component is on its way out and should stop doing things.
+  const submitStripeOrder = async (itemsBeingBought) => {
     setSubmitting(true);
-    const toastId = toast.loading("Placing your order...");
+    const toastId = toast.loading("Taking you to secure payment...");
 
     try {
-      const cartPayload = itemsBeingBought.map((item) => ({
-        productId: item.productId,
-        quantity: item.quantity,
-      }));
-
-      const res = await fetch("/api/orders", {
+      const res = await fetch("/api/checkout/stripe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          cart: cartPayload,
+          cart: itemsBeingBought.map((item) => ({
+            productId: item.productId,
+            quantity: item.quantity,
+          })),
           shippingAddress: buildShippingAddress(),
           cartSource: basketSource,
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Could not place your order.");
+      if (!res.ok || !data.url) {
+        throw new Error(data.message || "Could not start your payment.");
+      }
 
       toast.dismiss(toastId);
-      onOrderSuccess(data, itemsBeingBought);
+      // Left submitting on purpose: the button stays disabled for the moment it
+      // takes the browser to leave, so the order cannot be started twice.
+      window.location.href = data.url;
+      return true;
     } catch (error) {
-      toast.error(error.message || "Something went wrong placing your order.", { id: toastId });
-    } finally {
+      toast.error(error.message || "Something went wrong starting your payment.", {
+        id: toastId,
+      });
       setSubmitting(false);
+      return false;
     }
   };
 
@@ -524,9 +551,14 @@ export default function CheckoutPage() {
       return;
     }
 
-    // Exactly the rules /api/orders re-applies server-side - both sides import
-    // them from lib/address.js, so the form can never accept an address the
-    // server will then turn away.
+    if (!ONLINE_PAYMENT_ENABLED) {
+      toast.error("Online payment is unavailable right now. Please try again shortly.");
+      return;
+    }
+
+    // Exactly the rules /api/checkout/stripe re-applies server-side - both sides
+    // import them from lib/address.js, so the form can never accept an address
+    // the server will then turn away.
     const addressError = validateShippingAddress(buildShippingAddress());
     if (addressError) {
       toast.error(addressError);
@@ -543,8 +575,12 @@ export default function CheckoutPage() {
       signedInHere = true;
     }
 
-    // Cash on Delivery is the only payment option right now.
-    await submitCodOrder(itemsBeingBought);
+    // On success the browser is already on its way to Stripe, and the header
+    // gets its refresh from the success page instead. Only a payment that failed
+    // to even start falls through to the authUpdate below — which still matters,
+    // because the account may have just been created here.
+    const redirecting = await submitStripeOrder(itemsBeingBought);
+    if (redirecting) return;
 
     // Only now tell the header it has a signed-in shopper. Its cart badge
     // refreshes on this event, and that refresh merges any browser cart into the
@@ -607,62 +643,6 @@ export default function CheckoutPage() {
     );
   }
 
-  // Successful Checkout — Amazon's "Order placed, thanks!" confirmation.
-  if (orderSuccess && placedOrderDetails) {
-    return (
-      <CheckoutShell>
-        <div className="w-full max-w-2xl">
-          <div className="flex items-start gap-3 border-b border-[#e7e7e7] pb-5">
-            <CheckCircle className="mt-0.5 size-8 shrink-0 text-[#067d62]" />
-            <div>
-              <h2 className="text-2xl font-bold text-[#067d62]">Order placed, thank you!</h2>
-              <p className="mt-1 text-[13px] text-[#565959]">
-                Keep the cash ready — you pay the delivery agent when your order arrives. A
-                confirmation has been added to your orders.
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-5 rounded-lg border border-[#d5d9d9] bg-white">
-            <div className="border-b border-[#e7e7e7] bg-[#f0f2f2] px-4 py-2.5 text-[13px] font-bold text-[#0f1111]">
-              Order details
-            </div>
-            <dl className="divide-y divide-[#e7e7e7] px-4 text-[13px]">
-              <div className="flex justify-between gap-4 py-3">
-                <dt className="text-[#565959]">Order number</dt>
-                <dd className="font-bold text-[#007185]">{placedOrderDetails.orderNumber}</dd>
-              </div>
-              <div className="flex justify-between gap-4 py-3">
-                <dt className="text-[#565959]">Amount payable on delivery</dt>
-                <dd className="text-base font-bold text-[#b12704]">
-                  {money(placedOrderDetails.totalAmount)}
-                </dd>
-              </div>
-              <div className="flex justify-between gap-4 py-3">
-                <dt className="shrink-0 text-[#565959]">Shipping to</dt>
-                <dd className="text-right leading-5 text-[#0f1111]">
-                  {placedOrderDetails.address}
-                </dd>
-              </div>
-            </dl>
-          </div>
-
-          <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-            <Link href="/products" className={`${YELLOW_CTA} h-9 sm:w-auto sm:px-8`}>
-              Continue shopping
-            </Link>
-            <Link
-              href="/dashboard/orders"
-              className="inline-flex h-9 w-full items-center justify-center rounded-lg border border-[#d5d9d9] bg-white px-4 text-[13px] font-semibold text-[#0f1111] shadow-[0_2px_5px_rgba(15,17,17,0.1)] transition hover:bg-[#f7fafa] sm:w-auto sm:px-8"
-            >
-              View your orders
-            </Link>
-          </div>
-        </div>
-      </CheckoutShell>
-    );
-  }
-
   // ── The order summary panel. Rendered twice: sticky in the right column and
   // again in the box at the bottom of the steps, exactly like Amazon. ──
   const orderSummary = (
@@ -693,32 +673,36 @@ export default function CheckoutPage() {
   );
 
   // The CTA names both phases of the click, so a guest knows an account is about
-  // to be created before they press it rather than after.
+  // to be created before they press it rather than after. It says "pay" rather
+  // than "place your order", because the order is not placed until Stripe
+  // reports the money arrived.
   const placeOrderButton = (
-    <button type="submit" disabled={busy} className={`${YELLOW_CTA} h-9`}>
+    <button
+      type="submit"
+      disabled={busy || !ONLINE_PAYMENT_ENABLED}
+      className={`${YELLOW_CTA} h-9`}
+    >
       {busy ? (
         <>
           <Loader2 className="size-4 animate-spin" />
-          {authBusy ? "Setting up your account..." : "Placing your order..."}
+          {authBusy ? "Setting up your account..." : "Taking you to payment..."}
         </>
       ) : session ? (
-        "Place your order"
+        "Proceed to payment"
       ) : authMode === "register" ? (
-        "Create account & place order"
+        "Create account & pay"
       ) : (
-        "Sign in & place order"
+        "Sign in & pay"
       )}
     </button>
   );
 
+  // Names both halves of what the click does. For a guest on the "I'm new here"
+  // tab the same button creates the account as well as paying, so the notice
+  // has to cover the signup too — otherwise the account is made against terms
+  // the shopper was never shown.
   const termsNote = (
-    <p className="text-[11px] leading-4 text-[#565959]">
-      By placing your order, you agree to Ayursanthi&apos;s{" "}
-      <Link href="/terms" className="text-[#007185] transition hover:text-[#c7511f] hover:underline">
-        conditions of use and sale
-      </Link>
-      .
-    </p>
+    <TermsNotice action={!session && authMode === "register" ? "both" : "order"} />
   );
 
   return (
@@ -1133,39 +1117,28 @@ export default function CheckoutPage() {
                   <div className="border-b border-[#e7e7e7] bg-[#f0f2f2] px-4 py-2 text-[13px] font-bold text-[#0f1111]">
                     Your available payment methods
                   </div>
-                  <div className="divide-y divide-[#e7e7e7]">
-                    {[
-                      {
-                        id: "COD",
-                        label: "Cash on Delivery / Pay on Delivery",
-                        desc: "Pay the delivery agent in cash when your order arrives. Cash on delivery is available for this address.",
-                      },
-                    ].map((gateway) => (
-                      <label
-                        key={gateway.id}
-                        className="flex cursor-pointer items-start gap-3 px-4 py-3.5 transition hover:bg-[#f7fafa]"
-                      >
-                        <input
-                          type="radio"
-                          name="paymentMethod"
-                          value={gateway.id}
-                          checked={paymentMethod === gateway.id}
-                          onChange={() => setPaymentMethod(gateway.id)}
-                          disabled={busy}
-                          className="mt-0.5 size-4 accent-[#007185]"
-                        />
-                        <span className="min-w-0">
-                          <span className="flex items-center gap-2 text-[13px] font-bold text-[#0f1111]">
-                            <Banknote className="size-4 text-[#565959]" />
-                            {gateway.label}
-                          </span>
-                          <span className="mt-1 block text-[12px] leading-4 text-[#565959]">
-                            {gateway.desc}
-                          </span>
+                  {/* One method, so there is nothing to choose between — a lone
+                      radio button asking to be selected is just an extra click. */}
+                  {ONLINE_PAYMENT_ENABLED ? (
+                    <div className="flex items-start gap-3 px-4 py-3.5">
+                      <CreditCard className="mt-0.5 size-4 shrink-0 text-[#565959]" />
+                      <span className="min-w-0">
+                        <span className="block text-[13px] font-bold text-[#0f1111]">
+                          Card, Apple Pay or Google Pay
                         </span>
-                      </label>
-                    ))}
-                  </div>
+                        <span className="mt-1 block text-[12px] leading-4 text-[#565959]">
+                          You pay on Stripe&apos;s secure page. Your card details never touch this
+                          site, and your order is confirmed the moment the payment clears.
+                        </span>
+                        <PaymentMarks className="mt-2.5 justify-start" />
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="px-4 py-3.5 text-[12px] leading-4 text-[#b12704]">
+                      Online payment is temporarily unavailable, so orders cannot be placed right
+                      now. Please try again shortly — nothing in your basket will be lost.
+                    </div>
+                  )}
                 </div>
               </section>
 
@@ -1249,8 +1222,11 @@ export default function CheckoutPage() {
               </section>
 
               {/* Bottom place-order box — Amazon repeats the CTA and the total at
-                  the end of the pipeline so you never scroll back up. */}
-              <div className="mt-6 flex flex-col items-start gap-4 rounded-lg border border-[#d5d9d9] bg-[#f7fafa] p-4 sm:flex-row sm:items-center sm:justify-between">
+                  the end of the pipeline so you never scroll back up. Only worth
+                  showing once the summary is a sticky side panel: below lg the
+                  aside stacks directly underneath and already repeats both the
+                  CTA and the total, so this box is hidden there. */}
+              <div className="mt-6 hidden flex-col items-start gap-4 rounded-lg border border-[#d5d9d9] bg-[#f7fafa] p-4 sm:flex-row sm:items-center sm:justify-between lg:flex">
                 <div className="w-full sm:w-56">
                   {placeOrderButton}
                   <div className="mt-2">{termsNote}</div>
@@ -1260,7 +1236,7 @@ export default function CheckoutPage() {
                     Order total: {money(total)}
                   </p>
                   <p className="mt-0.5 text-[12px] text-[#565959]">
-                    {TAX_INCLUSIVE_LABEL} · Payable in cash on delivery
+                    {TAX_INCLUSIVE_LABEL} · Payable now, securely
                   </p>
                 </div>
               </div>
@@ -1289,6 +1265,7 @@ export default function CheckoutPage() {
                 <Lock className="size-3.5" />
                 Secure transaction
               </div>
+              <PaymentMarks className="mt-2" />
             </aside>
 
             {/* Bottom-of-content sentinel (normal flow, full width). The observer
@@ -1313,7 +1290,7 @@ export default function CheckoutPage() {
 
                 <button
                   type="submit"
-                  disabled={busy}
+                  disabled={busy || !ONLINE_PAYMENT_ENABLED}
                   tabIndex={showStickyBar ? 0 : -1}
                   className={`${YELLOW_CTA} h-9 sm:w-auto sm:px-10`}
                 >
@@ -1323,7 +1300,7 @@ export default function CheckoutPage() {
                       Processing...
                     </>
                   ) : session ? (
-                    <>Place your order · {money(total)}</>
+                    <>Proceed to payment · {money(total)}</>
                   ) : (
                     <>
                       {authMode === "register" ? "Create account" : "Sign in"} &amp; order ·{" "}

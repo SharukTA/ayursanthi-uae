@@ -10,6 +10,10 @@
  *   EMAIL_REPLY_TO   Where customer replies land — the From address is a
  *                    send-only identity with no mailbox behind it.
  *   RESEND_API_KEY   Resend account API key (https://resend.com)
+ *   LOGISTICS_EMAIL  The courier desk's shared mailbox — where the dispatch
+ *                    instruction for every paid order is sent. Not a
+ *                    notification address: nothing ships without it. See
+ *                    lib/email-logistics.js.
  *
  * If the required credentials are missing, the module falls back to a console
  * "sender" that logs the message instead of throwing. Signup therefore works
@@ -53,10 +57,44 @@ function resolveProvider() {
 }
 
 /**
+ * Normalise the `to` option into a list of deliverable addresses.
+ *
+ * Accepts a single address or a list, drops blanks and anything that isn't
+ * shaped like an address, and de-duplicates case-insensitively — an order whose
+ * shipping email matches the account email must not send the customer two
+ * copies of the same message.
+ *
+ * Order is preserved, so the first address given stays the primary recipient.
+ *
+ * @param {string|string[]|null|undefined} to
+ * @returns {string[]}
+ */
+function normaliseRecipients(to) {
+  const list = Array.isArray(to) ? to : [to];
+  const seen = new Set();
+  const out = [];
+
+  for (const entry of list) {
+    const address = String(entry ?? "").trim();
+    if (!looksLikeEmail(address)) continue;
+    const key = address.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(address);
+  }
+
+  return out;
+}
+
+/**
  * Send a transactional email.
  *
  * @param {object} opts
- * @param {string} opts.to        Recipient email address.
+ * @param {string|string[]} opts.to  Recipient address, or several. Multiple
+ *   recipients go out as ONE message with one `to` header — Resend bills and
+ *   rate-limits per message, not per address, so adding a second recipient
+ *   costs nothing against the sending quota. Invalid and duplicate addresses
+ *   are dropped; the send is skipped only when none survive.
  * @param {string} opts.subject   Subject line.
  * @param {string} opts.html      HTML body.
  * @param {string} [opts.text]    Plain-text fallback body.
@@ -78,11 +116,15 @@ export async function sendEmail({
   template = "unknown",
   orderId,
 }) {
-  const recipient = String(to || "").trim();
-  if (!looksLikeEmail(recipient)) {
+  const recipients = normaliseRecipients(to);
+  if (recipients.length === 0) {
     console.warn(`[email] Skipped: no valid email address (received: ${to ?? "none"})`);
     await recordEmailLog({
-      recipient: String(to ?? ""),
+      // What was attempted, for the audit trail. Blank/missing entries are
+      // dropped so an all-empty list logs "" rather than a row of separators.
+      recipient: (Array.isArray(to) ? to : [to]).map((v) => String(v ?? "").trim())
+        .filter(Boolean)
+        .join(", "),
       subject,
       template,
       provider: "none",
@@ -93,6 +135,10 @@ export async function sendEmail({
     return { ok: false, provider: "none", skipped: true, error: "invalid_email" };
   }
 
+  // The audit trail stores one string per email, so several recipients are
+  // recorded as the comma-joined list they were actually sent to.
+  const recipient = recipients.join(", ");
+
   const sender =
     from || process.env.EMAIL_FROM || "Ayurshoppee <onboarding@resend.dev>";
   const replyAddress = replyTo || process.env.EMAIL_REPLY_TO || null;
@@ -102,7 +148,8 @@ export async function sendEmail({
     try {
       const result = await sendViaResend({
         from: sender,
-        to: recipient,
+        // The array form: Resend puts every address in one message's `to`.
+        to: recipients,
         subject,
         html,
         text,
@@ -222,11 +269,20 @@ async function sendViaResend({ from, to, subject, html, text, replyTo, attachmen
   return { ok: true, provider: "resend" };
 }
 
-/** Keep full addresses out of log aggregators while staying diagnosable. */
+/**
+ * Keep full addresses out of log aggregators while staying diagnosable.
+ * Accepts one address or the comma-joined list of a multi-recipient send, and
+ * masks each part so a failure line still shows how many addresses were tried.
+ */
 function maskForLog(email) {
-  const [local, domain] = String(email).split("@");
-  if (!local || !domain) return "***";
-  return `${local.slice(0, 2)}***@${domain}`;
+  return String(email)
+    .split(",")
+    .map((part) => {
+      const [local, domain] = part.trim().split("@");
+      if (!local || !domain) return "***";
+      return `${local.slice(0, 2)}***@${domain}`;
+    })
+    .join(", ");
 }
 
 /** Crude HTML → text reduction for the plain-text fallback / console logs. */

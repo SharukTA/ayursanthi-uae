@@ -23,9 +23,16 @@ import {
   Menu,
 } from "lucide-react";
 import { parseTermsSections } from "@/lib/terms-parser";
+import { formatCancelWindow } from "@/lib/order-policy";
+import { useSiteSettings } from "@/components/SettingsProvider";
 import { RichText } from "@/components/RichText";
 
 export function AmazonTermsView({ page }) {
+  // The highlight below used to hard-code "24 hours". It is the same window the
+  // cancel button obeys, so it reads it from the same setting rather than
+  // promising one thing on the Terms page and enforcing another in the orders
+  // list.
+  const { order_cancel_window_hours: cancelWindowHours } = useSiteSettings();
   const [searchQuery, setSearchQuery] = useState("");
   const [activeSectionId, setActiveSectionId] = useState("");
   const [copiedId, setCopiedId] = useState(null);
@@ -239,7 +246,7 @@ export function AmazonTermsView({ page }) {
                 </div>
                 <div className="flex items-center gap-2 rounded bg-white p-2.5 border border-emerald-100 shadow-2xs">
                   <CheckCircle2 className="size-4 shrink-0 text-emerald-600" />
-                  <span>Cancel Before 24 Hours of Booking</span>
+                  <span>Cancel Within {formatCancelWindow(cancelWindowHours)} of Booking</span>
                 </div>
                 <div className="flex items-center gap-2 rounded bg-white p-2.5 border border-emerald-100 shadow-2xs">
                   <CheckCircle2 className="size-4 shrink-0 text-emerald-600" />

@@ -26,6 +26,7 @@ const navItems = [
   { href: "/about", label: "About Us" },
   { href: "/contact", label: "Contact" },
   { href: "/faq", label: "FAQ" },
+  { href: "/gifts", label: "Gifts" },
 ];
 
 // Admins get a trimmed, management-focused nav (no shopper-facing pages).

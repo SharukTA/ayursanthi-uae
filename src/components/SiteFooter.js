@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { FooterAuth } from "@/components/FooterAuth";
+import { SocialLinks } from "@/components/SocialLinks";
+import { FooterAddress } from "@/components/FooterAddress";
 
 export function SiteFooter() {
   // `surface-brand` is what keeps the brand teal alive here — it is the only
@@ -13,7 +15,7 @@ export function SiteFooter() {
         aria-hidden="true"
         className="pointer-events-none absolute inset-x-0 -top-px h-px bg-linear-to-r from-transparent via-white/30 to-transparent"
       />
-      <div className="mx-auto flex max-w-7xl justify-center gap-12 px-4 py-10 sm:px-6 md:gap-24 lg:px-8">
+      <div className="mx-auto flex max-w-7xl flex-wrap justify-center gap-x-10 gap-y-8 px-4 py-10 sm:gap-x-12 sm:px-6 md:gap-x-24 lg:px-8">
         <div>
           <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
             Shop
@@ -41,17 +43,40 @@ export function SiteFooter() {
             <Link href="/faq" className="hover:text-white">
               FAQ
             </Link>
-            <Link href="/terms" className="hover:text-white">
+            <Link href="/gifts" className="hover:text-white">
+              Gifts &amp; monthly draw
+            </Link>
+            {/* New tab: the footer is on every page including cart and
+                checkout, so following it in place would drop a shopper out of
+                whatever they were part-way through. */}
+            <Link
+              href="/terms"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-white"
+            >
               Terms
             </Link>
           </div>
         </div>
+        {/* Heading and icons together render nothing until an admin fills in at
+            least one URL in /admin/settings, so the column never sits here empty.
+            text-slate-300/400 are safe inside .surface-brand — globals.css
+            re-asserts them on the dark surfaces (see WHITE-PAGE TEXT LEGIBILITY). */}
+        <SocialLinks
+          heading="Follow us"
+          headingClassName="text-sm font-semibold uppercase tracking-wide text-slate-400"
+          linkClassName="text-slate-300 hover:text-white"
+        />
       </div>
 
       {/* Amazon-style bottom bar — darker gradient of the brand teal (#156c6b) */}
       <div className="border-t border-white/10 bg-linear-to-b from-[#0c403f] to-[#06201f]">
         <div className="mx-auto flex max-w-7xl flex-col items-center gap-3 px-4 py-6 sm:px-6 lg:px-8">
           <FooterAuth />
+          {/* Registered entity + address, above the copyright. Renders nothing
+              until an admin fills either field in /admin/settings. */}
+          <FooterAddress />
           <p className="text-xs text-white">
             &copy; 2026 Ayursanthi Wellness. All rights reserved.
           </p>

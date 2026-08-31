@@ -179,7 +179,7 @@ export default function CartPage() {
       <main className="min-h-screen bg-slate-50 text-white flex flex-col">
         <SiteHeader />
         <div className="flex-1 flex items-center justify-center">
-          <p className="text-sm font-semibold text-white">Loading your shopping cart...</p>
+          <p className="text-sm font-semibold text-[#565959]">Loading your shopping cart...</p>
         </div>
         <SiteFooter />
       </main>
@@ -208,10 +208,10 @@ export default function CartPage() {
             </Button>
           </div>
         ) : (
-          <div className="grid gap-8 lg:grid-cols-[1fr_350px]">
+          <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_350px]">
             
             {/* Left side: Cart List */}
-            <div className="flex flex-col gap-4">
+            <div className="flex min-w-0 flex-col gap-4">
               {/* Select-all bar */}
               <label className="flex items-center gap-3 rounded-md border border-border bg-white px-4 py-3 shadow-sm cursor-pointer">
                 <input
@@ -231,7 +231,7 @@ export default function CartPage() {
                     <div className={`flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-md border bg-white p-4 shadow-sm transition ${isSelected(item) ? "border-[#d5d9d9]" : "border-border opacity-60"}`}>
 
                       {/* Checkbox + Image & Title */}
-                      <div className="flex items-center gap-4">
+                      <div className="flex min-w-0 items-center gap-4">
                         <input
                           type="checkbox"
                           checked={isSelected(item)}
@@ -242,7 +242,7 @@ export default function CartPage() {
                         <Link
                           href={`/products/${item.slug}`}
                           onClick={() => handleViewDetails(item.productId, item.name)}
-                          className="group flex items-center gap-4"
+                          className="group flex min-w-0 items-center gap-4"
                           title="View details (removes this item from your cart)"
                         >
                           {item.imageMediaType === "VIDEO" && item.image ? (
@@ -255,11 +255,11 @@ export default function CartPage() {
                               playsInline
                               preload="metadata"
                               aria-hidden="true"
-                              className="size-16 rounded border border-[#d5d9d9] bg-[#f8fafc] object-contain"
+                              className="size-16 shrink-0 rounded border border-[#d5d9d9] bg-[#f8fafc] object-contain"
                             />
                           ) : (
                             <div
-                              className="size-16 rounded border border-[#d5d9d9] bg-[#f8fafc] bg-contain bg-no-repeat bg-center"
+                              className="size-16 shrink-0 rounded border border-[#d5d9d9] bg-[#f8fafc] bg-contain bg-no-repeat bg-center"
                               style={{ backgroundImage: `url('${item.image || "https://images.pexels.com/photos/4871365/pexels-photo-4871365.jpeg?auto=compress&cs=tinysrgb&w=150"}')` }}
                             />
                           )}
@@ -338,7 +338,7 @@ export default function CartPage() {
               </Stagger>
 
               <div className="mt-4">
-                <Link href="/products" className="inline-flex items-center gap-1.5 text-xs font-semibold text-white hover:underline transition">
+                <Link href="/products" className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#007185] transition hover:text-[#c7511f] hover:underline">
                   <ArrowLeft className="size-4" />
                   Continue Shopping
                 </Link>
@@ -396,12 +396,12 @@ export default function CartPage() {
                   <Button
                     disabled
                     variant="secondary"
-                    className="h-12 ring-0 bg-[#FFD814] text-[#0F1111] rounded-md text-sm font-semibold mt-2 opacity-60"
+                    className="h-auto min-h-12 whitespace-normal py-2 text-center ring-0 bg-[#FFD814] text-[#0F1111] rounded-md text-sm font-semibold mt-2 opacity-60"
                   >
                     Select items to checkout
                   </Button>
                 ) : (
-                  <Button asChild variant="secondary" className="h-12 ring-0 bg-[#FFD814] text-[#0F1111] hover:bg-[#F7CA00] rounded-md text-sm font-semibold mt-2">
+                  <Button asChild variant="secondary" className="h-auto min-h-12 whitespace-normal py-2 text-center ring-0 bg-[#FFD814] text-[#0F1111] hover:bg-[#F7CA00] rounded-md text-sm font-semibold mt-2">
                     <Link href="/checkout">
                       Proceed to Checkout ({selectedCount} {selectedCount === 1 ? "item" : "items"})
                       <ArrowRight className="size-4 ml-2" />

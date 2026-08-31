@@ -1,10 +1,11 @@
-import { Truck, Banknote, BellRing } from "lucide-react";
+import { Truck, ShieldCheck, BellRing } from "lucide-react";
 
-// The delivery box on a product page. Deliberately carries no date estimate:
-// fulfilment is handed to an external courier, so the store has no schedule it
-// can honestly promise a shopper. What it can promise is what it controls —
-// Cash on Delivery, UAE-wide shipping, and an email at every fulfilment step
-// (see STATUS_COPY in lib/email-orders.js).
+// The delivery box on a product page. Deliberately carries no date estimate and
+// no promise of tracking updates: fulfilment is handed to an external courier
+// the moment payment clears, and the parcel lives under their AWB number after
+// that. The store has neither a schedule nor a status feed it could honestly
+// offer. What it can promise is what it controls — UAE-wide shipping, secure
+// payment, and a confirmation the instant the money is in.
 export function DeliveryInfo() {
   return (
     <div className="mt-6 rounded-md border border-border bg-white p-4">
@@ -19,12 +20,12 @@ export function DeliveryInfo() {
           Shipped across the UAE by our courier partner
         </p>
         <p className="flex items-center gap-2 text-[#565959]">
-          <Banknote className="size-4 shrink-0 text-emerald-700" />
-          Cash on Delivery available
+          <ShieldCheck className="size-4 shrink-0 text-emerald-700" />
+          Secure online payment — Card, Apple Pay and Google Pay
         </p>
         <p className="flex items-center gap-2 text-[#565959]">
           <BellRing className="size-4 shrink-0 text-emerald-700" />
-          We email you when your order ships and when it&apos;s out for delivery
+          Order confirmation emailed the moment your payment clears
         </p>
       </div>
     </div>

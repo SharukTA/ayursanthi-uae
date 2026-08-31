@@ -3,12 +3,13 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ShoppingCart, CreditCard, Plus, Minus, ShieldAlert, Download } from "lucide-react";
+import { ShoppingCart, CreditCard, Plus, Minus, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ViewFullDetailsButton } from "@/components/ProductFullDetails";
 import { addToCart, stashBuyNowItem } from "@/lib/cart-client";
 import { formatMoney } from "@/lib/currency";
 
-export function ProductActions({ product, pdfHref }) {
+export function ProductActions({ product }) {
   const router = useRouter();
   const [quantity, setQuantity] = useState(1);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -234,19 +235,10 @@ export function ProductActions({ product, pdfHref }) {
             </p>
           </div>
 
-          {/* Download PDF — sits to the LEFT of Add to Cart so it never overlaps
-              the buy buttons. Icon-only on mobile to keep the buttons room. */}
-          {pdfHref ? (
-            <a
-              href={pdfHref}
-              aria-label="Download product details as PDF"
-              tabIndex={showStickyBar ? 0 : -1}
-              className="flex h-11 shrink-0 items-center justify-center gap-2 rounded-md border border-emerald-200 bg-white px-3 text-sm font-semibold text-emerald-800 transition hover:border-emerald-300 hover:bg-emerald-50 sm:px-4"
-            >
-              <Download className="size-4" />
-              <span className="hidden sm:inline">PDF</span>
-            </a>
-          ) : null}
+          {/* View full details — sits to the LEFT of Add to Cart so it never
+              overlaps the buy buttons, and drops its label on the smallest
+              screens to leave them room. */}
+          <ViewFullDetailsButton variant="compact" tabIndex={showStickyBar ? 0 : -1} />
 
           <div className="grid flex-1 grid-cols-2 gap-3 sm:flex-none">
             <Button

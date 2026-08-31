@@ -7,6 +7,7 @@ import {
   setUserCartLine,
   clearUserCart,
 } from "@/lib/cart";
+import { consumeRateLimit, rateLimitedResponse, RATE_LIMITS } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -44,6 +45,27 @@ function adminBlocked() {
   );
 }
 
+// Ceiling on how fast one account can write to its cart. Returns a 429 Response
+// when the caller has had enough, or null to carry on — so each handler adds two
+// lines rather than a block. Keyed by account: every write path below has
+// already resolved a signed-in shopper, and the account is what the writes land
+// on. See RATE_LIMITS.cartWrite for why the number is as high as it is.
+//
+// Reads are deliberately not limited. GET fires on every cart render, and a
+// shopper who tripped a limit on it would simply see an empty cart.
+async function cartWriteLimited(userId) {
+  const limit = await consumeRateLimit({
+    key: `cartwrite:user:${userId}`,
+    ...RATE_LIMITS.cartWrite,
+  });
+  if (limit.allowed) return null;
+
+  return rateLimitedResponse(
+    limit.retryAfter,
+    "Too many cart updates. Please wait a moment and try again."
+  );
+}
+
 // GET /api/cart — the signed-in shopper's cart.
 export async function GET() {
   try {
@@ -64,6 +86,9 @@ export async function POST(request) {
     const { response, admin, userId } = await resolveShopper();
     if (response) return response;
     if (admin) return adminBlocked();
+
+    const limited = await cartWriteLimited(userId);
+    if (limited) return limited;
 
     const body = await request.json();
     const result = await addToUserCart(userId, body?.productId, body?.quantity);
@@ -93,6 +118,9 @@ export async function PATCH(request) {
     const { response, admin, userId } = await resolveShopper();
     if (response) return response;
     if (admin) return adminBlocked();
+
+    const limited = await cartWriteLimited(userId);
+    if (limited) return limited;
 
     const body = await request.json();
 
@@ -124,6 +152,9 @@ export async function DELETE(request) {
     const { response, admin, userId } = await resolveShopper();
     if (response) return response;
     if (admin) return adminBlocked();
+
+    const limited = await cartWriteLimited(userId);
+    if (limited) return limited;
 
     const params = request.nextUrl.searchParams;
 

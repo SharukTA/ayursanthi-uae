@@ -168,4 +168,23 @@ export const RATE_LIMITS = {
   // Changing a password requires the current one, so this is brute-force cover
   // for an attacker who has a session but not the password.
   passwordChange: { limit: 10, windowSeconds: 15 * 60 },
+  // Starting an online payment reserves stock, writes an order row and opens a
+  // Stripe Checkout Session, so every call costs a round trip to Stripe and a
+  // little order churn. Set well clear of real use: a shopper whose card keeps
+  // being declined, or who bounces off Stripe's page and edits the basket a few
+  // times, can genuinely start half a dozen checkouts in one sitting and must
+  // never meet this. What it stops is a script opening them in a loop.
+  checkoutStart: { limit: 12, windowSeconds: 10 * 60 },
+  // Cart writes. Nothing in the cart UI debounces — every +/- click and every
+  // tick is its own request — so this is a backstop against a script, not a
+  // control on shopping, and is set where no amount of real clicking reaches it.
+  // The window is one minute rather than something longer on purpose: a shopper
+  // who does go at it gets a clean slate every minute instead of accumulating a
+  // lockout across a browsing session.
+  cartWrite: { limit: 120, windowSeconds: 60 },
+  // Posting a review is already gated to verified buyers and upserts one row per
+  // user per product, so there is nothing to flood — this only stops the same
+  // row being rewritten in a loop. Generous enough for somebody working through
+  // everything they have bought in one sitting.
+  reviewPost: { limit: 10, windowSeconds: 60 * 60 },
 };

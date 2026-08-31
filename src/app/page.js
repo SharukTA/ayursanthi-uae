@@ -2,8 +2,10 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { HomeTop } from "@/components/HomeTop";
 import { HomeSections } from "@/components/HomeSections";
 import { HeroDealCards } from "@/components/HeroDealCards";
+import { GiftFloatingButton } from "@/components/GiftFloatingButton";
 import { getPageSections } from "@/lib/page-sections";
 import { getCatalogPage } from "@/lib/catalog";
+import { isGiftProgramEnabled } from "@/lib/settings";
 
 // Re-query the homepage at most once per 5 minutes (ISR) so it stays fast while
 // reflecting admin changes reasonably quickly.
@@ -14,6 +16,11 @@ export default async function Home() {
   // from the shared helper, scoped to the HOME placement so product/category/
   // checkout sections never leak onto the homepage.
   const { sections, stats } = await getPageSections("HOME");
+
+  // The floating gift shortcut follows the programme's master switch: if the
+  // giveaway has been stopped in /admin/settings, the homepage must not keep
+  // advertising it. Same read the /gifts page itself gates on.
+  const giftEnabled = await isGiftProgramEnabled();
 
   // Newest products for the laptop-only strip that overlaps the hero's bottom
   // edge. `total` decides whether the "Show more" button (→ /products) appears.
@@ -60,6 +67,11 @@ export default async function Home() {
       <HomeSections sections={bodySections} stats={stats} />
 
       <SiteFooter />
+
+      {/* Small draggable shortcut to /gifts, pinned to the viewport. Last in the
+          tree so it is last in the tab order — it is a shortcut, not something
+          to wade through on the way to the page. */}
+      {giftEnabled ? <GiftFloatingButton /> : null}
     </main>
   );
 }

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import useEmblaCarousel from "embla-carousel-react";
 import { ImageOff, Play, VideoOff, X } from "lucide-react";
 import { ImageFill } from "@/components/ProductMedia";
+import { ViewFullDetailsButton } from "@/components/ProductFullDetails";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Amazon/Flipkart-style product media gallery. Takes an ordered list of media
@@ -60,7 +61,14 @@ function addOnce(setter, index) {
   });
 }
 
-export function ProductGallery({ media = [], productName = "" }) {
+export function ProductGallery({
+  media = [],
+  productName = "",
+  // Appends the "View full details" tile after the last thumbnail. Opt-in: the
+  // tile needs a ProductDetailsProvider above it, and it also forces the strip
+  // to render for a single-media product, which otherwise shows no strip at all.
+  fullDetailsTrigger = false,
+}) {
   const items =
     media.length > 0
       ? media
@@ -221,10 +229,12 @@ export function ProductGallery({ media = [], productName = "" }) {
         </div>
       </div>
 
-      {/* Thumbnail strip */}
-      {hasMany ? (
+      {/* Thumbnail strip. One media item needs no thumbnails — the main viewer
+          already shows it — but the strip still renders when it has to carry
+          the "View full details" tile. */}
+      {hasMany || fullDetailsTrigger ? (
         <div className="flex gap-2 overflow-x-auto pb-1">
-          {items.map((item, index) => {
+          {(hasMany ? items : []).map((item, index) => {
             const isVideo = item.mediaType === "VIDEO";
             const isBroken = !isVideo && failed.has(index);
 
@@ -276,6 +286,10 @@ export function ProductGallery({ media = [], productName = "" }) {
               </button>
             );
           })}
+
+          {/* Sits after the last image/video box, so the whole media row reads
+              as "here is everything, and here is where to see all of it". */}
+          {fullDetailsTrigger ? <ViewFullDetailsButton variant="tile" /> : null}
         </div>
       ) : null}
 

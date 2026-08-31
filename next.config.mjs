@@ -22,6 +22,31 @@ const r2Host = (() => {
   }
 })();
 
+// The R2 S3-API host the browser PUTs to during an admin upload.
+//
+// Deliberately NOT r2Host above, and that distinction is the whole of the bug
+// this exists to close: r2Host is where the bucket is READ from (the public
+// r2.dev URL, or a custom domain), while a presigned PUT is addressed to
+// Cloudflare's S3 API, which lives on an entirely different name derived from
+// the account id. Allowing only the read host let every image load and every
+// upload fail — and fail as a CSP violation, which reaches the admin as a bare
+// "Failed to fetch" with no HTTP status to point at the cause.
+//
+// Both addressing styles are listed because which one the AWS SDK emits is its
+// choice rather than ours: it defaults to virtual-hosted (bucket as a subdomain)
+// and switches to path style when `forcePathStyle` is set on the client. Naming
+// the two exact hosts, rather than wildcarding the account subdomain, keeps the
+// allowance to this one bucket.
+const r2UploadHosts = (() => {
+  const account = process.env.R2_ACCOUNT_ID;
+  const bucket = process.env.R2_BUCKET;
+  // Unset under STORAGE_DRIVER=local, where the bytes go to our own route and
+  // 'self' already covers them.
+  if (!account) return [];
+  const api = `${account}.r2.cloudflarestorage.com`;
+  return bucket ? [`${bucket}.${api}`, api] : [api];
+})();
+
 // Content-Security-Policy, assembled here so the R2 host is filled in from the
 // same env var everything else uses.
 //
@@ -51,10 +76,17 @@ function contentSecurityPolicy() {
     `media-src ${media}`,
     "font-src 'self' data:",
     // The admin media uploader PUTs bytes straight from the browser to the
-    // bucket using a presigned URL (src/lib/storage/client.js), so the R2 origin
-    // has to be reachable by fetch — without it every upload fails as a CSP
-    // violation rather than as an HTTP error.
-    `connect-src 'self'${r2Host ? ` https://${r2Host}` : ""}`,
+    // bucket using a presigned URL (src/lib/storage/client.js), so BOTH R2 names
+    // have to be reachable by fetch: the public host the bucket is read from,
+    // and the S3-API host the presigned PUT is addressed to. Without the second
+    // one every upload fails as a CSP violation rather than as an HTTP error.
+    `connect-src ${[
+      "'self'",
+      r2Host && `https://${r2Host}`,
+      ...r2UploadHosts.map((host) => `https://${host}`),
+    ]
+      .filter(Boolean)
+      .join(" ")}`,
     // Nothing on the site embeds a frame, and nothing may embed the site.
     "frame-src 'none'",
     "frame-ancestors 'none'",

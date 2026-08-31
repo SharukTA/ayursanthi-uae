@@ -143,6 +143,29 @@ export function cleanIngredientList(value) {
   return parts.length ? parts.join(", ") : null;
 }
 
+// Normalise an admin-supplied gallery into the rows a prize's image table
+// wants: a clean, de-duplicated, order-preserving list of URLs.
+//
+// De-duplication is not fussiness. The uploader appends a row per file, and an
+// admin who re-picks the same picture — or pastes a URL that is already in the
+// list — would otherwise get the same photograph twice in the gallery, which
+// looks like a bug in the page rather than a mistake in the form.
+export function readImageList(value) {
+  if (!Array.isArray(value)) return [];
+
+  const seen = new Set();
+  const urls = [];
+  for (const entry of value) {
+    // Tolerates both a bare string and the { url } shape the API hands back, so
+    // a client can round-trip what it was given without unwrapping it first.
+    const url = cleanString(typeof entry === "string" ? entry : entry?.url);
+    if (!url || seen.has(url)) continue;
+    seen.add(url);
+    urls.push(url);
+  }
+  return urls;
+}
+
 export function readBoolean(value, fallback = false) {
   if (typeof value === "boolean") {
     return value;

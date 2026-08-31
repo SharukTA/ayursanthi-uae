@@ -4,14 +4,26 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Settings, ArrowLeft, Loader2, Save, Phone, Share2, Truck } from "lucide-react";
+import { Settings, ArrowLeft, Loader2, Save, Phone, Share2, Truck, Gift, XCircle } from "lucide-react";
 import { FadeIn, PageReveal } from "@/components/Animated";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { Button } from "@/components/ui/button";
-import { validateSettings } from "@/lib/settings-shared";
+import { SOCIAL_SETTINGS, validateSettings } from "@/lib/settings-shared";
 import { FREE_SHIPPING_THRESHOLD } from "@/lib/pricing";
 import { CURRENCY } from "@/lib/currency";
+import { DEFAULT_DRAW_TIME, GIFT_COUPON_THRESHOLD, todayDrawDate } from "@/lib/gift-shared";
+import { DEFAULT_CANCEL_WINDOW_HOURS } from "@/lib/order-policy";
+
+// Example URLs shown in the social fields. Purely cosmetic — a key missing from
+// here just falls back to a generic "https://..." placeholder.
+const SOCIAL_PLACEHOLDERS = {
+  social_instagram: "https://instagram.com/ayursanthi",
+  social_facebook: "https://facebook.com/ayursanthi",
+  social_youtube: "https://youtube.com/@ayursanthi",
+  social_linkedin: "https://linkedin.com/company/ayursanthi",
+  social_twitter: "https://x.com/ayursanthi",
+};
 
 // Field groups for the settings form. `key` must match a key in lib/settings.js.
 const GROUPS = [
@@ -41,13 +53,69 @@ const GROUPS = [
     ],
   },
   {
+    title: "Cancellations",
+    icon: XCircle,
+    hint: "Cancelling refunds the card and puts stock back, so it only works while the parcel is still here. The window below is what the storefront promises, what the cancel button obeys, and what the API enforces — for customers and for the store alike.",
+    fields: [
+      {
+        key: "order_cancel_window_hours",
+        label: "Cancellation window (hours)",
+        placeholder: String(DEFAULT_CANCEL_WINDOW_HOURS),
+        type: "number",
+        min: 1,
+        hint: "How long after placing an order a customer — or an admin — can still cancel it. Set it to the point your courier collects and packs: past the window the parcel has gone, and a cancellation would refund goods already in transit. The deadline is shown beside every cancel button and on the Terms page.",
+      },
+    ],
+  },
+  {
+    title: "Gift draw",
+    icon: Gift,
+    hint: "The giveaway runs to a date you pick. Posters, prizes and winners are managed in Gifts, where the same date and switch can be set alongside the draws they govern.",
+    fields: [
+      {
+        key: "gift_coupon_threshold",
+        label: `Coupon threshold (${CURRENCY})`,
+        placeholder: String(GIFT_COUPON_THRESHOLD),
+        type: "number",
+        hint: "Earned on cumulative spend across orders, not per order. Every whole multiple of this a customer has spent since the programme start date earns one gift coupon; the remainder carries forward.",
+      },
+      {
+        key: "gift_draw_date",
+        label: "Next draw date",
+        // A calendar, floored at today: a draw scheduled for a date already
+        // behind us would be frozen by the nightly job on its very next run,
+        // closing a giveaway nobody was told about.
+        type: "date",
+        minToday: true,
+        hint: "The day the next draw is held. Moving it moves the entry cutoff — and the earliest day the draw can be run — for the draw not yet closed; draws already closed keep the dates they ran on.",
+      },
+      {
+        key: "gift_draw_time",
+        label: "Draw time (Gulf time)",
+        placeholder: DEFAULT_DRAW_TIME,
+        type: "time",
+        hint: "The hour the draw is held, on a 24-hour clock — 13:00 is 1:00 PM. Together with the date it forms the entry cutoff: everything bought before that instant is in this draw, everything after goes to the next.",
+      },
+      {
+        key: "gift_program_enabled",
+        label: "Programme enabled",
+        type: "toggle",
+        hint: "Turn off to stop minting new coupons immediately, and to stop the storefront advertising a draw. Coupons already issued keep their place in the next one.",
+      },
+    ],
+  },
+  {
     title: "Social links",
     icon: Share2,
-    fields: [
-      { key: "social_facebook", label: "Facebook URL", placeholder: "https://facebook.com/..." },
-      { key: "social_instagram", label: "Instagram URL", placeholder: "https://instagram.com/..." },
-      { key: "social_twitter", label: "X / Twitter URL", placeholder: "https://x.com/..." },
-    ],
+    // Generated from SOCIAL_SETTINGS so adding a platform there puts it in this
+    // form automatically — the two lists can never fall out of step.
+    hint: "Paste the full profile URL, including https://. Leave a field blank to hide that icon.",
+    fields: Object.entries(SOCIAL_SETTINGS).map(([key, label]) => ({
+      key,
+      label: `${label} URL`,
+      placeholder: SOCIAL_PLACEHOLDERS[key] || "https://...",
+      type: "url",
+    })),
   },
 ];
 
@@ -159,13 +227,41 @@ export default function AdminSettingsPage() {
                   <Icon className="size-5 text-emerald-700" />
                   {group.title}
                 </h2>
+                {group.hint ? (
+                  <p className="mt-3 text-[11px] font-normal text-slate-500">{group.hint}</p>
+                ) : null}
                 <div className="mt-5 grid gap-4 sm:grid-cols-2">
                   {group.fields.map((field) => (
                     <label key={field.key} className="grid gap-2 text-xs font-semibold text-slate-800">
                       {field.label}
+                      {field.type === "toggle" ? (
+                        // Stored as the string "true"/"false" like every other
+                        // setting — the settings table has no boolean column,
+                        // and isGiftProgramEnabled() reads it back the same way.
+                        <select
+                          value={values[field.key] === "true" ? "true" : "false"}
+                          onChange={(e) => update(field.key, e.target.value)}
+                          disabled={saving}
+                          className="w-full min-h-10 rounded border border-input bg-white px-3 text-xs font-normal text-slate-900 outline-none transition focus:border-emerald-700"
+                        >
+                          <option value="true">Enabled</option>
+                          <option value="false">Disabled</option>
+                        </select>
+                      ) : (
                       <input
                         type={field.type || "text"}
-                        min={field.type === "number" ? 0 : undefined}
+                        // `minToday` is resolved at render rather than baked
+                        // into the field definition: a console left open
+                        // overnight would otherwise keep offering yesterday as
+                        // a legal choice.
+                        min={
+                          field.minToday
+                            ? todayDrawDate()
+                            : field.type === "number"
+                              ? (field.min ?? 0)
+                              : undefined
+                        }
+                        max={field.type === "number" ? field.max : undefined}
                         step={field.type === "number" ? "1" : undefined}
                         value={values[field.key] ?? ""}
                         onChange={(e) => update(field.key, e.target.value)}
@@ -173,6 +269,7 @@ export default function AdminSettingsPage() {
                         placeholder={field.placeholder}
                         className="w-full min-h-10 rounded border border-input bg-white px-3 text-xs font-normal text-slate-900 outline-none transition focus:border-emerald-700"
                       />
+                      )}
                       {field.hint ? (
                         <span className="text-[10px] font-normal text-slate-500">{field.hint}</span>
                       ) : null}

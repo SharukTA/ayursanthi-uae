@@ -174,7 +174,11 @@ function Module({ heading, blocks, index }) {
   );
 }
 
-export function ProductDescription({ body }) {
+// `collapsible` is what the page wants (a "See more" fold keeps the page short).
+// The full-details reader passes false: it is already a scrollable panel the
+// shopper opened *to* read everything, so folding it again would be a second
+// obstacle in front of the same text.
+export function ProductDescription({ body, collapsible = true }) {
   const blocks = parseRichText(body || "");
 
   if (blocks.length === 0) {
@@ -183,13 +187,15 @@ export function ProductDescription({ body }) {
 
   const modules = toModules(blocks);
 
-  return (
-    <DescriptionCollapse collapsedHeight={560}>
-      <div className="mt-6 space-y-10 sm:space-y-14">
-        {modules.map((mod, i) => (
-          <Module key={i} heading={mod.heading} blocks={mod.blocks} index={i} />
-        ))}
-      </div>
-    </DescriptionCollapse>
+  const content = (
+    <div className="mt-6 space-y-10 sm:space-y-14">
+      {modules.map((mod, i) => (
+        <Module key={i} heading={mod.heading} blocks={mod.blocks} index={i} />
+      ))}
+    </div>
   );
+
+  if (!collapsible) return content;
+
+  return <DescriptionCollapse collapsedHeight={560}>{content}</DescriptionCollapse>;
 }

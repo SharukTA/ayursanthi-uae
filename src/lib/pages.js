@@ -101,6 +101,38 @@ export async function getPage(slug) {
   }
 }
 
+// Identifies the built-in terms body, for accounts and orders stamped while no
+// admin-edited Page row is live. Bump only if DEFAULT_PAGES.terms itself changes.
+export const TERMS_DEFAULT_VERSION = "builtin-2026-05-24";
+
+/**
+ * Which revision of the conditions of use was live right now.
+ *
+ * Stamped onto a User at signup and onto every Order at placement, so a dispute
+ * can be answered with the exact text the customer accepted rather than with
+ * whatever /terms happens to say today. The Page row's own updatedAt is the
+ * version — the terms are admin-editable, so anything hand-maintained would go
+ * stale the first time someone edits them without remembering to bump it.
+ *
+ * Never throws: this is evidence-keeping, not a gate. A database hiccup here
+ * must not be able to fail a registration or a checkout, so the worst case is
+ * an order stamped with the fallback string.
+ */
+export async function getTermsVersion() {
+  try {
+    const page = await prisma.page.findUnique({
+      where: { slug: "terms" },
+      select: { isActive: true, updatedAt: true },
+    });
+    // An inactive row is not what the shopper saw — /terms renders the built-in
+    // default in that case, so that is what they agreed to.
+    if (!page || !page.isActive) return TERMS_DEFAULT_VERSION;
+    return page.updatedAt.toISOString();
+  } catch {
+    return TERMS_DEFAULT_VERSION;
+  }
+}
+
 // Built-in FAQ fallback (mirrors the original hardcoded list).
 export const DEFAULT_FAQS = [
   { question: "How do I create an account?", answer: "Click the Register button in the header and fill in your name, email, phone number, and password. Your account is ready to shop with straight away." },

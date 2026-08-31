@@ -18,13 +18,22 @@ enum UserRole {
   ADMIN
 }
 
+// The store does not run a fulfilment ladder. An order is PENDING until its
+// payment clears, CONFIRMED the instant it does (confirmPaidOrder in
+// lib/order-payment.js is the only writer), and CANCELLED if it is pulled.
+// Delivery belongs to an external courier from the dispatch email onwards and is
+// tracked by AWB number on their side, so nothing here reports on it.
+//
+// The four middle values are retained only because orders placed under the old
+// admin-driven ladder still carry them. Nothing writes them any more; every
+// screen must still read and display them.
 enum OrderStatus {
   PENDING
   CONFIRMED
-  PROCESSING
-  SHIPPED
-  OUT_FOR_DELIVERY // with the courier, arriving today — the last rung before DELIVERED
-  DELIVERED
+  PROCESSING // legacy
+  SHIPPED // legacy
+  OUT_FOR_DELIVERY // legacy
+  DELIVERED // legacy
   CANCELLED
 }
 
@@ -88,21 +97,34 @@ model User {
   // all, and a row created outside the signup route has not been minted one yet
   // (the referrals API does that on first read). Whether an account SHOULD have
   // one is decided by role at read time, not by this column being set.
-  referralCode String?  @unique
+  referralCode String? @unique
   // Who referred THIS user, resolved from the code they typed at signup. One
   // level only: there is no chain to walk, A referred B and that is the whole
   // relationship. Immutable after signup — an existing account cannot be
   // retro-attributed to a referrer.
   referredById String?
-  referredBy   User?    @relation("UserReferrals", fields: [referredById], references: [id], onDelete: SetNull)
+  referredBy   User?   @relation("UserReferrals", fields: [referredById], references: [id], onDelete: SetNull)
   // The other side: everyone who signed up with this user's code. This is what
   // /dashboard/referrals lists.
-  referrals    User[]   @relation("UserReferrals")
+  referrals    User[]  @relation("UserReferrals")
 
   // Amazon's "Turn off Browsing History" switch. While false we neither record
   // new views nor show the shopper their history back — existing rows are kept
   // (removing them is a separate, explicit action) but nothing reads them.
   browsingHistoryEnabled Boolean @default(true)
+
+  // ── Conditions of use ─────────────────────────────────────────────────────
+  // When this account accepted the conditions of use, and which revision of
+  // them was live at the time (see lib/pages.js → getTermsVersion). Acceptance
+  // is the signup click itself — the form carries the notice next to the
+  // button, there is no tickbox — so this is the record of that click.
+  //
+  // Nullable because every account created before this was recorded has no
+  // stamp, and because a row created outside the signup route (a seed, an
+  // import) never went through the form. Absent means "not recorded", never
+  // "declined".
+  termsAcceptedAt DateTime?
+  termsVersion    String?
 
   // ── Session revocation ────────────────────────────────────────────────────
   // Any session token minted before this instant is refused (see getSession in
@@ -117,14 +139,23 @@ model User {
   // column — it must not sign the whole customer base out on deploy.
   sessionsValidFrom DateTime?
 
-  addresses         Address[]
   cartItems         CartItem[]
   orders            Order[]
   reviews           ProductReview[]
   productViews      ProductView[]
   passwordResetOtps PasswordResetOtp[]
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
+
+  // ── Gift draw programme ───────────────────────────────────────────────────
+  // Coupons this customer has earned, and the prizes they are owed. `giftWins`
+  // holds both kinds of win: one drawn from their own coupon, and one mirrored
+  // to them because they referred a winner. `giftDrawsRun` is the admin side —
+  // which draws this account pressed the button on.
+  giftCoupons  GiftCoupon[]
+  giftWins     GiftDrawWinner[] @relation("GiftDrawWins")
+  giftDrawsRun GiftDraw[]       @relation("GiftDrawsRun")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Every referrals page reads one referrer's downline, newest first.
   @@index([referredById, createdAt])
@@ -145,23 +176,6 @@ model PasswordResetOtp {
   createdAt  DateTime  @default(now())
 
   @@index([userId])
-}
-
-model Address {
-  id         String   @id @default(cuid())
-  userId     String
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  fullName   String
-  phone      String
-  line1      String
-  line2      String?
-  city       String
-  state      String
-  postalCode String
-  country    String   @default("India")
-  isDefault  Boolean  @default(false)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
 }
 
 model Category {
@@ -312,36 +326,56 @@ model CartItem {
 }
 
 model Order {
-  id              String        @id @default(cuid())
-  orderNumber     String        @unique
-  userId          String
-  user            User          @relation(fields: [userId], references: [id])
-  status          OrderStatus   @default(PENDING)
-  paymentStatus   PaymentStatus @default(PENDING)
-  subtotal        Decimal       @db.Decimal(10, 2)
-  shipping        Decimal       @default(0) @db.Decimal(10, 2)
-  total           Decimal       @db.Decimal(10, 2)
+  id                  String        @id @default(cuid())
+  orderNumber         String        @unique
+  userId              String
+  user                User          @relation(fields: [userId], references: [id])
+  status              OrderStatus   @default(PENDING)
+  paymentStatus       PaymentStatus @default(PENDING)
+  subtotal            Decimal       @db.Decimal(10, 2)
+  shipping            Decimal       @default(0) @db.Decimal(10, 2)
+  total               Decimal       @db.Decimal(10, 2)
   // Money already sent back to the customer for this order. Cancellation is the
   // only thing that puts money back (the store does not accept returns), so this
   // is the cancellation refund and paymentStatus flips to REFUNDED once it
   // reaches `total`.
-  refundedTotal   Decimal       @default(0) @db.Decimal(10, 2)
-  addressSnapshot Json?
-  // Courier consignment details, filled in by the admin when the order ships.
-  // Both are free text: the store hands parcels to whichever courier is
-  // cheapest on the route, so there is no fixed carrier list to enumerate.
-  trackingNumber  String?
-  courierName     String?
-  // When the courier handed the parcel over, stamped the moment an admin marks
-  // the order DELIVERED.
-  deliveredAt     DateTime?
-  cancelledAt     DateTime?
-  cancelledBy     CancelledBy?
-  cancelReason    String?
-  items           OrderItem[]
-  payments        Payment[]
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  refundedTotal       Decimal       @default(0) @db.Decimal(10, 2)
+  addressSnapshot     Json?
+  // Courier consignment details. No longer written by anything: the AWB number
+  // lives with the delivery partner, who tracks the parcel on their own system,
+  // and the store stopped keeping a second copy of it. Retained so orders from
+  // when an admin typed these in still read back correctly, and still exported
+  // in the admin CSV for the same reason.
+  trackingNumber      String?
+  courierName         String?
+  // When the courier handed the parcel over. Same story: stamped by the old
+  // admin "mark as delivered" action, which no longer exists, so this is null on
+  // every order placed since.
+  deliveredAt         DateTime?
+  // When the dispatch instruction reached the logistics inbox — the courier
+  // books the consignment off that email, so an order whose payment cleared
+  // while this is still NULL is one nobody has been told to ship. That is what
+  // makes it a stored column rather than something inferred from EmailLog: the
+  // admin order list queries it directly to flag the gap, and the resend button
+  // is the fix. Set only after the provider accepts the message.
+  logisticsNotifiedAt DateTime?
+  // Which revision of the conditions of use was live when this order was
+  // placed. Stamped separately from the buyer's signup stamp because the terms
+  // can change between the two, and a purchase dispute is about the terms in
+  // force on the day of the purchase. Nullable for orders placed before this
+  // was recorded.
+  termsVersion        String?
+  cancelledAt         DateTime?
+  cancelledBy         CancelledBy?
+  cancelReason        String?
+  items               OrderItem[]
+  payments            Payment[]
+  // Gift coupons this order earned — one per whole multiple of the qualifying
+  // threshold in its subtotal. Minted when the payment clears, voided (never
+  // deleted) if the order is later cancelled.
+  giftCoupons         GiftCoupon[]
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
 }
 
 model OrderItem {
@@ -531,4 +565,355 @@ model RateLimit {
 
   // Drives the opportunistic sweep of closed windows.
   @@index([expiresAt])
+}
+
+// ─── Gift draw programme ─────────────────────────────────────────────────────
+//
+// Every 100 AED of goods a customer pays for earns them one gift coupon. The
+// coupons never expire, but they only take part in a draw if the customer has
+// bought something in that draw's cycle — a qualifying purchase reactivates
+// EVERY coupon they already hold and mints another one on top, so a regular
+// shopper accumulates entries while a one-off shopper's coupon goes dormant.
+//
+// A draw runs once a month, on the day of the month set by the `gift_draw_day`
+// site setting (the 5th unless an admin changes it). Its entry list is frozen
+// first (nobody can be added once the cycle closes), then an admin runs it, then
+// it is published — and none of those three may happen before the draw's own
+// date, which is why every draw stores that date rather than deriving it. If a
+// winner was referred by another customer, that referrer wins the same prize —
+// one level only, exactly like the rest of the affiliate programme in
+// lib/referral.js.
+
+// Where a draw is in its lifecycle. The order is strictly forward: entries can
+// only be frozen once, winners can only be picked from a frozen list, and
+// publishing is what makes winners visible to customers.
+enum GiftDrawStatus {
+  SCHEDULED // created, cycle still open, entries still accruing
+  FROZEN // entry snapshot taken; the ticket list can no longer change
+  DRAWN // winners picked, awaiting admin review
+  PUBLISHED // winners visible on /gifts and in customer dashboards
+}
+
+// Whether a winner won the prize themselves or is receiving the mirrored copy
+// owed to the person who referred them.
+enum GiftWinnerKind {
+  PRIMARY // their own coupon was drawn
+  REFERRER // they referred a PRIMARY winner and get the same prize
+}
+
+// How far along handing the prize over has got. Purely operational — the store
+// hands these over by arrangement, so this is a checklist for the admin, not a
+// workflow anything else keys off.
+enum GiftFulfilmentStatus {
+  PENDING
+  NOTIFIED
+  CLAIMED
+  DELIVERED
+}
+
+// A promotional poster for the gift programme — the artwork an admin uploads
+// and the storefront shows as-is.
+//
+// The gifts page is an advertisement, not a specification: what sells the
+// giveaway is one designed image announcing the prize, the spend needed and the
+// draw date, all of which change together every campaign. Storing the finished
+// artwork rather than rebuilding it from fields means a new campaign is an
+// upload, not a deploy — and it is the reason the page carries no marketing
+// prose of its own to fall out of step with the poster.
+//
+// `linkUrl` is optional: a poster that leads somewhere ("shop now") becomes a
+// link, one that is purely informational stays an image.
+model GiftPoster {
+  id String @id @default(cuid())
+
+  // Doubles as the alt text. Not optional-in-spirit even though the column is:
+  // a poster carries ALL of its message in pixels, so a blank alt leaves a
+  // screen reader with nothing at all to announce.
+  title String?
+
+  imageUrl String
+  linkUrl  String?
+
+  // Which surface shows it: "GIFTS" (the public page), "DASHBOARD" (a
+  // customer's own gifts screen) or "BOTH". A plain string checked against
+  // GIFT_POSTER_PLACEMENTS in lib/gift-shared.js rather than a database enum,
+  // so adding a surface later is a code change rather than a migration on a
+  // live table.
+  placement String @default("BOTH")
+
+  isActive  Boolean @default(true)
+  sortOrder Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive, sortOrder])
+}
+
+// One prize the programme can award, e.g. "Smart Watch" or "1 Gram Gold Coin".
+//
+// A single catalogue shared by two very different consumers: the published
+// roadmap table on /gifts (via GiftTierItem) and the pool of an individual
+// monthly draw (via GiftDrawPrize). They share it because the same prizes recur
+// throughout both — "Smart Watch" alone appears in eight roadmap tiers — and a
+// second copy of the name would drift.
+model GiftPrize {
+  id        String  @id @default(cuid())
+  name      String
+  slug      String  @unique
+  // Free text rather than a Decimal on purpose: the published figures are a
+  // mixture of currencies and orders of magnitude ("1000 cash prize", "25 lakh
+  // villa", "1.5 CR villa in Dubai") and nothing computes on them. They are
+  // printed on the roadmap table exactly as the admin types them.
+  valueNote String?
+  isActive  Boolean @default(true)
+  sortOrder Int     @default(0)
+
+  // Show this prize large in the hero showcase at the top of /gifts, rather
+  // than only as a row in the roadmap table. Reserved for the headline items —
+  // the car, the villa — that are the reason anybody reads the page at all.
+  // A flag rather than "whatever is in the top tier" so the store can lead with
+  // whichever prize it wants to sell the programme on this month.
+  isFeatured Boolean @default(false)
+
+  // The prize's photographs, lowest sortOrder first. The first one is the cover
+  // — it is what every card, thumbnail and email shows — and the rest are extra
+  // angles for the pages that can display a gallery.
+  images GiftPrizeImage[]
+
+  tierItems  GiftTierItem[]
+  drawPrizes GiftDrawPrize[]
+  winners    GiftDrawWinner[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive, sortOrder])
+}
+
+// One photograph of a prize.
+//
+// A table rather than a single `imageUrl` column because the headline prizes are
+// the reason anybody reads the gifts page, and one photograph rarely sells a car
+// or a villa — the store wants the exterior, the interior and the detail shot.
+// Ordered rather than a bare set: which image is the COVER is a decision the
+// admin makes by dragging it to the top, not something the database picks.
+//
+// Cascades on delete, because an image has no meaning without its prize.
+model GiftPrizeImage {
+  id      String    @id @default(cuid())
+  prizeId String
+  prize   GiftPrize @relation(fields: [prizeId], references: [id], onDelete: Cascade)
+
+  url       String
+  sortOrder Int    @default(0)
+
+  createdAt DateTime @default(now())
+
+  @@index([prizeId, sortOrder])
+}
+
+// One row of the published prize roadmap — the table customers read on /gifts.
+//
+// This is marketing content, NOT draw machinery: nothing here decides who wins
+// anything. It is stored rather than hardcoded because the roadmap is a
+// sixteen-row table of business targets that the company revises, and revising
+// it must not need a deploy.
+model GiftTier {
+  id             String  @id @default(cuid())
+  sortOrder      Int     @default(0) // the "SI NO" column
+  memberCount    Int // members reached at this rung
+  totalMembers   Int? // cumulative members, where the roadmap states one
+  targetDays     Int? // days allowed to reach the rung
+  totalValueNote String? // e.g. "T = 50000", printed as-is
+  isActive       Boolean @default(true)
+
+  items GiftTierItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive, sortOrder])
+}
+
+// A prize line within one roadmap rung: "Smart Watch x 5".
+model GiftTierItem {
+  id        String    @id @default(cuid())
+  tierId    String
+  tier      GiftTier  @relation(fields: [tierId], references: [id], onDelete: Cascade)
+  prizeId   String
+  prize     GiftPrize @relation(fields: [prizeId], references: [id])
+  quantity  Int       @default(1)
+  sortOrder Int       @default(0)
+
+  @@unique([tierId, prizeId])
+  @@index([tierId, sortOrder])
+}
+
+// A gift coupon owned by one customer. The customer-facing artefact of the whole
+// programme: the code is what is drawn, and `userId` is what turns a drawn code
+// back into a person.
+//
+// Never deleted and never expired. A coupon that should no longer take part —
+// its order was cancelled — is stamped `voidedAt` instead, so the reason a code
+// stopped being eligible is always on the record.
+model GiftCoupon {
+  id     String @id @default(cuid())
+  code   String @unique
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // The paid order that earned this coupon. Several coupons share one order
+  // when its subtotal covered several multiples of the threshold.
+  sourceOrderId String
+  sourceOrder   Order  @relation(fields: [sourceOrderId], references: [id])
+
+  // The instant the owner last made a qualifying purchase. THIS is what
+  // "active" means: a coupon takes part in a draw when this falls inside the
+  // draw's cycle. Set on mint and moved forward — on every coupon the customer
+  // holds — by each later qualifying purchase. Never cleared; a dormant coupon
+  // is simply one whose stamp has fallen behind the current cycle.
+  lastQualifiedAt DateTime
+
+  voidedAt   DateTime?
+  voidReason String?
+
+  entries GiftDrawEntry[]
+  wins    GiftDrawWinner[]
+
+  createdAt DateTime @default(now())
+
+  // The customer's own list of codes, newest first.
+  @@index([userId, createdAt])
+  // The eligibility sweep that builds a draw's entry list.
+  @@index([lastQualifiedAt])
+  @@index([sourceOrderId])
+}
+
+// One monthly draw.
+model GiftDraw {
+  id       String         @id @default(cuid())
+  // "2026-09". Unique so a duplicate draw for one month is impossible, which
+  // matters because the scheduled freeze and a human can both create one.
+  cycleKey String         @unique
+  drawDate DateTime
+  status   GiftDrawStatus @default(SCHEDULED)
+
+  // The half-open window a coupon's lastQualifiedAt must fall in to enter:
+  // [cycleStart, cycleEnd). Stored rather than recomputed so a draw can always
+  // explain its own entry list, even after the cadence is changed — which it can
+  // be, since the draw day is an admin setting. Recomputing these on read would
+  // retroactively redefine which coupons were in a draw that has already run.
+  //
+  // A draw still SCHEDULED is re-dated when the setting changes (see ensureDraw);
+  // one that has been frozen keeps these values for ever.
+  cycleStart DateTime
+  cycleEnd   DateTime
+
+  // Stamped when the entry snapshot is taken, with the size of that snapshot.
+  frozenAt   DateTime?
+  entryCount Int       @default(0)
+
+  // Whether one customer may take more than one prize from this draw.
+  //
+  // Entries accumulate — a regular shopper holds many coupons — so with this
+  // off, the heaviest spender can plausibly sweep several prizes at once. On
+  // (the default) each customer can be drawn only once per draw and their
+  // remaining coupons are skipped. It applies to PRIMARY wins only: a prize
+  // mirrored to someone for referring a winner is a separate obligation and is
+  // never suppressed by it.
+  oneWinPerCustomer Boolean @default(true)
+
+  drawnAt     DateTime?
+  drawnById   String?
+  drawnBy     User?     @relation("GiftDrawsRun", fields: [drawnById], references: [id], onDelete: SetNull)
+  publishedAt DateTime?
+
+  prizes  GiftDrawPrize[]
+  entries GiftDrawEntry[]
+  winners GiftDrawWinner[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, drawDate])
+}
+
+// A prize, and how many of it, on offer in one draw. The admin assembles this
+// before running the draw; the number of winners picked is the sum of these
+// quantities.
+model GiftDrawPrize {
+  id       String    @id @default(cuid())
+  drawId   String
+  draw     GiftDraw  @relation(fields: [drawId], references: [id], onDelete: Cascade)
+  prizeId  String
+  prize    GiftPrize @relation(fields: [prizeId], references: [id])
+  quantity Int       @default(1)
+
+  @@unique([drawId, prizeId])
+}
+
+// One ticket in the drum: a frozen copy of a coupon that was eligible when the
+// cycle closed.
+//
+// The snapshot is the point. Eligibility is derived from data that keeps moving
+// — a customer buys again and every coupon's lastQualifiedAt jumps forward — so
+// without freezing there is no way to say afterwards who was actually in the
+// draw. `couponCode` and `userId` are copied rather than joined for the same
+// reason: the ticket list must still read correctly years later.
+model GiftDrawEntry {
+  id         String     @id @default(cuid())
+  drawId     String
+  draw       GiftDraw   @relation(fields: [drawId], references: [id], onDelete: Cascade)
+  couponId   String
+  coupon     GiftCoupon @relation(fields: [couponId], references: [id])
+  couponCode String
+  userId     String
+  // 0-based index within this draw. The winner is chosen by drawing a position,
+  // so this is the number the randomness actually lands on.
+  position   Int
+
+  @@unique([drawId, couponId])
+  @@unique([drawId, position])
+  @@index([drawId, userId])
+}
+
+// Someone who is owed a prize from a draw.
+//
+// A referrer's mirrored prize is a row of its own (kind REFERRER) rather than
+// something worked out at display time. Two reasons: the obligation is fixed at
+// the moment of the draw and must survive any later change to the referral
+// link, and each person's prize is handed over separately, so each needs its own
+// fulfilment status.
+model GiftDrawWinner {
+  id      String    @id @default(cuid())
+  drawId  String
+  draw    GiftDraw  @relation(fields: [drawId], references: [id], onDelete: Cascade)
+  prizeId String
+  prize   GiftPrize @relation(fields: [prizeId], references: [id])
+
+  userId String
+  user   User   @relation("GiftDrawWins", fields: [userId], references: [id], onDelete: Cascade)
+
+  // The drawn coupon. Null on a REFERRER row — the referrer won nothing of
+  // their own; they are owed the prize because of who they referred.
+  couponId String?
+  coupon   GiftCoupon? @relation(fields: [couponId], references: [id])
+
+  kind                 GiftWinnerKind  @default(PRIMARY)
+  // On a REFERRER row, the PRIMARY win that earned it. Lets the admin screen
+  // show the pair together, and the @unique is what stops a mirror being
+  // created twice for the same win.
+  mirroredFromWinnerId String?         @unique
+  mirroredFrom         GiftDrawWinner? @relation("GiftWinnerMirror", fields: [mirroredFromWinnerId], references: [id], onDelete: Cascade)
+  mirror               GiftDrawWinner? @relation("GiftWinnerMirror")
+
+  status GiftFulfilmentStatus @default(PENDING)
+  notes  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([drawId, kind])
+  @@index([userId, createdAt])
 }
