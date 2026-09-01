@@ -34,10 +34,19 @@ export const DEFAULT_SETTINGS = {
   // the same normalizeCancelWindowHours(), so both sides agree on what a bad
   // value means.
   //
-  // Load-bearing: it is the courier's collection deadline written down, so
-  // moving it moves when parcels can still be pulled back. Lengthening it past
-  // the hour the courier actually collects would offer shoppers a cancel button
-  // that refunds them for goods already on a van.
+  // Load-bearing twice over. It is the courier's collection deadline written
+  // down, so moving it moves when parcels can still be pulled back — lengthening
+  // it past the hour the courier actually collects would offer shoppers a cancel
+  // button that refunds them for goods already on a van.
+  //
+  // It is ALSO the gap between a gift draw and the moment its entries close (see
+  // entryCutoffFor in lib/gift-shared.js). A coupon must not be in the drum while
+  // the order behind it can still be cancelled, or a customer can win, cancel for
+  // a full refund and keep the prize. The gift cutoff is derived from this value
+  // rather than configured beside it precisely so the two cannot drift apart:
+  // raise this and entries start closing correspondingly earlier, on their own.
+  // The visible cost is that the last N hours before a draw count towards the
+  // NEXT one, so a long window shortens the run-up an admin can advertise.
   order_cancel_window_hours: String(DEFAULT_CANCEL_WINDOW_HOURS),
   // Gift draw programme (lib/gift-coupons.js). The threshold is the goods
   // subtotal that earns one coupon; `gift_program_enabled` is the master switch

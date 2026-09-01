@@ -90,7 +90,22 @@ export function validateShippingAddress(snapshot) {
  * @param {object|null} snapshot
  * @returns {string[]} lines, already stripped of anything blank
  */
-export function formatAddressLines(snapshot) {
+/**
+ * Just the postal half — who it is for and where it is — with no phone numbers
+ * or email addresses.
+ *
+ * Split out for screens that render the contact channels themselves, as
+ * something clickable rather than as text: the gift winners table turns every
+ * number into a `tel:` link, and printing them again inside the address block
+ * underneath would show the same number twice and read as two contacts. Every
+ * other caller wants the whole thing and goes on using formatAddressLines(),
+ * which is now this plus those channels — one definition of the order, so the
+ * two can never drift apart.
+ *
+ * @param {object|null} snapshot
+ * @returns {string[]}
+ */
+export function formatPostalLines(snapshot) {
   if (!snapshot || typeof snapshot !== "object") return [];
   const s = snapshot;
   const join = (...parts) => parts.map(value).filter(Boolean).join(", ");
@@ -102,11 +117,8 @@ export function formatAddressLines(snapshot) {
       value(s.line2),
       join(s.city, s.state),
       [value(s.postalCode), value(s.country)].filter(Boolean).join(" "),
-      value(s.phone) && `Phone: ${value(s.phone)}`,
     ].filter(Boolean);
   }
-
-  const mobiles = [value(s.phone), value(s.phone2)].filter(Boolean).join(" / ");
 
   return [
     value(s.fullName),
@@ -115,6 +127,22 @@ export function formatAddressLines(snapshot) {
     join(s.area, s.emirate),
     value(s.landmark) && `Near ${value(s.landmark)}`,
     value(s.country),
+  ].filter(Boolean);
+}
+
+export function formatAddressLines(snapshot) {
+  if (!snapshot || typeof snapshot !== "object") return [];
+  const s = snapshot;
+  const postal = formatPostalLines(s);
+
+  if (isLegacySnapshot(s)) {
+    return [...postal, value(s.phone) && `Phone: ${value(s.phone)}`].filter(Boolean);
+  }
+
+  const mobiles = [value(s.phone), value(s.phone2)].filter(Boolean).join(" / ");
+
+  return [
+    ...postal,
     mobiles && `Mobile: ${mobiles}`,
     value(s.whatsapp) && `WhatsApp: ${value(s.whatsapp)}`,
     value(s.email) && `Email: ${value(s.email)}`,

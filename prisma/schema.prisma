@@ -388,6 +388,12 @@ model OrderItem {
   quantity    Int
   price       Decimal @db.Decimal(10, 2)
   total       Decimal @db.Decimal(10, 2)
+
+  // "Continue shopping" asks, for every product in a shopper's history, whether
+  // they have already bought it (lib/browsing-history.js). That reads this table
+  // by product on every home page load for a signed-in shopper, which without an
+  // index is a scan of every line item the store has ever sold.
+  @@index([productId])
 }
 
 model Payment {
@@ -607,6 +613,11 @@ enum GiftWinnerKind {
 enum GiftFulfilmentStatus {
   PENDING
   NOTIFIED
+  // Retired: the admin screens no longer offer it (see
+  // GIFT_FULFILMENT_STATUSES in lib/gift-shared.js, which is what both the
+  // dropdown and the API validate against). Kept in the enum so a row written
+  // before it was withdrawn still reads back; dropping it would need a
+  // migration that rewrote those rows into a state nobody chose for them.
   CLAIMED
   DELIVERED
 }
@@ -800,7 +811,7 @@ model GiftDraw {
   status   GiftDrawStatus @default(SCHEDULED)
 
   // The half-open window a coupon's lastQualifiedAt must fall in to enter:
-  // [cycleStart, cycleEnd). Stored rather than recomputed so a draw can always
+  // [cycleStart, entryCutoff). Stored rather than recomputed so a draw can always
   // explain its own entry list, even after the cadence is changed — which it can
   // be, since the draw day is an admin setting. Recomputing these on read would
   // retroactively redefine which coupons were in a draw that has already run.
@@ -809,6 +820,21 @@ model GiftDraw {
   // one that has been frozen keeps these values for ever.
   cycleStart DateTime
   cycleEnd   DateTime
+
+  // When entries actually close: one cancellation window before cycleEnd.
+  //
+  // cycleEnd is when the draw is HELD; this is the last instant a purchase can
+  // still count towards it. The gap between them is order_cancel_window_hours,
+  // and it exists because a coupon whose order is still cancellable must not be
+  // in the drum — otherwise a customer can win, cancel for a full refund, and
+  // keep the prize, which nothing downstream would ever notice.
+  //
+  // It is also what consecutive draws tile on: the next draw's cycleStart is the
+  // previous draw's entryCutoff, not its cycleEnd. Both edges of the window move
+  // by the same amount, so the calendar still tiles exactly — no purchase falls
+  // through a gap between two draws, and none is counted by both. A purchase
+  // made after a draw's cutoff is not lost; it counts towards the following one.
+  entryCutoff DateTime
 
   // Stamped when the entry snapshot is taken, with the size of that snapshot.
   frozenAt   DateTime?

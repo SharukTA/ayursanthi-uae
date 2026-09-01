@@ -23,9 +23,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata = {
-  title: "Ayursanthi | Ayurveda Wellness Store",
+  title: "Ayurshoppee | Ayurveda Wellness Store",
   description:
-    "Ayursanthi ecommerce platform for ayurvedic products, rewards, and customer wellness shopping.",
+    "Ayurshoppee ecommerce platform for ayurvedic products, rewards, and customer wellness shopping.",
 };
 
 export default async function RootLayout({ children }) {

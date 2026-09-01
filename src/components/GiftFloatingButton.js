@@ -43,10 +43,15 @@ import { Gift } from "lucide-react";
  * enforce the Amazon CTA look, and this bubble is not a CTA button.
  */
 
-const STORAGE_KEY = "ayursanthi:gift-fab-position";
+// Versioned. The bubble used to rest in the bottom-right corner, and a returning
+// visitor has that corner saved against the old key — restoring it would put
+// them back where the button no longer lives and hide the new resting place from
+// exactly the people who have seen the site before. Bumping the suffix retires
+// those saved positions; anyone who drags it again is saved under v2.
+const STORAGE_KEY = "ayursanthi:gift-fab-position:v2";
 
 // Distance kept between the bubble and the edge of the viewport, and the inset
-// of its default resting corner.
+// of its default resting position.
 const EDGE_GAP = 16;
 
 // How far a pointer must travel before the press counts as a drag rather than a
@@ -89,11 +94,11 @@ export function GiftFloatingButton({ href = "/gifts", label = "Gift Giveaways" }
   // afterwards can be swallowed instead of navigating.
   const suppressClick = useRef(false);
 
-  // null = "has not been moved", which renders from the bottom-right corner in
-  // CSS. Once dragged it becomes {x, y} in viewport pixels. Keeping null
-  // distinct from a measured corner is what lets the default position be
-  // expressed in CSS — correct on the server, and able to follow the safe-area
-  // inset on phones — instead of needing a layout pass to compute.
+  // null = "has not been moved", which renders against the right edge, centred
+  // vertically, in CSS. Once dragged it becomes {x, y} in viewport pixels.
+  // Keeping null distinct from a measured position is what lets the default be
+  // expressed in CSS — correct on the server, and correct on the first paint at
+  // any viewport height — instead of needing a layout pass to compute.
   const [pos, setPos] = useState(null);
   const [dragging, setDragging] = useState(false);
   const [hovered, setHovered] = useState(false);
@@ -123,7 +128,7 @@ export function GiftFloatingButton({ href = "/gifts", label = "Gift Giveaways" }
         window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
       } catch {
         // Private mode / storage disabled: the bubble just goes back to its
-        // corner on the next visit.
+        // default resting place on the next visit.
       }
     }
     return next;
@@ -152,7 +157,8 @@ export function GiftFloatingButton({ href = "/gifts", label = "Gift Giveaways" }
   }, [commitPos]);
 
   // Same reasoning for a resize mid-session. No-ops while the bubble is still in
-  // its CSS-anchored default corner, which needs no help staying put.
+  // its CSS-anchored default position, which re-centres itself and needs no
+  // help staying put.
   useEffect(() => {
     const onResize = () => {
       const node = nodeRef.current;
@@ -209,9 +215,7 @@ export function GiftFloatingButton({ href = "/gifts", label = "Gift Giveaways" }
       y: rect.top,
       moved: false,
     };
-    // Capture means the drag survives the pointer leaving the 44px circle —
-    // without it, moving faster than the element follows drops the drag.
-    node.setPointerCapture(e.pointerId);
+    // Deliberately NOT capturing the pointer here. See onPointerMove.
   }
 
   function onPointerMove(e) {
@@ -221,6 +225,24 @@ export function GiftFloatingButton({ href = "/gifts", label = "Gift Giveaways" }
       const travelled = Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY);
       if (travelled < DRAG_THRESHOLD) return; // still a tap
       drag.moved = true;
+
+      // Capture is taken HERE, at the moment the press becomes a drag, and not
+      // on pointerdown where it belongs by instinct.
+      //
+      // This is what was breaking the link on a laptop. While an element holds
+      // pointer capture, the browser dispatches the following `click` to the
+      // CAPTURING element rather than to whatever was actually under the
+      // cursor — so a plain mouse click landed on this wrapper div instead of
+      // on the <Link> inside it, the anchor never saw a click, and nothing
+      // navigated. A tap on a phone still worked, which is what made it look
+      // like a desktop-only bug rather than a capture problem.
+      //
+      // Deferring it costs nothing: a press that never travels 6px does not
+      // need capture at all, and one that does gets it before the pointer has
+      // had a chance to leave the 44px circle — which is the case capture
+      // exists for, keeping the drag alive when the finger outruns the element.
+      nodeRef.current?.setPointerCapture(e.pointerId);
+
       // The only render a drag causes: it lifts the bubble and hides the
       // tooltip. Everything after this is transform writes.
       setDragging(true);
@@ -239,8 +261,12 @@ export function GiftFloatingButton({ href = "/gifts", label = "Gift Giveaways" }
     dragRef.current = null;
     cancelAnimationFrame(frameRef.current);
     frameRef.current = 0;
+    // Guarded rather than blindly released: capture is only taken once a press
+    // becomes a drag, so on every ordinary tap there is nothing to release and
+    // an unguarded call would throw NotFoundError.
     try {
-      nodeRef.current?.releasePointerCapture(e.pointerId);
+      const node = nodeRef.current;
+      if (node?.hasPointerCapture?.(e.pointerId)) node.releasePointerCapture(e.pointerId);
     } catch {
       // Pointer already gone (cancelled); nothing to release.
     }
@@ -254,12 +280,18 @@ export function GiftFloatingButton({ href = "/gifts", label = "Gift Giveaways" }
       // Hand the drag over from transform to left/top in one synchronous write,
       // before React re-renders. Doing it here rather than waiting for the
       // render means there is never a frame where the transform is gone but the
-      // new offsets have not landed — i.e. no snap back to the old corner.
-      // right/bottom are cleared explicitly because the very first drag starts
-      // from the CSS-anchored default, where they are still set.
+      // new offsets have not landed — i.e. no snap back to where it was.
+      // Every property of the CSS-anchored default is cleared explicitly,
+      // because the very first drag starts from it and they are all still set:
+      // the right inset, and the full-height/auto-margin pair that centres it.
+      // Leaving the margins behind would fight the new `top` and drop the bubble
+      // back into the middle of the screen.
       node.style.transform = "";
       node.style.right = "";
       node.style.bottom = "";
+      node.style.marginTop = "";
+      node.style.marginBottom = "";
+      node.style.height = "";
       node.style.left = `${drag.x}px`;
       node.style.top = `${drag.y}px`;
     }
@@ -293,9 +325,20 @@ export function GiftFloatingButton({ href = "/gifts", label = "Gift Giveaways" }
           ? { left: `${pos.x}px`, top: `${pos.y}px` }
           : {
               right: `${EDGE_GAP}px`,
-              // Clears the iOS home indicator / Android gesture bar in its
-              // resting corner.
-              bottom: `calc(${EDGE_GAP}px + env(safe-area-inset-bottom, 0px))`,
+              // Vertically centred on the right edge, on every viewport.
+              //
+              // Done with auto margins against a full-height inset rather than
+              // `top: 50%` + `translateY(-50%)`, because the drag OWNS the
+              // transform: its first frame overwrites whatever is there, and a
+              // -50% shift silently baked into the starting position would make
+              // the bubble jump half its own height the instant it was picked
+              // up. Auto margins centre it with no transform at all, so there is
+              // nothing for the drag to clobber.
+              top: 0,
+              bottom: 0,
+              marginTop: "auto",
+              marginBottom: "auto",
+              height: "fit-content",
             }),
         // Without this the browser claims the gesture for page scrolling and no
         // pointermove ever arrives, so the bubble would only drag with a mouse.
@@ -355,7 +398,7 @@ export function GiftFloatingButton({ href = "/gifts", label = "Gift Giveaways" }
       {/* PHONES: the words, permanently, under the icon. In normal flow rather
           than absolutely positioned, so the wrapper's measured height includes it
           and clampToViewport keeps the caption on screen too — pinned below the
-          circle it would hang off the bottom edge at the resting corner. The
+          circle it would hang off the bottom edge once dragged there. The
           max-width is what breaks it onto two tidy lines ("Gift" / "Giveaways")
           instead of one wide strip. aria-hidden: the link's aria-label already
           says this. */}

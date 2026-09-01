@@ -9,6 +9,8 @@ import {
   Loader2,
   Lock,
   Mail,
+  MessageCircle,
+  Phone,
   Plus,
   Save,
   Send,
@@ -24,7 +26,133 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { Button } from "@/components/ui/button";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { ImageListField } from "@/components/ImageListField";
-import { formatDrawDate, GIFT_FULFILMENT_STATUSES } from "@/lib/gift-shared";
+import {
+  formatDrawDate,
+  formatDrawDateTime,
+  GIFT_FULFILMENT_STATUSES,
+  referredWinnerName,
+} from "@/lib/gift-shared";
+
+/**
+ * How to reach one winner, as things that can be clicked.
+ *
+ * Prizes are handed over in person — the winner is called and told where to
+ * come — so this column is the working end of the whole screen. Every number is
+ * a `tel:` link and every address a `mailto:`, because an admin ringing a list
+ * of winners off a desk phone should not be retyping digits read off a screen,
+ * which is exactly where a wrong number comes from.
+ *
+ * The details are assembled server-side by winnerContact() in lib/gift-draw.js,
+ * from the account and from the last paid order's snapshot. Which of the two a
+ * number came from is not shown: the admin needs one that works, not a lecture
+ * on where it was stored.
+ *
+ * Everything the store holds is here — every distinct number, WhatsApp, both
+ * email addresses when they differ, and the postal address — because the one
+ * thing this screen must never do is send an admin off to the customer record
+ * mid-call to find the rest.
+ */
+function WinnerContact({ contact }) {
+  if (!contact) return <span className="text-[10px] text-slate-400">—</span>;
+
+  const { phones = [], whatsapp, email, orderEmail, addressLines = [], orderNumber } = contact;
+
+  // wa.me takes digits only — no plus, no spaces, no dashes.
+  const waNumber = String(whatsapp ?? "").replace(/\D/g, "");
+
+  return (
+    <div className="grid max-w-60 gap-1">
+      {phones.length > 0 ? (
+        phones.map((phone) => (
+          <a
+            key={phone}
+            href={`tel:${phone.replace(/\s/g, "")}`}
+            className="inline-flex items-center gap-1.5 font-mono text-[11px] font-semibold text-slate-800 hover:text-emerald-800 hover:underline"
+          >
+            <Phone className="size-3 shrink-0 text-slate-400" />
+            {phone}
+          </a>
+        ))
+      ) : (
+        // Said plainly rather than left blank. A winner with no number on file
+        // has to be chased by email instead, and an admin working down the list
+        // needs to know that now — not after a silent row turns out to be
+        // unreachable.
+        <span
+          className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-amber-700"
+          title="No phone number on this account or on their last order. Reach them by email."
+        >
+          <Phone className="size-3 shrink-0" />
+          No phone on file
+        </span>
+      )}
+
+      {/* The account address, on every row, directly beneath the number.
+          It IS also the second line of the "Who" cell one column to the left,
+          and that duplication is accepted deliberately: this column is the one
+          an admin works a handover from, and the two channels used to reach a
+          winner — ring them, then mail them what was agreed — should be one
+          click apart rather than one per column. It matters most on a referrer
+          row, where the store may hold no number at all: a referrer is owed a
+          prize without ever having bought anything, so the account address can
+          be the only way to reach them that exists. */}
+      {email ? (
+        <a
+          href={`mailto:${email}`}
+          className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-800 hover:text-emerald-800 hover:underline"
+        >
+          <Mail className="size-3 shrink-0 text-slate-400" />
+          {email}
+        </a>
+      ) : null}
+
+      {waNumber ? (
+        <a
+          href={`https://wa.me/${waNumber}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1.5 font-mono text-[11px] text-emerald-800 hover:underline"
+        >
+          <MessageCircle className="size-3 shrink-0 text-emerald-600" />
+          {whatsapp}
+        </a>
+      ) : null}
+
+      {/* Only when the address they checked out with differs from the account
+          one, which is the case where mailing the account address alone could
+          miss them. */}
+      {orderEmail ? (
+        <a
+          href={`mailto:${orderEmail}`}
+          className="inline-flex items-center gap-1.5 text-[10px] text-slate-500 hover:text-emerald-800 hover:underline"
+        >
+          <Mail className="size-3 shrink-0 text-slate-400" />
+          {orderEmail}
+        </a>
+      ) : null}
+
+      {/* The address they last had an order sent to. Not for posting the prize
+          — these are collected in person — but it answers "which emirate are
+          they in?", which is what decides where the admin tells them to come,
+          and it carries the name the order was placed under when that differs
+          from the account name. Muted and last: it is context for the call, not
+          the thing the admin clicks. */}
+      {addressLines.length > 0 ? (
+        <div className="mt-0.5 border-t border-slate-100 pt-1 text-[10px] leading-snug text-slate-500">
+          {addressLines.map((line, index) => (
+            // Indexed: two lines of one address can legitimately read the same
+            // ("Dubai" as both area and emirate), and the line itself is
+            // therefore not a unique key.
+            <p key={`${index}-${line}`}>{line}</p>
+          ))}
+          {orderNumber ? (
+            <p className="mt-0.5 font-mono text-[9px] text-slate-400">from {orderNumber}</p>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 /** The prize's cover, or a muted placeholder when its gallery is still empty. */
 function PoolThumb({ src, alt }) {
@@ -365,9 +493,18 @@ export default function AdminDrawPage({ params }) {
                 {draw.status}
               </span>
             </div>
+            {/* The window ends at the ENTRY CUTOFF, not at the draw instant, and
+                the two are different days often enough that showing the draw
+                date here would quietly misdescribe the entry list. Entries close
+                one cancellation window early so no coupon in the drum belongs to
+                an order that can still be cancelled for a refund. */}
             <p className="mt-1 text-sm text-slate-300">
-              Held {formatDrawDate(draw.drawDate)} · qualifying window{" "}
-              {formatDrawDate(draw.cycleStart)} to {formatDrawDate(draw.cycleEnd)}
+              Held {formatDrawDateTime(draw.drawDate)} · qualifying window{" "}
+              {formatDrawDate(draw.cycleStart)} to {formatDrawDate(draw.entryCutoff)}
+            </p>
+            <p className="mt-0.5 text-xs text-slate-400">
+              Entries {draw.status === "SCHEDULED" ? "close" : "closed"}{" "}
+              {formatDrawDateTime(draw.entryCutoff)}, one cancellation window before the draw.
             </p>
           </PageReveal>
         </div>
@@ -586,11 +723,15 @@ export default function AdminDrawPage({ params }) {
         {/* Winners */}
         {draw.winners.length > 0 ? (
           <FadeIn className="mt-5 overflow-x-auto rounded-md border border-border bg-white shadow-sm">
-            <table className="w-full min-w-[760px] text-left text-xs">
+            <table className="w-full min-w-[900px] text-left text-xs">
               <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-wide text-slate-500">
                 <tr>
                   <th className="px-4 py-2.5">Prize</th>
                   <th className="px-4 py-2.5">Who</th>
+                  {/* The prize is handed over in person, so this column is the
+                      one the admin actually works from: it is what the winner
+                      email's promise of a call depends on. */}
+                  <th className="px-4 py-2.5">Contact</th>
                   <th className="px-4 py-2.5">Why</th>
                   <th className="px-4 py-2.5">Coupon</th>
                   <th className="px-4 py-2.5">Fulfilment</th>
@@ -600,12 +741,20 @@ export default function AdminDrawPage({ params }) {
                 {draw.winners.map((winner) => (
                   <tr
                     key={winner.id}
-                    className={winner.kind === "REFERRER" ? "bg-slate-50/60" : ""}
+                    className={`align-top ${winner.kind === "REFERRER" ? "bg-slate-50/60" : ""}`}
                   >
                     <td className="px-4 py-3 font-bold text-slate-900">{winner.prize.name}</td>
                     <td className="px-4 py-3">
                       <p className="font-semibold text-slate-900">{winner.user.name}</p>
-                      <p className="text-[10px] text-slate-500">{winner.user.email}</p>
+                      <a
+                        href={`mailto:${winner.user.email}`}
+                        className="text-[10px] text-slate-500 hover:text-emerald-800 hover:underline"
+                      >
+                        {winner.user.email}
+                      </a>
+                    </td>
+                    <td className="px-4 py-3">
+                      <WinnerContact contact={winner.contact} />
                     </td>
                     <td className="px-4 py-3">
                       {winner.kind === "PRIMARY" ? (
@@ -613,10 +762,42 @@ export default function AdminDrawPage({ params }) {
                           Drawn
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 rounded border border-sky-200 bg-sky-50 px-1.5 py-0.5 text-[9px] font-black uppercase text-sky-800">
-                          <Users className="size-2.5" />
-                          Referrer
-                        </span>
+                        <div className="grid gap-1">
+                          <span className="inline-flex w-fit items-center gap-1 rounded border border-sky-200 bg-sky-50 px-1.5 py-0.5 text-[9px] font-black uppercase text-sky-800">
+                            <Users className="size-2.5" />
+                            Referrer
+                          </span>
+                          {/* WHOSE win this one mirrors. The badge alone states
+                              a rule; this states the obligation — without it a
+                              referrer row is a person holding no coupon, with
+                              nothing on screen saying why the store owes them a
+                              phone. The referred customer's own number comes
+                              too, because their row sits in a separate block
+                              further down the table (winners are ordered by
+                              kind, so every primary is listed before every
+                              referrer) and they are the one person who can
+                              vouch for a referrer the store may hold nothing
+                              else for. */}
+                          {referredWinnerName(winner) ? (
+                            <p className="text-[10px] leading-snug text-slate-600">
+                              referred{" "}
+                              <span className="font-semibold text-slate-900">
+                                {referredWinnerName(winner)}
+                              </span>
+                              {winner.mirroredFrom?.user?.phone ? (
+                                <>
+                                  {" · "}
+                                  <a
+                                    href={`tel:${winner.mirroredFrom.user.phone.replace(/\s/g, "")}`}
+                                    className="font-mono text-slate-500 hover:text-emerald-800 hover:underline"
+                                  >
+                                    {winner.mirroredFrom.user.phone}
+                                  </a>
+                                </>
+                              ) : null}
+                            </p>
+                          ) : null}
+                        </div>
                       )}
                     </td>
                     <td className="px-4 py-3 font-mono text-[10px] text-slate-600">
@@ -628,8 +809,28 @@ export default function AdminDrawPage({ params }) {
                         onChange={(e) => updateWinner(winner.id, { status: e.target.value })}
                         className={field}
                       >
-                        {GIFT_FULFILMENT_STATUSES.map((status) => (
-                          <option key={status} value={status}>
+                        {/* The row's own status is added when it is not one of
+                            the offered steps — a row left on the retired
+                            CLAIMED. A select whose value matches no option
+                            silently displays the FIRST one instead, which would
+                            show that winner as PENDING and let a careless save
+                            write it back. Listed, it stays visible and can be
+                            moved forward, but cannot be chosen again. */}
+                        {[
+                          ...GIFT_FULFILMENT_STATUSES,
+                          ...(GIFT_FULFILMENT_STATUSES.includes(winner.status)
+                            ? []
+                            : [winner.status]),
+                        ].map((status) => (
+                          <option
+                            key={status}
+                            value={status}
+                            // Shown so the row reads correctly, but not
+                            // selectable: the API validates against the same
+                            // list and would reject it, so offering it would
+                            // only produce an error the admin cannot act on.
+                            disabled={!GIFT_FULFILMENT_STATUSES.includes(status)}
+                          >
                             {status}
                           </option>
                         ))}

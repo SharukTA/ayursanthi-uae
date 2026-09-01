@@ -63,7 +63,7 @@ const GROUPS = [
         placeholder: String(DEFAULT_CANCEL_WINDOW_HOURS),
         type: "number",
         min: 1,
-        hint: "How long after placing an order a customer — or an admin — can still cancel it. Set it to the point your courier collects and packs: past the window the parcel has gone, and a cancellation would refund goods already in transit. The deadline is shown beside every cancel button and on the Terms page.",
+        hint: "How long after placing an order a customer — or an admin — can still cancel it. Set it to the point your courier collects and packs: past the window the parcel has gone, and a cancellation would refund goods already in transit. The deadline is shown beside every cancel button and on the Terms page. It also sets how early gift-draw entries close — a coupon cannot be in a draw while the order behind it can still be cancelled — so lengthening this shortens the run-up to each draw.",
       },
     ],
   },
@@ -94,7 +94,7 @@ const GROUPS = [
         label: "Draw time (Gulf time)",
         placeholder: DEFAULT_DRAW_TIME,
         type: "time",
-        hint: "The hour the draw is held, on a 24-hour clock — 13:00 is 1:00 PM. Together with the date it forms the entry cutoff: everything bought before that instant is in this draw, everything after goes to the next.",
+        hint: "The hour the draw is held, on a 24-hour clock — 13:00 is 1:00 PM. Entries close one cancellation window before this instant, so that nobody can win on an order they can still cancel; anything bought after that cutoff counts towards the next draw.",
       },
       {
         key: "gift_program_enabled",

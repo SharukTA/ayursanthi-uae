@@ -44,6 +44,15 @@ export async function GET() {
         prize: { select: { name: true, valueNote: true, images: { orderBy: { sortOrder: "asc" }, take: 1, select: { url: true } } } },
         coupon: { select: { code: true } },
         draw: { select: { cycleKey: true, drawDate: true } },
+        // On a REFERRER row, the customer whose win earned this one. Their name
+        // is the whole substance of the message: "you won because somebody you
+        // referred did" is a claim, and a referrer with several referrals has
+        // no way to tell which of them it is about — the winner email already
+        // names them, so a page that cannot is the one place the store is
+        // vaguer than its own mail. First name only when it is shown; the
+        // relation carries the full one so a future admin-side reuse of this
+        // shape does not need a second query.
+        mirroredFrom: { select: { user: { select: { name: true } } } },
       },
     }),
     getGiftCouponThreshold(),
@@ -62,22 +71,45 @@ export async function GET() {
   const towardsNext = threshold > 0 ? Math.max(0, spend % threshold) : 0;
   const remainingToNext = threshold > 0 ? Math.round((threshold - towardsNext) * 100) / 100 : 0;
 
-  const decorated = coupons.map((coupon) => ({
-    id: coupon.id,
-    code: coupon.code,
-    createdAt: coupon.createdAt,
-    voidedAt: coupon.voidedAt,
-    voidReason: coupon.voidReason,
-    order: coupon.sourceOrder,
+  const decorated = coupons.map((coupon) => {
     // A voided coupon is never active, whatever its stamp says. With no draw
     // scheduled nothing is active — there is no window to fall inside — and the
     // dashboard says so rather than showing a count against a date that does
     // not exist.
-    active:
+    //
+    // Judged against entryCutoff, not the draw instant: entries close one
+    // cancellation window early so that nobody can win on an order they can
+    // still cancel for a refund.
+    const active =
       !coupon.voidedAt &&
       Boolean(upcoming) &&
-      isWithinCycle(coupon.lastQualifiedAt, upcoming.cycleStart, upcoming.cycleEnd),
-  }));
+      isWithinCycle(coupon.lastQualifiedAt, upcoming.cycleStart, upcoming.entryCutoff);
+
+    // The two reasons a live coupon is not in the next draw are completely
+    // different messages, and the dashboard cannot tell them apart from `active`
+    // alone. Dormant means "you have not shopped this cycle — buy again and it
+    // comes back". Settling means the opposite: the customer HAS just shopped,
+    // and did so too close to the draw for the order to be final in time, so the
+    // coupon counts towards the draw after it. Showing them the dormant wording
+    // would tell somebody who has just spent their money that they need to spend
+    // it again.
+    const settling =
+      !active &&
+      !coupon.voidedAt &&
+      Boolean(upcoming) &&
+      new Date(coupon.lastQualifiedAt).getTime() >= new Date(upcoming.entryCutoff).getTime();
+
+    return {
+      id: coupon.id,
+      code: coupon.code,
+      createdAt: coupon.createdAt,
+      voidedAt: coupon.voidedAt,
+      voidReason: coupon.voidReason,
+      order: coupon.sourceOrder,
+      active,
+      settling,
+    };
+  });
 
   return Response.json({
     enabled,
@@ -91,6 +123,11 @@ export async function GET() {
     cycleKey: upcoming?.cycleKey ?? null,
     drawDate: upcoming?.drawDate ?? null,
     cycleStart: upcoming?.cycleStart ?? null,
+    // When buying stops counting towards the draw above, which is earlier than
+    // the draw itself and is the deadline the page should actually quote. A
+    // shopper told "buy before the draw on the 31st" who buys on the 30th and
+    // lands in the next draw has been misled by the store's own copy.
+    entryCutoff: upcoming?.entryCutoff ?? null,
     coupons: decorated,
     activeCount: decorated.filter((coupon) => coupon.active).length,
     wins,

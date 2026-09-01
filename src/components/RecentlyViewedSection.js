@@ -18,8 +18,10 @@ import { clearRecentlyViewed, readRecentlyViewed } from "@/lib/recently-viewed";
 //     client render agree (no hydration mismatch) and no layout jumps in for a
 //     visitor with no history.
 //   • A shopper with an empty history, or whose viewed products have all been
-//     retired, sees nothing at all — never a padded or generic fallback, which
-//     would make the "Continue shopping" heading a lie.
+//     retired or since bought, sees nothing at all — never a padded or generic
+//     fallback, which would make the "Continue shopping" heading a lie. Which
+//     products count as bought is decided server-side; see notPurchasedBy in
+//     lib/browsing-history.js.
 export function RecentlyViewedSection({ section }) {
   const pathname = usePathname();
   const { session } = useSession();

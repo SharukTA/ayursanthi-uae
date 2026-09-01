@@ -196,10 +196,12 @@ function ScheduleCard({ data, onSaved }) {
       </div>
 
       <p className="mt-2.5 text-[11px] font-normal text-slate-500">
-        Gulf time, on a 24-hour clock — 13:00 is 1:00 PM. The date and time together are the entry
-        cutoff: everything bought before that instant is in this draw, everything from it onwards
-        goes to the next one. So a giveaway advertised for 1:00 PM should say 13:00 here, or a whole
-        day of shoppers who did what the poster told them is shut out.
+        Gulf time, on a 24-hour clock — 13:00 is 1:00 PM. This is when the draw is held, and the
+        entry cutoff is measured back from it: entries close one cancellation window earlier, so
+        that no coupon in the draw belongs to an order the customer could still cancel for a
+        refund. Everything bought after that cutoff counts towards the next draw instead. A giveaway
+        advertised for 1:00 PM should still say 13:00 here — the open draw shows the cutoff this
+        works out to.
       </p>
       <p className="mt-1 text-[11px] font-normal text-slate-500">
         Moving either one moves that cutoff, and the earliest moment the draw can be run, for the

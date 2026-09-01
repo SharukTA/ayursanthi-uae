@@ -10,6 +10,7 @@ import {
 } from "@/lib/validation";
 import { createUniqueReferralCode, findReferrerByCode } from "@/lib/referral";
 import { getTermsVersion } from "@/lib/pages";
+import { revalidateCommunityStats } from "@/lib/page-sections";
 import {
   clientIp,
   consumeRateLimit,
@@ -144,6 +145,11 @@ export async function POST(request) {
       termsAcceptedAt: new Date(),
       termsVersion,
     });
+
+    // The "N registered customers" ticker is rendered into cached HTML, so a new
+    // account is invisible on the homepage until the count is invalidated. Safe
+    // here: this is a Route Handler, not a render.
+    revalidateCommunityStats();
 
     // Set the session cookie
     await setSession({

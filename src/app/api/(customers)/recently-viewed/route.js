@@ -7,6 +7,7 @@ import {
   HISTORY_STRIP_LIMIT,
   isHistoryEnabled,
   isValidProductId,
+  notPurchasedBy,
   recordProductView,
 } from "@/lib/browsing-history";
 
@@ -31,10 +32,20 @@ function parseIds(raw) {
 // Resolve product ids into render-ready cards, preserving the given order
 // (`id IN (...)` does not) and dropping anything no longer on sale — so a
 // retired product silently leaves the strip instead of linking to a 404.
-async function toCards(ids) {
+//
+// `userId` also drops anything that shopper has already bought. getAccountHistoryIds
+// has done that for the account's own ids, but the ids a browser sends alongside
+// them have been through no such filter, so a product bought on another device
+// would otherwise ride back in on the local list. Signed-out callers pass null:
+// there is no account to check purchases against.
+async function toCards(ids, userId = null) {
   if (ids.length === 0) return [];
   const products = await prisma.product.findMany({
-    where: { id: { in: ids }, isActive: true },
+    where: {
+      id: { in: ids },
+      isActive: true,
+      ...(userId ? notPurchasedBy(userId) : {}),
+    },
     select: SECTION_PRODUCT_SELECT,
   });
   const byId = new Map(products.map((p) => [p.id, p]));
@@ -47,7 +58,8 @@ async function toCards(ids) {
 // Signed in : the account's history (which follows them across devices) leads,
 //             and any ids the browser still holds are appended behind it — this
 //             covers the moment between signing in and the client adopting its
-//             local list.
+//             local list. Products they have already bought are left out of both
+//             halves; see notPurchasedBy in lib/browsing-history.js.
 //
 // Never cached: the response depends on the caller's session and ids, so it must
 // not be shared between visitors.
@@ -71,7 +83,7 @@ export async function GET(request) {
     const accountIds = await getAccountHistoryIds(session.userId);
     const merged = [...new Set([...accountIds, ...guestIds])].slice(0, MAX_IDS);
 
-    return Response.json({ items: await toCards(merged), enabled: true });
+    return Response.json({ items: await toCards(merged, session.userId), enabled: true });
   } catch {
     // A failed lookup should hide the strip, not surface an error to a shopper
     // who never asked for it.

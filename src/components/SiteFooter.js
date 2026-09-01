@@ -78,7 +78,7 @@ export function SiteFooter() {
               until an admin fills either field in /admin/settings. */}
           <FooterAddress />
           <p className="text-xs text-white">
-            &copy; 2026 Ayursanthi Wellness. All rights reserved.
+            &copy; 2026 Ayurshoppee. All rights reserved.
           </p>
         </div>
       </div>

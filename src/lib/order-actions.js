@@ -10,6 +10,7 @@ import {
 import { getCancelWindowHours } from "@/lib/settings";
 import { reconcileCouponsForUser, voidCouponsForOrder } from "@/lib/gift-coupons";
 import { getStripe, isStripeConfigured, toFils } from "@/lib/stripe";
+import { revalidateCommunityStats } from "@/lib/page-sections";
 
 /**
  * Write-side of the cancel flow. Every mutation that touches stock or money
@@ -360,6 +361,23 @@ export async function cancelOrder({ orderId, userId, actor = "CUSTOMER", reason 
   // stop. Self-limiting: the sender returns early for an order that was never
   // dispatched, which is every order cancelled before payment cleared.
   queueEmail(() => sendLogisticsCancelEmail(order.id));
+
+  // The "N successful bookings" ticker counts orders whose paymentStatus is
+  // PAID, and a full refund has just moved this one out of that bucket — so the
+  // cached pages showing the number are now a booking ahead of reality.
+  //
+  // REFUNDED is the precise test rather than "was it cancelled": a cancelled
+  // order that was never paid lands on FAILED and was never counted, and an
+  // order already refunded down to zero keeps its PAID badge (recordRefund
+  // returns early on a zero-value refund) and so is still being counted.
+  // Either way the number has not moved and there is nothing to invalidate.
+  //
+  // Safe to sit inside this function rather than at the call sites, which is
+  // where the equivalent call for a *paid* order has to live: both routes that
+  // cancel are Route Handlers, and nothing cancels an order mid-render.
+  if (updated?.paymentStatus === "REFUNDED") {
+    revalidateCommunityStats();
+  }
 
   return { status: "cancelled", order: updated };
 }

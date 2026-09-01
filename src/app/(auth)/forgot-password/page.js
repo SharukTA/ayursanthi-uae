@@ -317,7 +317,7 @@ export default function ForgotPasswordPage() {
 
       <footer className="border-t border-white/10 bg-linear-to-b from-[#0c403f] to-[#06201f]">
         <div className="mx-auto flex max-w-7xl flex-col items-center gap-3 px-4 py-6 sm:px-6 lg:px-8">
-          <p className="text-xs text-white">&copy; 2026 Ayursanthi Wellness. All rights reserved.</p>
+          <p className="text-xs text-white">&copy; 2026 Ayurshoppee. All rights reserved.</p>
         </div>
       </footer>
     </div>

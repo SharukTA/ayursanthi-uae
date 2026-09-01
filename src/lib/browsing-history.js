@@ -26,6 +26,32 @@ export function isValidProductId(value) {
   return typeof value === "string" && /^[a-z0-9_-]{1,64}$/i.test(value);
 }
 
+// Prisma `where` fragment for "this shopper has not bought this product".
+//
+// The Amazon rule behind "Continue shopping": the strip is a list of things you
+// were still deciding on, so the moment you buy one it stops belonging there —
+// offering it back reads as the shop not noticing the order. Only the strip uses
+// this. Browsing History (Your Account -> Browsing History) deliberately does
+// not: that page is a record of what you looked at, purchases included.
+//
+// A CANCELLED order is not a purchase. The shopper ended up without the product,
+// so it goes back to being something they might still buy and reappears in the
+// strip on its own.
+//
+// Written as a fragment rather than a second query so the exclusion is applied
+// inside the same statement that reads the history — the row limit then counts
+// products the shopper could still buy, instead of being spent on ones that are
+// about to be filtered out.
+//
+// Note this says nothing about the cart. Amazon keeps carted-but-unbought items
+// in the strip, and so do we: a product sitting in a cart is still undecided,
+// and it is exactly the one worth putting back in front of the shopper.
+export function notPurchasedBy(userId) {
+  return {
+    orderItems: { none: { order: { userId, status: { not: "CANCELLED" } } } },
+  };
+}
+
 // Whether this shopper is recording history at all. A missing user reads as
 // disabled, so a stale session can never write rows.
 export async function isHistoryEnabled(userId) {
@@ -93,14 +119,18 @@ export async function adoptGuestHistory(userId, ids) {
   await prisma.productView.createMany({ data: rows, skipDuplicates: true });
 }
 
-// This shopper's history as product ids, most recently viewed first. Empty when
-// they have recording turned off — the switch hides the history as well as
-// stopping new writes.
+// What this shopper still has left to decide on, most recently viewed first —
+// their history minus anything they have since bought (see notPurchasedBy).
+// Empty when they have recording turned off: the switch hides the history as
+// well as stopping new writes.
 export async function getAccountHistoryIds(userId, limit = HISTORY_STRIP_LIMIT) {
   if (!(await isHistoryEnabled(userId))) return [];
 
   const rows = await prisma.productView.findMany({
-    where: { userId, product: { isActive: true } },
+    where: {
+      userId,
+      product: { isActive: true, ...notPurchasedBy(userId) },
+    },
     orderBy: { viewedAt: "desc" },
     take: limit,
     select: { productId: true },

@@ -1,4 +1,5 @@
 import { confirmPaidOrder, releaseUnpaidOrder } from "@/lib/order-payment";
+import { revalidateCommunityStats } from "@/lib/page-sections";
 import { getStripe } from "@/lib/stripe";
 
 export const runtime = "nodejs";
@@ -115,6 +116,13 @@ async function handleSuccess(session) {
       currency: session.currency,
     },
   });
+
+  // The "N successful bookings" ticker counts PAID orders out of cached HTML,
+  // so the order has to knock that cache over to become visible. Unconditional
+  // rather than gated on confirmPaidOrder's status: when the return page won
+  // the race it confirmed the order mid-render, where revalidating is not
+  // allowed, so this call is the one that gets to do it either way.
+  revalidateCommunityStats();
 }
 
 async function handleRelease(session, reason) {

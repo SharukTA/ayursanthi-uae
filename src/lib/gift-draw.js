@@ -12,8 +12,9 @@
 import { randomInt } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { canHaveAffiliateId } from "@/lib/referral";
-import { drawInstant, normalizeDrawDate } from "@/lib/gift-shared";
-import { getGiftDrawSchedule, getGiftProgramStart } from "@/lib/settings";
+import { formatPostalLines } from "@/lib/address";
+import { drawInstant, entryCutoffFor, normalizeDrawDate } from "@/lib/gift-shared";
+import { getCancelWindowHours, getGiftDrawSchedule, getGiftProgramStart } from "@/lib/settings";
 import { sendGiftDrawWinnerEmails } from "@/lib/email-gifts";
 
 // Entries are written in batches so freezing a large cycle is a handful of
@@ -23,14 +24,27 @@ const ENTRY_INSERT_BATCH = 500;
 /**
  * Where the qualifying window for a draw held at `instant` begins.
  *
- * The previous draw's cutoff, or the programme start date when there has never
- * been one. That is what makes consecutive draws tile the calendar exactly: no
- * purchase can fall through a gap between two draws, and none can be counted by
- * both. It has to be a database question rather than arithmetic because draws
- * are scheduled one at a time by date — there is no cadence to subtract a month
- * from.
+ * The previous draw's ENTRY CUTOFF — not the instant it was held — or the
+ * programme start date when there has never been one.
  *
- * @param {Date} instant     the draw's own cutoff
+ * The distinction is what keeps the calendar tiled. Entries close one
+ * cancellation window before a draw (see entryCutoffFor), so if the next window
+ * still began at the previous draw's instant, the hours between that draw's
+ * cutoff and the draw itself would belong to no draw at all and every purchase
+ * made in them would be orphaned for ever. Moving BOTH edges by the same amount
+ * means the windows still abut exactly: no purchase falls through a gap, none is
+ * counted by two draws, and a purchase made too close to one draw simply counts
+ * towards the next.
+ *
+ * It also means the spacing between draws can be anything. Chaining off the
+ * previous cutoff makes each window exactly as wide as the gap between the two
+ * draws, so a draw scheduled sooner after the last one than the cancellation
+ * window is long still has a real entry list rather than an empty one.
+ *
+ * Still a database question rather than arithmetic, because draws are scheduled
+ * one at a time by date — there is no cadence to subtract a month from.
+ *
+ * @param {Date} instant     the instant the draw is held
  * @param {string} [exceptId] the draw being (re)dated, so it never bounds itself
  */
 async function cycleStartFor(instant, exceptId) {
@@ -40,10 +54,30 @@ async function cycleStartFor(instant, exceptId) {
       ...(exceptId ? { id: { not: exceptId } } : {}),
     },
     orderBy: { cycleEnd: "desc" },
-    select: { cycleEnd: true },
+    select: { entryCutoff: true },
   });
 
-  return previous?.cycleEnd ?? (await getGiftProgramStart());
+  return previous?.entryCutoff ?? (await getGiftProgramStart());
+}
+
+/**
+ * The window a draw held at `cycleEnd` accepts purchases in, as the two stored
+ * columns. One place so ensureDraw, refreshWindow and rescheduleDraw cannot
+ * derive it three slightly different ways.
+ *
+ * The cutoff is read from the LIVE cancellation window every time this runs,
+ * which is exactly what should happen while a draw is still SCHEDULED: lengthen
+ * `order_cancel_window_hours` and entries close correspondingly earlier, so the
+ * two settings can never drift apart and reopen the hole this closes. Once the
+ * draw is frozen the stored value is frozen with it.
+ */
+async function windowFor(cycleEnd, exceptId) {
+  const [cycleStart, windowHours] = await Promise.all([
+    cycleStartFor(cycleEnd, exceptId),
+    getCancelWindowHours(),
+  ]);
+
+  return { cycleStart, entryCutoff: entryCutoffFor(cycleEnd, windowHours) };
 }
 
 /**
@@ -96,8 +130,8 @@ export async function ensureDraw(drawDate, drawTime) {
       data: {
         cycleKey: iso,
         drawDate: cycleEnd,
-        cycleStart: await cycleStartFor(cycleEnd),
         cycleEnd,
+        ...(await windowFor(cycleEnd)),
       },
     });
   } catch (error) {
@@ -117,18 +151,24 @@ export async function ensureDraw(drawDate, drawTime) {
  * window stands.
  */
 async function refreshWindow(draw, iso, cycleEnd) {
-  const cycleStart = await cycleStartFor(cycleEnd, draw.id);
+  const { cycleStart, entryCutoff } = await windowFor(cycleEnd, draw.id);
 
+  // entryCutoff is compared like the rest of the window, not derived from the
+  // others, because it moves on its own: an admin editing the cancellation
+  // window shifts when entries close without touching the draw date at all, and
+  // a check that only looked at the dates would leave the draw advertising a
+  // cutoff it would no longer be frozen against.
   const stale =
     draw.cycleKey !== iso ||
     draw.drawDate.getTime() !== cycleEnd.getTime() ||
     draw.cycleStart.getTime() !== cycleStart.getTime() ||
+    draw.entryCutoff.getTime() !== entryCutoff.getTime() ||
     draw.cycleEnd.getTime() !== cycleEnd.getTime();
   if (!stale) return draw;
 
   await prisma.giftDraw.updateMany({
     where: { id: draw.id, status: "SCHEDULED" },
-    data: { cycleKey: iso, drawDate: cycleEnd, cycleStart, cycleEnd },
+    data: { cycleKey: iso, drawDate: cycleEnd, cycleStart, entryCutoff, cycleEnd },
   });
 
   return prisma.giftDraw.findUnique({ where: { id: draw.id } });
@@ -147,6 +187,14 @@ async function refreshWindow(draw, iso, cycleEnd) {
  * winners chosen under it — moving either would retroactively redefine which
  * coupons were eligible for a result that has already been decided. That is the
  * one thing this whole module is built not to allow.
+ *
+ * Moving a SCHEDULED draw moves its entry cutoff with it, since the cutoff is
+ * measured back from the draw instant. Bringing a draw FORWARD therefore closes
+ * entries earlier, and coupons whose owners were shown an "In the draw" badge
+ * can fall back to counting towards the following draw instead. Nothing is lost
+ * — the next draw's window starts at this one's cutoff — but it is a visible
+ * change to a customer, which is worth saying out loud on the button that does
+ * it.
  *
  * The caller is responsible for writing the `gift_draw_date` / `gift_draw_time`
  * settings alongside this. They are the schedule of record, and a draw moved
@@ -170,14 +218,14 @@ export async function rescheduleDraw(drawId, isoDate, time) {
   const clash = await prisma.giftDraw.findUnique({ where: { cycleKey: isoDate } });
   if (clash && clash.id !== draw.id) return { status: "clash", draw: clash };
 
-  const cycleStart = await cycleStartFor(cycleEnd, draw.id);
+  const { cycleStart, entryCutoff } = await windowFor(cycleEnd, draw.id);
 
   // Conditional on the status we read, like every other transition here: if the
   // draw was frozen while the admin had the form open, the freeze wins and its
   // window stands.
   const moved = await prisma.giftDraw.updateMany({
     where: { id: draw.id, status: "SCHEDULED" },
-    data: { cycleKey: isoDate, drawDate: cycleEnd, cycleStart, cycleEnd },
+    data: { cycleKey: isoDate, drawDate: cycleEnd, cycleStart, entryCutoff, cycleEnd },
   });
 
   const updated = await prisma.giftDraw.findUnique({ where: { id: draw.id } });
@@ -197,8 +245,10 @@ export async function rescheduleDraw(drawId, isoDate, time) {
  * dates a customer is shown are the dates they will actually be judged against
  * whether or not anybody has opened the draw yet.
  *
- * @returns {{cycleKey: string, drawDate: Date, cycleStart: Date, cycleEnd: Date}|null}
- *   null only when no valid date is configured at all.
+ * @returns {{cycleKey: string, drawDate: Date, cycleStart: Date, entryCutoff: Date, cycleEnd: Date}|null}
+ *   null only when no valid date is configured at all. `entryCutoff` is the one
+ *   the customer's coupons are judged against; `cycleEnd`/`drawDate` is when the
+ *   draw is held and is what the store advertises.
  */
 export async function getUpcomingDraw() {
   const [pending, schedule] = await Promise.all([
@@ -216,6 +266,7 @@ export async function getUpcomingDraw() {
       cycleKey: pending.cycleKey,
       drawDate: pending.drawDate,
       cycleStart: pending.cycleStart,
+      entryCutoff: pending.entryCutoff,
       cycleEnd: pending.cycleEnd,
     };
   }
@@ -225,8 +276,8 @@ export async function getUpcomingDraw() {
   return {
     cycleKey: iso,
     drawDate: cycleEnd,
-    cycleStart: await cycleStartFor(cycleEnd, pending?.id),
     cycleEnd,
+    ...(await windowFor(cycleEnd, pending?.id)),
   };
 }
 
@@ -234,25 +285,43 @@ export async function getUpcomingDraw() {
  * Which coupons are eligible for a draw's cycle.
  *
  * Four conditions, each of which has cost somebody a dispute somewhere:
- *   - lastQualifiedAt inside the half-open window, i.e. the owner bought
- *     something during this cycle;
+ *   - lastQualifiedAt inside the half-open window [cycleStart, entryCutoff),
+ *     i.e. the owner bought something during this cycle AND did so early enough
+ *     that the purchase can no longer be cancelled by the time the draw runs;
  *   - the coupon is not voided;
  *   - the order that earned it was not cancelled — a refunded purchase must not
  *     leave a live ticket behind, and the void above only covers coupons the
  *     cancel flow reached;
  *   - the owner is still a customer, so an account promoted to admin drops out
  *     of the programme immediately, exactly as it does for affiliate IDs.
+ *
+ * The cutoff is the load-bearing one, and it is deliberately a bound on
+ * lastQualifiedAt rather than on the source order's date. A qualifying purchase
+ * wakes EVERY coupon its owner holds, not just the one it mints, and all of them
+ * are stamped with that purchase's instant — so a customer with a drawer full of
+ * dormant coupons could otherwise put the lot into a draw with one last-minute
+ * order and then cancel it. Those woken coupons are not voided by the cancel
+ * flow (their own source orders are untouched), so nothing further down would
+ * ever catch them. Bounding the stamp covers the minted coupon and the woken
+ * ones in a single condition, because they all carry the same one.
  */
-function eligibleCouponWhere({ cycleStart, cycleEnd }) {
+function eligibleCouponWhere({ cycleStart, entryCutoff }) {
   return {
     voidedAt: null,
-    lastQualifiedAt: { gte: cycleStart, lt: cycleEnd },
+    lastQualifiedAt: { gte: cycleStart, lt: entryCutoff },
     sourceOrder: { status: { not: "CANCELLED" } },
     user: { role: "CUSTOMER" },
   };
 }
 
-/** How many tickets a draw would have if it were frozen right now. */
+/**
+ * How many tickets a draw would have if it were frozen right now.
+ *
+ * Judged against the draw's STORED window, so the number an admin is shown is
+ * the number the freeze would actually snapshot — including the cutoff, which
+ * means a coupon earned in the last hours before the draw is correctly absent
+ * from this count rather than appearing and then vanishing at freeze time.
+ */
 export async function countEligibleCoupons(draw) {
   return prisma.giftCoupon.count({ where: eligibleCouponWhere(draw) });
 }
@@ -268,10 +337,11 @@ export async function countEligibleCoupons(draw) {
  * Idempotent: a draw that is already frozen is returned untouched rather than
  * re-snapshotted, so the scheduled job can safely run twice.
  *
- * Refused before the draw date. The cutoff is a published promise — customers
- * are told their coupons are in the draw held on a named day — so closing the
- * list early would quietly exclude everyone who bought in the days that were
- * still supposed to count. The gate is here rather than in the admin API because
+ * Refused before the draw date. The date is a published promise — customers are
+ * told their coupons are in the draw held on a named day — so snapshotting early
+ * would quietly exclude anyone whose coupon was still moving. The entry cutoff
+ * that decides WHO is in the list is a separate, earlier instant and is applied
+ * inside the query below. The gate is here rather than in the admin API because
  * the rule belongs to the draw, not to one screen: the cron reaches this
  * function too, and only ever at or after the instant, so the schedule is
  * unaffected.
@@ -293,14 +363,44 @@ export async function freezeDraw(cycleKey, { now = new Date() } = {}) {
     return { status: "already_frozen", draw };
   }
 
-  // cycleEnd IS the draw instant — the window is half-open, so the moment the
-  // draw is held is the first moment that no longer counts towards it.
+  // cycleEnd IS the draw instant. Entries closed one cancellation window before
+  // it, but the SNAPSHOT is still taken at the draw itself — closing the list
+  // early and taking the picture early are different things, and taking it early
+  // would miss a coupon voided in between.
   if (now.getTime() < draw.cycleEnd.getTime()) {
     return { status: "too_early", draw };
   }
 
+  // The cutoff is recomputed from the live cancellation window and written down
+  // in the same statement that freezes the draw, rather than trusted from the
+  // row. The stored value is kept fresh by ensureDraw, but only while something
+  // calls it — a draw created before the cancellation window was last edited and
+  // then frozen by the cron would otherwise be snapshotted against a cutoff that
+  // no longer matches the policy it exists to enforce. After this write the
+  // stored value is exactly what the entry list was built from, for ever, which
+  // is the whole reason the column exists.
+  const entryCutoff = entryCutoffFor(draw.cycleEnd, await getCancelWindowHours());
+
+  // An empty window means nobody can possibly be in this draw, and a draw that
+  // freezes zero entries for a structural reason rather than a commercial one is
+  // exactly the kind of thing that gets noticed a week later. It should not be
+  // reachable: cycleStart is the PREVIOUS draw's cutoff, so a window is normally
+  // as wide as the gap between the two draws however close together they are.
+  // The one way in is a draw whose predecessor pre-dates the cutoff column and
+  // was backfilled to its own instant — the seam this was introduced across —
+  // and only then if the two draws are less than a cancellation window apart.
+  // Said out loud rather than left as a zero for somebody to explain.
+  if (entryCutoff.getTime() <= draw.cycleStart.getTime()) {
+    console.warn(
+      `Draw ${draw.cycleKey} has an empty qualifying window: entries close ` +
+        `${entryCutoff.toISOString()}, which is at or before the window opens ` +
+        `${draw.cycleStart.toISOString()}. Nothing can enter it. This draw is likely ` +
+        `scheduled less than one cancellation window after the one before it.`
+    );
+  }
+
   const coupons = await prisma.giftCoupon.findMany({
-    where: eligibleCouponWhere(draw),
+    where: eligibleCouponWhere({ cycleStart: draw.cycleStart, entryCutoff }),
     // Stable, total ordering. `id` breaks ties on identical timestamps, which
     // are common: one order mints several coupons in the same millisecond, and
     // a reactivation stamps a whole collection with one instant. Without the
@@ -329,7 +429,12 @@ export async function freezeDraw(cycleKey, { now = new Date() } = {}) {
     // while we were building the snapshot, theirs stands and ours is a no-op.
     await tx.giftDraw.updateMany({
       where: { id: draw.id, status: "SCHEDULED" },
-      data: { status: "FROZEN", frozenAt: new Date(), entryCount: entries.length },
+      data: {
+        status: "FROZEN",
+        frozenAt: new Date(),
+        entryCount: entries.length,
+        entryCutoff,
+      },
     });
   });
 
@@ -635,20 +740,136 @@ const DRAW_DETAIL_INCLUDE = {
   winners: {
     include: {
       prize: true,
-      user: { select: { id: true, name: true, email: true, referralCode: true } },
+      user: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          referralCode: true,
+          // The winner's most recent paid order, for its contact details.
+          //
+          // The account's own `phone` is optional and in practice often unset —
+          // signing up needs an email and nothing else — so on its own it is not
+          // something the store can plan to ring somebody on. An order is
+          // different: it cannot be placed without deliverable contact details,
+          // and every winner has at least one, because a coupon is only ever
+          // earned by paying for something. Newest rather than the one that
+          // earned the winning coupon: a customer who has moved house or changed
+          // number since is reachable on the number they used last, not the one
+          // attached to a coupon minted months ago.
+          orders: {
+            where: { paymentStatus: "PAID", status: { not: "CANCELLED" } },
+            orderBy: { createdAt: "desc" },
+            take: 1,
+            select: { orderNumber: true, addressSnapshot: true },
+          },
+        },
+      },
       coupon: { select: { id: true, code: true } },
+      // On a REFERRER row, the customer whose win earned it. The row is
+      // otherwise unreadable: a referrer holds no coupon and did nothing to be
+      // there, so "Referrer" on its own leaves an admin working down the list
+      // with no way to see WHY this person is owed a prize, or to reach the
+      // buyer who can vouch for them — which matters here more than on a
+      // primary row, because a referrer need never have bought anything and so
+      // may have no phone number and no address anywhere in the store.
+      mirroredFrom: {
+        select: {
+          id: true,
+          user: { select: { id: true, name: true, email: true, phone: true } },
+        },
+      },
     },
     orderBy: [{ kind: "asc" }, { createdAt: "asc" }],
   },
   drawnBy: { select: { id: true, name: true } },
 };
 
+/**
+ * Everything needed to actually reach one winner, gathered from both places the
+ * store holds it.
+ *
+ * This exists because handing a prize over is a phone call, not an email: the
+ * winner has to be told where to come and when. The winner email promises that
+ * call, so the admin screen has to be able to make it — which means the numbers
+ * have to be on the winners table itself rather than several clicks away in the
+ * customer record, where an admin working through a list will not go looking.
+ *
+ * Numbers are collected from the account and from the last order's snapshot and
+ * de-duplicated, because they are usually the same one and a list that shows it
+ * twice reads as two different contacts. Order matters: the account number goes
+ * first when there is one, being the number the customer chose to be reached on
+ * rather than the one they had a parcel sent to.
+ */
+function winnerContact(user) {
+  const snapshot = user?.orders?.[0]?.addressSnapshot ?? null;
+  const fromSnapshot = (key) => {
+    const value = snapshot && typeof snapshot === "object" ? snapshot[key] : null;
+    const trimmed = String(value ?? "").trim();
+    return trimmed || null;
+  };
+
+  // A Set keyed on the digits alone, so "+971 52 101 8945" and "+971521018945"
+  // are recognised as one number rather than listed as two.
+  const phones = [];
+  const seen = new Set();
+  for (const candidate of [user?.phone, fromSnapshot("phone"), fromSnapshot("phone2")]) {
+    const value = String(candidate ?? "").trim();
+    if (!value) continue;
+    const key = value.replace(/\D/g, "");
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    phones.push(value);
+  }
+
+  const whatsapp = fromSnapshot("whatsapp");
+
+  return {
+    phones,
+    // Where they live, exactly as the invoice and the courier email print it.
+    // Not for posting the prize — these are collected in person — but because
+    // "which emirate are they in?" is the first thing that decides WHICH place
+    // the admin tells them to come to, and the landmark line is often the only
+    // way to tell two customers with the same name apart on the phone.
+    //
+    // Postal lines only. The numbers and addresses are rendered above as things
+    // that can be dialled and clicked, and repeating them inside this block
+    // would show the same contact twice.
+    addressLines: formatPostalLines(snapshot),
+    // Only worth showing separately when it is a different number from the ones
+    // already listed — most customers give the same one.
+    whatsapp: whatsapp && !seen.has(whatsapp.replace(/\D/g, "")) ? whatsapp : null,
+    // The account address is the one the store's own emails go to; the order
+    // snapshot's is whatever they typed at checkout, which is worth having when
+    // the two differ.
+    email: user?.email ?? null,
+    orderEmail: fromSnapshot("email") !== user?.email ? fromSnapshot("email") : null,
+    orderNumber: user?.orders?.[0]?.orderNumber ?? null,
+  };
+}
+
 /** One draw with everything the admin detail screen renders. */
 export async function getDraw(drawId) {
-  return prisma.giftDraw.findUnique({
+  const draw = await prisma.giftDraw.findUnique({
     where: { id: drawId },
     include: DRAW_DETAIL_INCLUDE,
   });
+  if (!draw) return draw;
+
+  // Flattened onto the winner rather than left for the screen to dig out of a
+  // JSON blob: the admin API is the right place to decide which of two stored
+  // phone numbers is the one to ring, and doing it here means the raw address
+  // snapshot — a whole delivery address — never has to be shipped to the
+  // browser just to read a phone number off it.
+  return {
+    ...draw,
+    winners: draw.winners.map(({ user, ...winner }) => ({
+      ...winner,
+      user: { id: user.id, name: user.name, email: user.email, referralCode: user.referralCode },
+      contact: winnerContact(user),
+    })),
+  };
 }
 
 /** Draws for the admin list, newest first. */

@@ -1,3 +1,4 @@
+import { revalidateTag, unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { CARD_MEDIA_SELECT, CARD_MEDIA_TAKE, pickCardMedia } from "@/lib/media";
 
@@ -51,21 +52,102 @@ async function getSections(placement) {
   }
 }
 
-// Live community numbers powering STATS_BAR. The admin chooses which to show,
-// never the numbers themselves (they are DB counts).
-export async function getCommunityStats() {
-  try {
-    const [registeredCount, bookingsCount] = await Promise.all([
-      prisma.user.count({ where: { role: "CUSTOMER" } }),
-      prisma.order.count({ where: { paymentStatus: "PAID" } }),
-    ]);
+// ── Live community numbers powering STATS_BAR ────────────────────────────────
+//
+// The admin chooses WHICH metrics to show, never the numbers themselves (they
+// are DB counts). Two counts, so cheap to run — but the pages that show them
+// are cached, and that is what used to make the bar look frozen: the homepage
+// is ISR'd (revalidate = 300 in app/page.js) and the product/category pages,
+// which can carry a STATS_BAR too, have no revalidate at all, so their HTML —
+// numbers baked in — was cached until the next deploy.
+//
+// The fix is a cache tag rather than a shorter timer. Next records the tags of
+// every cached function a render consumed onto that route's own cache entry, so
+// tagging the counts here also tags the prerendered HTML of every page that
+// rendered a STATS_BAR. One revalidateTag then refreshes both the numbers and
+// the pages showing them — see revalidateCommunityStats below.
+//
+// (`unstable_cache` is deprecated in Next 16 in favour of `use cache`, but that
+// directive requires cacheComponents: true, which is an app-wide migration.
+// This is the documented approach for a project that has not opted in.)
+export const COMMUNITY_STATS_TAG = "community-stats";
 
-    return {
-      REGISTERED_CUSTOMERS: registeredCount,
-      PAID_ORDERS: bookingsCount,
-    };
+async function countCommunityStats() {
+  const [registeredCount, bookingsCount] = await Promise.all([
+    prisma.user.count({ where: { role: "CUSTOMER" } }),
+    prisma.order.count({ where: { paymentStatus: "PAID" } }),
+  ]);
+
+  return {
+    REGISTERED_CUSTOMERS: registeredCount,
+    PAID_ORDERS: bookingsCount,
+  };
+}
+
+const readCachedCommunityStats = unstable_cache(
+  countCommunityStats,
+  ["community-stats"],
+  {
+    tags: [COMMUNITY_STATS_TAG],
+    // A backstop, not the mechanism: the tag above is what makes a signup, a
+    // paid order or a refund show up immediately. This bounds how long the bar
+    // can be wrong when nothing *can* invalidate it — a payment confirmed by
+    // the return page where no Stripe webhook is configured, and above all a
+    // row changed straight in the database, which runs no code of ours at all.
+    // It also gives the otherwise never-revalidated product/category pages a
+    // ceiling, because a numeric revalidate on a cached function lowers that
+    // of the route that used it.
+    revalidate: 300,
+  }
+);
+
+export async function getCommunityStats() {
+  // Deliberately outside the cached function: a DB blip should cost one render
+  // its numbers, not cache a pair of zeros for the next five minutes.
+  try {
+    // In development the cache is only ever in the way. Pages are re-rendered
+    // on every request there, so caching the counts buys nothing — and what it
+    // costs is the thing you do constantly while building: edit rows straight
+    // in the database and reload. No code path runs for that, so nothing calls
+    // revalidateCommunityStats, and the bar would sit on a stale number for
+    // five minutes with no way to tell it from a bug. Read through instead.
+    if (process.env.NODE_ENV !== "production") return await countCommunityStats();
+
+    return await readCachedCommunityStats();
   } catch {
     return { REGISTERED_CUSTOMERS: 0, PAID_ORDERS: 0 };
+  }
+}
+
+/**
+ * Invalidate the community counts after an event that moves one of them.
+ *
+ * Callers: the register route (a new customer), the Stripe webhook (an order
+ * reaching PAID) and cancelOrder (a full refund taking one back out).
+ *
+ * Route Handlers and Server Actions only — Next throws if a revalidation is
+ * attempted during a render. That is why the paid-order call sits in the
+ * webhook route rather than in confirmPaidOrder, which app/checkout/success/
+ * page.js also calls while that page renders. cancelOrder has no such caller,
+ * so it makes the call itself.
+ *
+ * `{ expire: 0 }` rather than the usually-recommended "max": "max" marks the
+ * entry stale and serves the stale copy once more while refreshing behind it,
+ * which is precisely the "I registered and the number didn't move" symptom
+ * this exists to fix. Expiring outright makes the next request re-run two
+ * COUNT queries — a fair price at this event rate for a number that is right
+ * the first time someone looks.
+ */
+export function revalidateCommunityStats() {
+  try {
+    revalidateTag(COMMUNITY_STATS_TAG, { expire: 0 });
+  } catch (error) {
+    // A ticker being briefly out of date is not worth failing the thing that
+    // actually mattered over: the caller has already created the account or
+    // banked the payment, and a throw here would turn that into a 500 — or,
+    // from the webhook, into a Stripe retry loop. The revalidate backstop
+    // above closes the gap. Same reasoning as queueEmail in lib/email-queue.js.
+    console.error("[stats] community-stats revalidation failed:", error?.message || error);
   }
 }
 

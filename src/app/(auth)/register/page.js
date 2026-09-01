@@ -304,7 +304,7 @@ export default function RegisterPage() {
             </Link>
           </p>
           <p className="text-xs text-white">
-            &copy; 2026 Ayursanthi Wellness. All rights reserved.
+            &copy; 2026 Ayurshoppee. All rights reserved.
           </p>
         </div>
       </footer>

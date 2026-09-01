@@ -243,7 +243,7 @@ export function SiteHeader({ transparent = false }) {
               <input
                 type="text"
                 name="search"
-                placeholder="Search ayursanthi.com"
+                placeholder="Search ayurshoppee.ae"
                 aria-label="Search products"
                 className="search-bare w-full min-w-0 bg-transparent py-2.5 text-sm text-[#0f1111] outline-none placeholder:text-[#565959]"
               />
@@ -328,7 +328,7 @@ export function SiteHeader({ transparent = false }) {
             <input
               type="text"
               name="search"
-              placeholder="Search ayursanthi.com"
+              placeholder="Search ayurshoppee.ae"
               aria-label="Search products"
               className="search-bare w-full min-w-0 bg-transparent px-4 py-2 text-sm text-[#0f1111] outline-none placeholder:text-[#565959]"
             />
@@ -671,7 +671,7 @@ export function SiteHeader({ transparent = false }) {
                 <input
                   type="text"
                   name="search"
-                  placeholder="Search ayursanthi.com"
+                  placeholder="Search ayurshoppee.ae"
                   aria-label="Search products"
                   className="search-bare w-full min-w-0 bg-transparent py-2.5 text-sm text-[#0f1111] outline-none placeholder:text-[#565959]"
                 />

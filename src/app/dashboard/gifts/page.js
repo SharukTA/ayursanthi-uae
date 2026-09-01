@@ -6,8 +6,16 @@ import { toast } from "sonner";
 import { Check, Copy, Gift, Sparkles, Ticket, Trophy, Users } from "lucide-react";
 import { FadeIn, PageReveal } from "@/components/Animated";
 import { formatMoney } from "@/lib/currency";
-import { formatDrawDate, formatDrawDateTime } from "@/lib/gift-shared";
+import {
+  firstNameOf,
+  formatDrawDate,
+  formatDrawDateTime,
+  GIFT_FULFILMENT_LABELS as WIN_STATUS_LABELS,
+  referredWinnerName,
+  shouldCelebrateWin,
+} from "@/lib/gift-shared";
 import { GiftPosters } from "@/components/GiftPosters";
+import { GiftWinCelebration } from "@/components/GiftWinCelebration";
 
 // Whole dirhams: the fils formatMoney shows by default are noise in this copy.
 const money = (value) => formatMoney(value, { decimals: 0 });
@@ -20,8 +28,17 @@ const money = (value) => formatMoney(value, { decimals: 0 });
 // draw if you bought something during that draw's cycle. So active coupons are
 // listed first and counted in their own tile, and a dormant one says plainly
 // what would wake it up.
+//
+// A live coupon can be out of the next draw for two unrelated reasons, and they
+// need opposite wording. DORMANT means the customer has not shopped this cycle
+// and another qualifying purchase brings it back. SETTLING means they just did
+// shop, but too close to the draw for the order to be past its cancellation
+// window in time, so the coupon counts towards the draw after this one — nothing
+// is required of them and nothing is lost. Telling a customer who has just spent
+// their money that they need to spend it again is the mistake this split exists
+// to prevent.
 
-function CouponCard({ coupon, onCopy, copied }) {
+function CouponCard({ coupon, onCopy, copied, threshold }) {
   return (
     <div
       className={`flex items-center justify-between gap-3 rounded-md border p-3 ${
@@ -29,7 +46,9 @@ function CouponCard({ coupon, onCopy, copied }) {
           ? "border-slate-200 bg-slate-50 opacity-70"
           : coupon.active
             ? "border-emerald-200 bg-emerald-50/40"
-            : "border-slate-200 bg-white"
+            : coupon.settling
+              ? "border-sky-200 bg-sky-50/40"
+              : "border-slate-200 bg-white"
       }`}
     >
       <div className="min-w-0">
@@ -55,8 +74,23 @@ function CouponCard({ coupon, onCopy, copied }) {
             "Earned on a past order"
           )}
         </p>
+        {/* The reason line. A voided coupon already carried one; the settling
+            and dormant states were explained only by a tooltip, which is
+            invisible on a phone — where most of these are read. Each state now
+            says its own sentence in the card, because "why is my coupon not in
+            the draw?" is the single question this page exists to answer. */}
         {coupon.voidedAt ? (
           <p className="mt-0.5 text-[10px] font-normal text-amber-700">{coupon.voidReason}</p>
+        ) : coupon.settling ? (
+          <p className="mt-0.5 text-[10px] font-normal text-sky-800">
+            Earned too close to the next draw for your order to be final in time, so this coupon
+            goes into the draw after it — automatically, with nothing for you to do.
+          </p>
+        ) : !coupon.active ? (
+          <p className="mt-0.5 text-[10px] font-normal text-amber-700">
+            Waiting for your next qualifying purchase. Coupons never expire — spend another{" "}
+            {money(threshold)} and every coupon you hold comes back into the draw.
+          </p>
         ) : null}
       </div>
 
@@ -71,6 +105,13 @@ function CouponCard({ coupon, onCopy, copied }) {
         ) : coupon.active ? (
           <span className="rounded border border-emerald-200 bg-emerald-100 px-1.5 py-0.5 text-[9px] font-black uppercase text-emerald-800">
             In the draw
+          </span>
+        ) : coupon.settling ? (
+          <span
+            className="rounded border border-sky-200 bg-sky-50 px-1.5 py-0.5 text-[9px] font-black uppercase text-sky-800"
+            title="Earned too close to this draw for the order to be final in time. It goes into the next draw automatically — there is nothing for you to do."
+          >
+            Next draw
           </span>
         ) : (
           <span
@@ -137,9 +178,17 @@ export default function MyGiftsPage() {
     return <p className="text-sm font-semibold text-slate-500">Loading your gifts...</p>;
   }
 
-  // Active first, then dormant, then on hold — the order in which they matter.
+  // Wins the celebration at the top of the page is no longer announcing —
+  // either the draw ran more than two days ago, or the prize has since been
+  // delivered. Split with the very function the banner filters on, so the two
+  // can never both show a win or both hide one.
+  const settledWins = data.wins.filter((win) => !shouldCelebrateWin(win));
+
+  // Active first, then the ones settling into the next draw, then dormant, then
+  // on hold — the order in which they matter. Settling outranks dormant because
+  // it is the better news: it needs nothing from the customer.
   const sorted = [...data.coupons].sort((a, b) => {
-    const rank = (c) => (c.voidedAt ? 2 : c.active ? 0 : 1);
+    const rank = (c) => (c.voidedAt ? 3 : c.active ? 0 : c.settling ? 1 : 2);
     return rank(a) - rank(b);
   });
 
@@ -155,6 +204,11 @@ export default function MyGiftsPage() {
           gift coupon for the giveaway.
         </p>
       </div>
+
+      {/* Above everything, including the artwork: a customer who has won wants
+          to be told that before they are sold the next draw. Renders nothing
+          when they have not, so the page is unchanged for everybody else. */}
+      <GiftWinCelebration wins={data.wins} />
 
       {/* The same campaign artwork the storefront runs, so a customer who came
           here from an ad recognises the page they landed on. */}
@@ -254,8 +308,18 @@ export default function MyGiftsPage() {
             {data.drawScheduled ? (
               <>
                 The next draw is held on{" "}
-                <strong>{formatDrawDateTime(data.drawDate)}</strong>. Whatever you buy before that
-                moment counts towards it.
+                <strong>{formatDrawDateTime(data.drawDate)}</strong>
+                {data.entryCutoff ? (
+                  <>
+                    , and entries for it close on{" "}
+                    <strong>{formatDrawDateTime(data.entryCutoff)}</strong>. Anything you buy after
+                    that counts towards the following draw instead — we close entries a little
+                    early so that every coupon in the draw is one you can no longer cancel the
+                    order behind.
+                  </>
+                ) : (
+                  <>. Whatever you buy before that moment counts towards it.</>
+                )}
               </>
             ) : (
               <>The date of the next draw has not been announced yet — your coupons are held for it.</>
@@ -271,12 +335,18 @@ export default function MyGiftsPage() {
         </ul>
       </FadeIn>
 
-      {/* Wins */}
-      {data.wins.length > 0 ? (
+      {/* Wins, once the celebration above has expired.
+
+          Split rather than duplicated: a win from the last two days is already
+          shown at the top of the page in full, and printing it again down here
+          made the second copy read as a different, duller set of prizes. What
+          this list is for is everything older — the celebration is temporary,
+          but a prize the customer owns has to stay on their account for good. */}
+      {settledWins.length > 0 ? (
         <FadeIn className="rounded-md border border-border bg-white p-4 shadow-sm">
           <h2 className="text-xs font-black uppercase tracking-wide text-slate-500">Prizes won</h2>
           <div className="mt-3 grid gap-2">
-            {data.wins.map((win) => (
+            {settledWins.map((win) => (
               <div
                 key={win.id}
                 className="flex items-center justify-between gap-3 rounded-md border border-amber-200 bg-amber-50/50 p-3"
@@ -289,9 +359,15 @@ export default function MyGiftsPage() {
                   <p className="mt-0.5 text-[10px] font-normal text-slate-600">
                     {formatDrawDate(win.draw.drawDate)} draw
                     {win.kind === "REFERRER" ? (
+                      // Named for the same reason the celebration banner names
+                      // them: this list is permanent, and "someone you
+                      // referred" is exactly the detail a customer will have
+                      // forgotten by the time they scroll back to it.
                       <span className="ml-1 inline-flex items-center gap-1 font-semibold text-sky-800">
                         <Users className="size-2.5" />
-                        won through someone you referred
+                        {firstNameOf(referredWinnerName(win))
+                          ? `${firstNameOf(referredWinnerName(win))}, who you referred, won this`
+                          : "won through someone you referred"}
                       </span>
                     ) : win.coupon ? (
                       <span className="ml-1 font-mono">· {win.coupon.code}</span>
@@ -299,7 +375,7 @@ export default function MyGiftsPage() {
                   </p>
                 </div>
                 <span className="shrink-0 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[9px] font-black uppercase text-slate-600">
-                  {win.status}
+                  {WIN_STATUS_LABELS[win.status] ?? win.status}
                 </span>
               </div>
             ))}
@@ -326,7 +402,13 @@ export default function MyGiftsPage() {
         ) : (
           <div className="mt-3 grid gap-2">
             {sorted.map((coupon) => (
-              <CouponCard key={coupon.id} coupon={coupon} onCopy={copy} copied={copied} />
+              <CouponCard
+                key={coupon.id}
+                coupon={coupon}
+                onCopy={copy}
+                copied={copied}
+                threshold={data.threshold}
+              />
             ))}
           </div>
         )}

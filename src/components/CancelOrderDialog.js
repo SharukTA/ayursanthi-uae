@@ -22,6 +22,11 @@ import { formatMoney } from "@/lib/currency";
  * The copy about money changes with what was actually collected: an order whose
  * payment never completed costs the customer nothing, while a paid one is
  * refunded to the card in full.
+ *
+ * It also says what cancelling does to a gift coupon, because that is a real
+ * consequence a shopper would otherwise only find out about afterwards — and
+ * because the reassuring half of it (that cancelling can never cost them a prize
+ * they have already won) is not something anybody would guess.
  */
 export function CancelOrderDialog({ order, onClose, onCancelled, onStale }) {
   const [reason, setReason] = useState("");
@@ -32,7 +37,8 @@ export function CancelOrderDialog({ order, onClose, onCancelled, onStale }) {
   // The deadline is repeated here, on the last screen before the order is
   // pulled, because this is where a shopper decides whether to cancel now or
   // "think about it" — and after the window there is no thinking about it.
-  const { order_cancel_window_hours: windowHours } = useSiteSettings();
+  const { order_cancel_window_hours: windowHours, gift_program_enabled: giftsOn } =
+    useSiteSettings();
   const deadline = cancelWindowEndsAt(order, windowHours);
 
   const submit = async (event) => {
@@ -97,6 +103,27 @@ export function CancelOrderDialog({ order, onClose, onCancelled, onStale }) {
               until{" "}
               <span className="font-bold text-[#0f1111]">{formatCancelDeadline(deadline)}</span> for
               this one. After that it is with our delivery partner and cannot be cancelled.
+            </p>
+          ) : null}
+          {/* What cancelling does to their gift coupons, said before they do it
+              rather than discovered afterwards on the Gifts page.
+    
+              The second sentence is the one worth printing. A shopper deciding
+              whether to cancel does not know whether they are about to throw
+              away a chance at a prize, and the honest answer is that they
+              cannot be: entries close a full cancellation window before every
+              draw, so no coupon is ever in a draw while the order behind it is
+              still cancellable. Saying so removes the only reason to hesitate.
+    
+              Hidden entirely when the programme is switched off — there is no
+              coupon to put on hold, and describing a giveaway that is not
+              running would be the store inventing a consequence. */}
+          {giftsOn === "true" ? (
+            <p className="mt-1.5 border-t border-[#d5d9d9] pt-1.5">
+              If this order earned you a <span className="font-bold text-[#0f1111]">gift coupon</span>
+              , cancelling puts that coupon on hold — it is not lost, and the same code comes back as
+              soon as your spending qualifies again. You cannot lose a prize this way: coupons only
+              enter a draw once the order behind them can no longer be cancelled.
             </p>
           ) : null}
         </div>

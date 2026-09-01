@@ -7,6 +7,7 @@ import { GiftPosters } from "@/components/GiftPosters";
 import { GiftCountdown } from "@/components/GiftCountdown";
 import { PrizeGallery } from "@/components/PrizeGallery";
 import { GiftCouponsCta } from "@/components/GiftCouponsCta";
+import { GiftWinBanner } from "@/components/GiftWinCelebration";
 import { getGiftCouponThreshold, getGiftDrawSchedule, isGiftProgramEnabled } from "@/lib/settings";
 import { getPublishedDraws, getShowcasePrizes } from "@/lib/gift-draw";
 import { getGiftPosters } from "@/lib/gift-posters";
@@ -156,6 +157,20 @@ export default async function GiftsPage() {
           )}
         </PageReveal>
       </section>
+
+      {/* ── "You won" ────────────────────────────────────────────────────────
+          Directly under the poster, above the countdown, because a winner
+          arriving here has no reason to care when the NEXT draw closes until
+          they have been told about the one they just won. Client-side and
+          per-visitor: this page is cached for five minutes and shared by
+          everybody, so the result cannot come from the server render. Signed-out
+          visitors and customers who have not won get nothing — no request, no
+          markup, no layout shift.
+
+          The gutter classes are handed to the component rather than wrapped
+          around it, so that when it renders nothing there is no empty padded
+          element left behind opening a gap under the poster. */}
+      <GiftWinBanner className="mx-auto w-full max-w-6xl px-3 pt-3 sm:px-6 sm:pt-4 lg:px-8" />
 
       {/* ── Countdown + the offer, as one banner ─────────────────────────────
           Gold rather than the dark slab this page used to open with. It reads as

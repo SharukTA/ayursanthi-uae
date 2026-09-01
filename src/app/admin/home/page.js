@@ -79,11 +79,11 @@ const SECTION_TYPES = [
   {
     value: "RECENTLY_VIEWED",
     label: "Continue Shopping (recently viewed)",
-    help: "Shows each shopper the products they looked at recently, Amazon-style. Personal to every visitor. Just set the heading.",
+    help: "Shows each shopper the products they looked at recently but have not bought yet, Amazon-style. Personal to every visitor. Just set the heading.",
     auto: true,
     source: "each shopper's history",
     autoNote:
-      "Every visitor sees their OWN recently-viewed products here — so this block looks different for each shopper and shows nothing to a first-time visitor. Signed-in shoppers keep their history on their account, so it follows them to any device they sign in on; signed-out visitors keep theirs in their own browser until they sign in. Shoppers can review, delete or switch off their history from Your Account › Browsing History. There is nothing to add or edit; just set the heading above.",
+      "Every visitor sees their OWN recently-viewed products here — so this block looks different for each shopper and shows nothing to a first-time visitor. Once a shopper buys a product it drops out of this block for them, the way it does on Amazon: this is the list of things they were still deciding on, not a list of everything they have seen. A product in their cart but not yet bought stays. Cancel an order and its products come back. Signed-in shoppers keep their history on their account, so it follows them to any device they sign in on; signed-out visitors keep theirs in their own browser until they sign in. Shoppers can review, delete or switch off their history from Your Account › Browsing History — that page still lists everything they viewed, purchases included. There is nothing to add or edit; just set the heading above.",
     fields: [],
   },
   {

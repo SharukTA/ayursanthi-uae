@@ -8,9 +8,19 @@ import { formatMoney } from "@/lib/currency";
 import { formatAddressSummary } from "@/lib/address";
 import { confirmPaidOrder } from "@/lib/order-payment";
 import { getStripe, isStripeConfigured } from "@/lib/stripe";
-import { drawInstant, formatDrawDateTime, isDrawUpcoming } from "@/lib/gift-shared";
+import {
+  drawInstant,
+  entryCutoffFor,
+  formatDrawDateTime,
+  isDrawUpcoming,
+} from "@/lib/gift-shared";
 import { getQualifyingSpend } from "@/lib/gift-coupons";
-import { getGiftCouponThreshold, getGiftDrawSchedule, isGiftProgramEnabled } from "@/lib/settings";
+import {
+  getCancelWindowHours,
+  getGiftCouponThreshold,
+  getGiftDrawSchedule,
+  isGiftProgramEnabled,
+} from "@/lib/settings";
 import { PaymentSuccessCleanup } from "./PaymentSuccessCleanup";
 
 export const runtime = "nodejs";
@@ -180,6 +190,29 @@ export default async function CheckoutSuccessPage({ searchParams }) {
   const giftDrawDate = isDrawUpcoming(schedule.date, schedule.time)
     ? drawInstant(schedule.date, schedule.time)
     : null;
+  // Whether the coupons this order just earned are in the draw named above, or
+  // in the one after it.
+  //
+  // Entries close one cancellation window before a draw, so an order placed
+  // inside those final hours earns coupons that count towards the FOLLOWING
+  // draw. This page is the single worst place to get that wrong: it is the
+  // receipt, it is read once, and "Entered in the draw on the 31st" is a promise
+  // the customer will hold the store to. An order placed after the cutoff is
+  // told plainly that it is in the next one, rather than finding out weeks later
+  // when a draw they believed they were in passes without them.
+  //
+  // Measured on the order's own createdAt because that is exactly what becomes
+  // the coupon's lastQualifiedAt (see computeLastQualifiedAt), which is the
+  // value the draw actually judges.
+  // Gated on the programme being on as well as a date being set, so a store with
+  // the giveaway switched off does not pay for a settings read on every receipt.
+  const giftEntryCutoff =
+    giftEnabled && giftDrawDate
+      ? entryCutoffFor(giftDrawDate, await getCancelWindowHours())
+      : null;
+  const giftMadeThisDraw =
+    Boolean(giftEntryCutoff) && new Date(order.createdAt).getTime() < giftEntryCutoff.getTime();
+
   let giftThreshold = 0;
   let giftRemaining = 0;
   if (giftEnabled) {
@@ -264,13 +297,23 @@ export default async function CheckoutSuccessPage({ searchParams }) {
                 ))}
               </div>
               <p className="mt-2.5 text-[12px] leading-5 text-[#565959]">
-                {giftDrawDate ? (
+                {giftDrawDate && giftMadeThisDraw ? (
                   <>
                     Entered in the draw on{" "}
                     <strong className="text-[#0f1111]">
                       {formatDrawDateTime(giftDrawDate)}
                     </strong>
                     , along with every coupon you already held.{" "}
+                  </>
+                ) : giftDrawDate ? (
+                  <>
+                    Entries for the{" "}
+                    <strong className="text-[#0f1111]">
+                      {formatDrawDateTime(giftDrawDate)}
+                    </strong>{" "}
+                    draw have already closed, so these go into the next draw instead — along with
+                    every coupon you already held. We close entries a little early so that no
+                    coupon is in a draw while the order behind it can still be cancelled.{" "}
                   </>
                 ) : (
                   <>Held for the next draw, along with every coupon you already had. </>
@@ -292,7 +335,7 @@ export default async function CheckoutSuccessPage({ searchParams }) {
                 Your spending adds up across orders. Spend{" "}
                 <strong className="text-[#0f1111]">{formatMoney(giftRemaining)}</strong> more to
                 earn a coupon for the{" "}
-                {giftDrawDate ? (
+                {giftDrawDate && giftMadeThisDraw ? (
                   <>
                     <strong className="text-[#0f1111]">
                       {formatDrawDateTime(giftDrawDate)}
