@@ -1,6 +1,12 @@
 import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { decryptSession } from "@/lib/session-token";
+import {
+  isValidLinkCode,
+  SHOP_ATTRIBUTION_COOKIE,
+  SHOP_ATTRIBUTION_DAYS,
+  SHOP_LINK_PARAM,
+} from "@/lib/shop-shared";
 
 // Centralised route gate. Runs before every page request and redirects users who
 // manually type a URL they are not allowed to be on — in BOTH directions:
@@ -147,6 +153,31 @@ export default function proxy(request) {
 
   if (MAINTENANCE_MODE && pathname !== "/maintenance") {
     return NextResponse.rewrite(new URL("/maintenance", request.nextUrl));
+  }
+
+  // A shop link (any page + ?via=code). Swap the parameter for a cookie and clean
+  // the URL straight away, so the shopper does not carry the code around or re-share
+  // it, and the page they land on is the page the advert promised. The last link
+  // clicked wins.
+  //
+  // The code is not looked up here, and that is on purpose as well as for speed:
+  // a real code and a made-up one get identical treatment, so this cannot be used
+  // to discover which shops exist. Checkout decides whether it means anything.
+  const linkCode = request.nextUrl.searchParams.get(SHOP_LINK_PARAM);
+  if (linkCode !== null) {
+    const url = new URL(request.nextUrl);
+    url.searchParams.delete(SHOP_LINK_PARAM);
+    const response = NextResponse.redirect(url);
+    if (isValidLinkCode(linkCode)) {
+      response.cookies.set(SHOP_ATTRIBUTION_COOKIE, linkCode, {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+        path: "/",
+        maxAge: 60 * 60 * 24 * SHOP_ATTRIBUTION_DAYS,
+      });
+    }
+    return response;
   }
 
   // decryptSession returns null for a missing, tampered, or expired token, so an

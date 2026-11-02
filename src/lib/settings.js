@@ -10,6 +10,12 @@ import {
   normalizeDrawDate,
   normalizeDrawTime,
 } from "@/lib/gift-shared";
+import {
+  DEFAULT_SHOP_REFERRAL_RATE,
+  DEFAULT_SHOP_WITHDRAWAL_MINIMUM,
+  normalizeShopReferralRate,
+  normalizeShopWithdrawalMinimum,
+} from "@/lib/shop-shared";
 
 // Editable site-wide settings (contact details, social links, delivery rules).
 // These are the canonical keys; the admin overrides any of them in
@@ -22,6 +28,10 @@ export const DEFAULT_SETTINGS = {
   contact_address: "Kochi, Kerala, India",
   contact_hours: "Mon-Sat, 9AM - 6PM",
   contact_dispatch: "98% Same-day dispatch",
+  // Where /online-consultation sends a client's case history, and the number it
+  // displays. Validated in lib/settings-shared.js, because a wa.me link built
+  // from a number with no country code opens a chat with nobody.
+  consultation_whatsapp: "+91 8289808134",
   // Every social platform defaults to blank, which means "not set up yet, hide
   // the icon". Derived from SOCIAL_SETTINGS so the key list has one home.
   ...Object.fromEntries(Object.keys(SOCIAL_SETTINGS).map((key) => [key, ""])),
@@ -83,6 +93,18 @@ export const DEFAULT_SETTINGS = {
 // Keys that are safe to expose publicly (all of the above are).
 export const PUBLIC_SETTING_KEYS = Object.keys(DEFAULT_SETTINGS);
 
+// Settings only the admin console and server code may read. Kept out of
+// DEFAULT_SETTINGS because everything in there reaches every visitor, through
+// /api/settings and the root layout, and shoppers must not learn anything about the
+// partner programme.
+export const PRIVATE_SETTINGS = {
+  shop_referral_rate: String(DEFAULT_SHOP_REFERRAL_RATE),
+  shop_withdrawal_minimum: String(DEFAULT_SHOP_WITHDRAWAL_MINIMUM),
+};
+
+// What the admin settings API may read and write.
+export const ADMIN_SETTING_KEYS = [...PUBLIC_SETTING_KEYS, ...Object.keys(PRIVATE_SETTINGS)];
+
 // Re-exported from the client-safe module so both the server API and the admin
 // form (a client component) can validate saves without importing this file,
 // which pulls in prisma.
@@ -110,6 +132,31 @@ export async function getSiteSettings() {
     // DB unreachable — fall back to defaults rather than crash the page.
     return { ...DEFAULT_SETTINGS };
   }
+}
+
+// Every setting including the private ones. For the admin settings API only.
+export async function getAdminSettings() {
+  const [settings, rows] = await Promise.all([
+    getSiteSettings(),
+    prisma.siteSetting.findMany({ where: { key: { in: Object.keys(PRIVATE_SETTINGS) } } }),
+  ]);
+  const overrides = {};
+  for (const row of rows) {
+    if (row.value != null && row.value !== "") overrides[row.key] = row.value;
+  }
+  return { ...settings, ...PRIVATE_SETTINGS, ...overrides };
+}
+
+// The live referrer percentage as a number, guarded against a bad or blank value.
+export async function getShopReferralRate() {
+  const row = await prisma.siteSetting.findUnique({ where: { key: "shop_referral_rate" } });
+  return normalizeShopReferralRate(row?.value);
+}
+
+// The live minimum withdrawal as a number, guarded the same way.
+export async function getShopWithdrawalMinimum() {
+  const row = await prisma.siteSetting.findUnique({ where: { key: "shop_withdrawal_minimum" } });
+  return normalizeShopWithdrawalMinimum(row?.value);
 }
 
 // The live free-shipping threshold as a number, guarded against a bad/blank

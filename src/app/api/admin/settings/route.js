@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { getSiteSettings, PUBLIC_SETTING_KEYS, validateSettings } from "@/lib/settings";
+import { ADMIN_SETTING_KEYS, getAdminSettings, validateSettings } from "@/lib/settings";
 import { jsonError, prismaErrorResponse, requireAdmin } from "@/lib/admin-api";
 
 export const runtime = "nodejs";
@@ -9,7 +9,7 @@ export async function GET() {
   const { error } = await requireAdmin();
   if (error) return error;
 
-  const settings = await getSiteSettings();
+  const settings = await getAdminSettings();
   return Response.json({ settings });
 }
 
@@ -33,7 +33,7 @@ export async function PUT(request) {
     }
 
     const entries = Object.entries(incoming).filter(([key]) =>
-      PUBLIC_SETTING_KEYS.includes(key)
+      ADMIN_SETTING_KEYS.includes(key)
     );
 
     await prisma.$transaction(
@@ -46,7 +46,7 @@ export async function PUT(request) {
       )
     );
 
-    const settings = await getSiteSettings();
+    const settings = await getAdminSettings();
     return Response.json({ settings });
   } catch (error) {
     return prismaErrorResponse(error, "Unable to save settings.");

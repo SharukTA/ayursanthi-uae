@@ -4,6 +4,7 @@ import { releasePreviousCheckouts, releaseUnpaidOrder } from "@/lib/order-paymen
 import { validateShippingAddress } from "@/lib/address";
 import { consumeRateLimit, rateLimitedResponse, RATE_LIMITS } from "@/lib/rate-limit";
 import { prisma } from "@/lib/prisma";
+import { resolveAttributedShop } from "@/lib/shop";
 import { getSiteOrigin, getStripe, isStripeConfigured, STRIPE_CURRENCY, toFils } from "@/lib/stripe";
 
 export const runtime = "nodejs";
@@ -104,6 +105,7 @@ export async function POST(request) {
       shippingAddress,
       clearAccountCart: cartSource !== "guest" && cartSource !== "buynow",
       cartSource,
+      shop: await resolveAttributedShop(),
     });
 
     if (result.status !== "created") {

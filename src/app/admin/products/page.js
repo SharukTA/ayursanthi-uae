@@ -859,10 +859,10 @@ export default function AdminProductsPage() {
                             {prod.sku || "No SKU"}
                           </p>
                         </div>
-                        <div className="flex shrink-0 items-center gap-2">
+                        <div className="flex shrink-0 items-center gap-1">
                           <button
                             onClick={() => startEditProduct(prod)}
-                            className="text-slate-500 hover:text-emerald-700 transition"
+                            className="p-1.5 text-slate-500 hover:text-emerald-700 transition"
                             title="Edit Product"
                           >
                             <Pencil className="size-4" />
@@ -870,7 +870,7 @@ export default function AdminProductsPage() {
                           <button
                             onClick={() => handleDeleteProduct(prod.id, prod.name)}
                             disabled={!prod.isActive}
-                            className="text-slate-500 hover:text-rose-700 disabled:opacity-30 disabled:hover:text-slate-500 transition"
+                            className="p-1.5 text-slate-500 hover:text-rose-700 disabled:opacity-30 disabled:hover:text-slate-500 transition"
                             title="Disable Product"
                           >
                             <Trash2 className="size-4" />

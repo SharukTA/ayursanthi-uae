@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { Logo3D } from "@/components/Logo3D";
 import { PasswordField } from "@/components/PasswordField";
+import { safeRedirectPath } from "@/lib/validation";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -44,8 +45,7 @@ export default function LoginPage() {
       // `?next=`). Only same-site paths are accepted — taking an arbitrary
       // value would turn login into an open redirect to any external URL.
       const next = new URLSearchParams(window.location.search).get("next");
-      const safeNext = next && next.startsWith("/") && !next.startsWith("//") ? next : null;
-      router.push(safeNext || (data.user?.role === "ADMIN" ? "/admin" : "/"));
+      router.push(safeRedirectPath(next) || (data.user?.role === "ADMIN" ? "/admin" : "/"));
       router.refresh();
     } catch (error) {
       toast.error(error.message || "Something went wrong. Please try again.", { id: toastId });

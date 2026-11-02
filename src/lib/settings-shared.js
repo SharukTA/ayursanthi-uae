@@ -17,7 +17,16 @@ export const NUMERIC_SETTINGS = {
   // Listed in POSITIVE_SETTINGS too: a zero window would close cancellation for
   // the entire store, which is not something a stray keystroke should do.
   order_cancel_window_hours: "Cancellation window",
+  // The referrer's percentage of each sale by a shop they referred. Zero is legal
+  // and means referrers earn nothing on new sales.
+  shop_referral_rate: "Shop referrer profit",
+  // The available balance a shop owner has to reach before they can be paid. Zero is
+  // legal and means any balance can be paid.
+  shop_withdrawal_minimum: "Minimum withdrawal",
 };
+
+// Numeric settings that are percentages, so also may not pass 100.
+const PERCENT_SETTINGS = new Set(["shop_referral_rate"]);
 
 // Settings holding a calendar date, as the "YYYY-MM-DD" a date input produces.
 // Blank is allowed everywhere (it clears the override); a present value must be
@@ -60,6 +69,9 @@ export function validateSettings(incoming) {
     if (POSITIVE_SETTINGS.has(key) && n === 0) {
       return `${label} must be greater than 0 (leave blank to use the default).`;
     }
+    if (PERCENT_SETTINGS.has(key) && n > 100) {
+      return `${label} must be between 0 and 100 (leave blank to use the default).`;
+    }
   }
   for (const [key, label] of Object.entries(DATE_SETTINGS)) {
     if (!incoming || !(key in incoming)) continue;
@@ -83,7 +95,19 @@ export function validateSettings(incoming) {
       return `${label} must be a full link starting with https:// (leave blank to hide it).`;
     }
   }
+  if (incoming && !validateWhatsappNumber(incoming.consultation_whatsapp)) {
+    return "Online consultation WhatsApp must be a full number starting with + and the country code (leave blank to use the default).";
+  }
   return null;
+}
+
+// wa.me needs the international form to reach anyone: "+" and country code, then
+// 8 to 15 digits in all. Blank is fine, and falls back to the default number.
+export function validateWhatsappNumber(raw) {
+  const value = String(raw ?? "").trim();
+  if (value === "") return true;
+  const digits = value.replace(/\D/g, "");
+  return /^\+[\d\s()-]+$/.test(value) && digits.length >= 8 && digits.length <= 15;
 }
 
 /**

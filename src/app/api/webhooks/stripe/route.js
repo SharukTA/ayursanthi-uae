@@ -1,4 +1,9 @@
-import { confirmPaidOrder, releaseUnpaidOrder } from "@/lib/order-payment";
+import {
+  confirmPaidOrder,
+  recordStripeDispute,
+  recordStripeRefund,
+  releaseUnpaidOrder,
+} from "@/lib/order-payment";
 import { revalidateCommunityStats } from "@/lib/page-sections";
 import { getStripe } from "@/lib/stripe";
 
@@ -18,7 +23,7 @@ export const runtime = "nodejs";
  * request.text() and parsed by Stripe rather than by request.json().
  *
  * Register the endpoint at https://dashboard.stripe.com/webhooks as
- * <site>/api/webhooks/stripe, subscribed to the four events handled below, and
+ * <site>/api/webhooks/stripe, subscribed to the seven events handled below, and
  * put its signing secret in STRIPE_WEBHOOK_SECRET. Test mode and live mode have
  * separate endpoints with different secrets.
  */
@@ -73,6 +78,20 @@ export async function POST(request) {
       // abandoned checkouts' stock back on the shelf.
       case "checkout.session.expired": {
         await handleRelease(event.data.object, "The payment session expired.");
+        break;
+      }
+
+      // A refund, however it was issued. This also fires for the refund a website
+      // cancellation makes, which is harmless: see recordStripeRefund.
+      case "charge.refunded": {
+        await recordStripeRefund(event.data.object);
+        break;
+      }
+
+      // A customer disputing the payment with their bank, and how that ended.
+      case "charge.dispute.created":
+      case "charge.dispute.closed": {
+        await recordStripeDispute(event.data.object, event.created);
         break;
       }
 

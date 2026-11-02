@@ -698,3 +698,85 @@ header[class*="sticky"] img[alt="Ayursanthi"] {
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
+/* ─── Small screens ──────────────────────────────────────────────────────────
+   A grid or flex item will not shrink below its longest unbroken content, so one
+   long email address or product name can push a whole page off the side of a phone.
+   Layered, so a page's own utilities still win. */
+@layer base {
+  body {
+    overflow-wrap: break-word;
+  }
+
+  .grid > * {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 767.98px) {
+  /* Safari on iPhone zooms the whole page in when a field under 16px is tapped. */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
+  /* A wide table as a list of cards, so nothing has to be scrolled sideways to reach
+     it. Each cell needs data-label, which names it in place of the hidden heading. A
+     cell without one, such as an editor opened across a whole row, keeps full width. */
+  .table-cards {
+    display: block;
+    min-width: 0;
+  }
+
+  .table-cards thead {
+    display: none;
+  }
+
+  .table-cards tbody,
+  .table-cards tr {
+    display: block;
+  }
+
+  .table-cards tr {
+    padding: 0.5rem 1rem;
+  }
+
+  .table-cards td {
+    display: grid;
+    grid-template-columns: 5.5rem minmax(0, 1fr);
+    column-gap: 0.75rem;
+    align-items: start;
+    max-width: none;
+    padding: 0.375rem 0;
+    overflow: visible;
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+
+  .table-cards td::before {
+    content: attr(data-label);
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1.5;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #64748b;
+  }
+
+  .table-cards td > * {
+    grid-column: 2;
+    justify-self: start;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .table-cards td:not([data-label]) {
+    display: block;
+    padding: 0;
+  }
+
+  .table-cards td:not([data-label])::before {
+    content: none;
+  }
+}

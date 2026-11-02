@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Settings, ArrowLeft, Loader2, Save, Phone, Share2, Truck, Gift, XCircle } from "lucide-react";
+import { Settings, ArrowLeft, Loader2, Save, Phone, Share2, Store, Truck, Gift, XCircle } from "lucide-react";
 import { FadeIn, PageReveal } from "@/components/Animated";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
@@ -14,6 +14,7 @@ import { FREE_SHIPPING_THRESHOLD } from "@/lib/pricing";
 import { CURRENCY } from "@/lib/currency";
 import { DEFAULT_DRAW_TIME, GIFT_COUPON_THRESHOLD, todayDrawDate } from "@/lib/gift-shared";
 import { DEFAULT_CANCEL_WINDOW_HOURS } from "@/lib/order-policy";
+import { DEFAULT_SHOP_REFERRAL_RATE, DEFAULT_SHOP_WITHDRAWAL_MINIMUM } from "@/lib/shop-shared";
 
 // Example URLs shown in the social fields. Purely cosmetic — a key missing from
 // here just falls back to a generic "https://..." placeholder.
@@ -37,6 +38,12 @@ const GROUPS = [
       { key: "contact_address", label: "Address", placeholder: "Kochi, Kerala, India" },
       { key: "contact_hours", label: "Working hours", placeholder: "Mon-Sat, 9AM - 6PM" },
       { key: "contact_dispatch", label: "Fulfillment note", placeholder: "98% Same-day dispatch" },
+      {
+        key: "consultation_whatsapp",
+        label: "Online consultation WhatsApp",
+        placeholder: "+91 8289808134",
+        hint: "Online consultation forms are sent to this number, and it is shown on that page. Include + and the country code.",
+      },
     ],
   },
   {
@@ -101,6 +108,29 @@ const GROUPS = [
         label: "Programme enabled",
         type: "toggle",
         hint: "Turn off to stop minting new coupons immediately, and to stop the storefront advertising a draw. Coupons already issued keep their place in the next one.",
+      },
+    ],
+  },
+  {
+    title: "Shop partners",
+    icon: Store,
+    fields: [
+      {
+        key: "shop_referral_rate",
+        label: "Referrer profit (%)",
+        placeholder: String(DEFAULT_SHOP_REFERRAL_RATE),
+        type: "number",
+        max: 100,
+        step: "0.01",
+        hint: "What a shop owner earns on each purchase made through a shop they referred, on top of that shop's own profit. Applies to the goods total, not delivery. A change affects new purchases only.",
+      },
+      {
+        key: "shop_withdrawal_minimum",
+        label: `Minimum withdrawal (${CURRENCY})`,
+        placeholder: String(DEFAULT_SHOP_WITHDRAWAL_MINIMUM),
+        type: "number",
+        step: "0.01",
+        hint: "A shop owner's available balance has to reach this before a payout can be recorded. Set 0 to allow any balance.",
       },
     ],
   },
@@ -262,7 +292,7 @@ export default function AdminSettingsPage() {
                               : undefined
                         }
                         max={field.type === "number" ? field.max : undefined}
-                        step={field.type === "number" ? "1" : undefined}
+                        step={field.type === "number" ? (field.step ?? "1") : undefined}
                         value={values[field.key] ?? ""}
                         onChange={(e) => update(field.key, e.target.value)}
                         disabled={saving}

@@ -85,7 +85,7 @@ export function SectionCarousel({ children, slideClassName = "", autoplay = true
               key={idx}
               onClick={() => scrollTo(idx)}
               aria-label={`Go to slide ${idx + 1}`}
-              className={`h-1.5 rounded-full transition-all ${
+              className={`relative h-1.5 rounded-full transition-all after:absolute after:-inset-x-1 after:-inset-y-3 after:content-[''] ${
                 idx === selectedIndex
                   ? "w-8 bg-[#232f3e] shadow-md"
                   : "w-3 bg-[#eaeded] hover:bg-[#565959]"

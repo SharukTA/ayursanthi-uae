@@ -375,17 +375,17 @@ export default function AdminCategoriesPage() {
                           <p className="text-sm font-bold text-slate-900 break-words">{cat.name}</p>
                           <p className="mt-0.5 font-mono text-[10px] text-slate-500">{cat.slug}</p>
                         </div>
-                        <div className="flex shrink-0 items-center gap-2">
+                        <div className="flex shrink-0 items-center gap-1">
                           <button
                             onClick={() => startEditCategory(cat)}
-                            className="text-slate-500 hover:text-emerald-700 transition"
+                            className="p-1.5 text-slate-500 hover:text-emerald-700 transition"
                             title="Edit Category"
                           >
                             <Pencil className="size-4" />
                           </button>
                           <button
                             onClick={() => handleDeleteCategory(cat)}
-                            className="text-slate-500 hover:text-rose-700 transition"
+                            className="p-1.5 text-slate-500 hover:text-rose-700 transition"
                             title="Delete Category"
                           >
                             <Trash2 className="size-4" />

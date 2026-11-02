@@ -39,6 +39,11 @@ const RESEND_ENDPOINT = "https://api.resend.com/emails";
  */
 export { CURRENCY as EMAIL_CURRENCY, formatMoney };
 
+/** Where admin-facing alerts go. Falls back to the reply-to inbox. */
+export function adminRecipient() {
+  return process.env.ORDER_NOTIFICATION_EMAIL || process.env.EMAIL_REPLY_TO || null;
+}
+
 /** Very small sanity check — the API already validates the address. */
 function looksLikeEmail(value) {
   return typeof value === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
@@ -186,7 +191,24 @@ export async function sendEmail({
     }
   }
 
-  // Console fallback — used in dev or when credentials are not configured.
+  // On a live site this means email is not set up. Nothing was sent, so nothing may claim
+  // it was, and the body stays out of the logs because it can hold codes.
+  if (process.env.NODE_ENV === "production") {
+    const error = "No email provider is configured (RESEND_API_KEY).";
+    console.error(`[email] NOT SENT, template ${template}: ${error}`);
+    await recordEmailLog({
+      recipient,
+      subject,
+      template,
+      provider: "console",
+      status: "FAILED",
+      error,
+      orderId,
+    });
+    return { ok: false, provider: "console", error };
+  }
+
+  // Console fallback — used in dev when credentials are not configured.
   console.info(
     `[email:console] -> ${recipient}\n` +
       `             Subject: ${subject}\n` +

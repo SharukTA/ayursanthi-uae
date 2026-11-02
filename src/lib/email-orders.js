@@ -21,6 +21,7 @@ import { paymentMethodLabel } from "@/lib/order-policy";
 import { formatStoreDate } from "@/lib/store-time";
 import { formatAddress } from "@/lib/address";
 import {
+  adminRecipient,
   escapeHtml,
   formatMoney,
   getBrandContext,
@@ -32,11 +33,6 @@ import {
   sendEmail,
 } from "@/lib/email";
 import { renderOrderInvoice } from "@/lib/invoice";
-
-/** Where admin-facing alerts go. Falls back to the reply-to inbox. */
-function adminRecipient() {
-  return process.env.ORDER_NOTIFICATION_EMAIL || process.env.EMAIL_REPLY_TO || null;
-}
 
 function firstName(name) {
   return (name || "there").trim().split(/\s+/)[0];

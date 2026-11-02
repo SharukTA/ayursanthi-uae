@@ -128,12 +128,12 @@ export default function ProfilePage() {
       {/* Main profile card */}
       <FadeIn className="rounded-md border border-border bg-white p-6 shadow-sm">
         {/* Header */}
-        <div className="mb-6 flex items-center justify-between border-b border-[#d5d9d9] pb-5">
-          <div className="flex items-center gap-4">
-            <span className="flex size-16 items-center justify-center rounded-full bg-[#232f3e] text-2xl font-extrabold text-white">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-4 border-b border-[#d5d9d9] pb-5">
+          <div className="flex min-w-0 items-center gap-4">
+            <span className="flex size-16 shrink-0 items-center justify-center rounded-full bg-[#232f3e] text-2xl font-extrabold text-white">
               {profile?.name?.charAt(0)?.toUpperCase() ?? "U"}
             </span>
-            <div>
+            <div className="min-w-0">
               <h2 className="text-base font-bold text-[#0f1111]">{profile?.name}</h2>
               <p className="mt-0.5 text-xs text-[#565959]">{profile?.email}</p>
               <span className="mt-1.5 inline-flex items-center rounded border border-[#d5d9d9] bg-[#f7fafa] px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-[#0f1111]">

@@ -125,7 +125,7 @@ function CouponCard({ coupon, onCopy, copied, threshold }) {
           <button
             type="button"
             onClick={() => onCopy(coupon.code)}
-            className="text-slate-400 transition hover:text-emerald-700"
+            className="-m-1.5 p-1.5 text-slate-400 transition hover:text-emerald-700"
             aria-label={`Copy ${coupon.code}`}
           >
             {copied === coupon.code ? (

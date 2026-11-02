@@ -21,7 +21,7 @@ export default function robots() {
       allow: "/",
       // Everything here is either behind a login or meaningless without a
       // session, so a crawler spending its budget on these pages is pure waste.
-      disallow: ["/admin/", "/dashboard/", "/api/", "/checkout", "/cart"],
+      disallow: ["/admin/", "/dashboard/", "/api/", "/checkout", "/cart", "/my-shop"],
     },
   };
 }

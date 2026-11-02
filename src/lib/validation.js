@@ -47,6 +47,31 @@ export function normalizePhone(phone) {
   return hasPlus ? `+${digits}` : digits;
 }
 
+/**
+ * A request's JSON body as a plain object, or an empty one for anything else. So `null`,
+ * a list or a body that is not JSON gets a normal refusal rather than a server error.
+ */
+export async function readJsonObject(request) {
+  const body = await request.json().catch(() => null);
+  return body && typeof body === "object" && !Array.isArray(body) ? body : {};
+}
+
+/**
+ * A redirect target from a URL as a path on this site, or null if it could lead anywhere
+ * else. Browsers read a backslash as a slash and drop tabs and newlines from URLs, so
+ * "/\evil.com" and "/<tab>/evil.com" both really mean "//evil.com", another site.
+ */
+export function safeRedirectPath(target) {
+  if (typeof target !== "string" || !target.startsWith("/")) return null;
+  if (/[\\\u0000-\u001f\u007f]/.test(target)) return null;
+  const base = "https://this-site.invalid";
+  try {
+    return new URL(target, base).origin === base ? target : null;
+  } catch {
+    return null;
+  }
+}
+
 export function validateName(name) {
   const trimmed = String(name || "").trim();
   if (!trimmed) return "Please enter your name.";
@@ -81,6 +106,23 @@ export function validatePhone(phone, { required = false } = {}) {
     return "Please enter a valid phone number, including the country code.";
   }
   return validateNationalNumber(normalized);
+}
+
+/**
+ * A required mobile number with its country code, for forms that ask for a mobile
+ * rather than any number to reach someone on. validatePhone also allows UAE landlines,
+ * which is right for a delivery contact, so UAE numbers get the stricter check here.
+ * Other countries keep the rules in lib/geo/phone-rules.js.
+ */
+export function validateMobile(phone) {
+  const error = validatePhone(phone, { required: true });
+  if (error) return error;
+  const normalized = normalizePhone(phone);
+  if (!normalized.startsWith("+")) return "Please select your country code.";
+  if (normalized.startsWith("+971") && !/^\+9715\d{8}$/.test(normalized)) {
+    return "United Arab Emirates mobile numbers must be 9 digits starting with 5. For example: +971 50 123 4567.";
+  }
+  return null;
 }
 
 export function validatePassword(password) {

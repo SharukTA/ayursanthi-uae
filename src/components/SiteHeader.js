@@ -294,7 +294,9 @@ export function SiteHeader({ transparent = false }) {
         {/* Brand Logo only — no wordmark. `scale` enlarges the logo visually
             without growing its layout footprint, so the row stays compact and
             nothing else shifts. Negative left margin nudges it further left. */}
-        <Link href="/" className="group -ml-6 flex shrink-0 items-center sm:-ml-10 lg:-ml-14">
+        {/* Pulled left only once the page has a margin to pull into. Any narrower and
+            the left of the logo is cut off by the edge of the screen. */}
+        <Link href="/" className="group flex shrink-0 items-center min-[1366px]:-ml-14">
           <Logo3D size={64} scale={1.35} />
         </Link>
 

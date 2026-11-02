@@ -26,7 +26,11 @@ let cachedKey = null;
  */
 function getKey() {
   if (cachedKey) return cachedKey;
+  cachedKey = deriveKey("ayursanthi-salt");
+  return cachedKey;
+}
 
+function deriveKey(salt) {
   const secret = process.env.SESSION_SECRET;
 
   if (!secret || secret.length < 32) {
@@ -40,13 +44,21 @@ function getKey() {
       "[auth] SESSION_SECRET missing or too short — using an INSECURE development key. " +
         "Set SESSION_SECRET in .env before deploying."
     );
-    cachedKey = crypto.scryptSync("ayursanthi-development-only-key", "ayursanthi-salt", 32);
-    return cachedKey;
+    return crypto.scryptSync("ayursanthi-development-only-key", salt, 32);
   }
 
   // Ensure key is exactly 32 bytes for aes-256-gcm
-  cachedKey = crypto.scryptSync(secret, "ayursanthi-salt", 32);
-  return cachedKey;
+  return crypto.scryptSync(secret, salt, 32);
+}
+
+/**
+ * A key for encrypting something other than sessions. Each purpose has its own salt,
+ * so a value encrypted for one can never be read as, or passed off as, another.
+ * @param {string} purpose
+ * @returns {Buffer} 32-byte key for aes-256-gcm
+ */
+export function derivePurposeKey(purpose) {
+  return deriveKey(`ayursanthi-${purpose}`);
 }
 
 /**

@@ -160,15 +160,15 @@ export default function AdminEmailsPage() {
               </button>
             ))}
 
-            <form onSubmit={applySearch} className="ml-auto flex items-center gap-2">
-              <div className="relative">
+            <form onSubmit={applySearch} className="flex w-full items-center gap-2 sm:ml-auto sm:w-auto">
+              <div className="relative min-w-0 flex-1">
                 <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="Recipient, subject or template"
-                  className="w-64 rounded-md border border-slate-300 bg-white py-1.5 pl-8 pr-3 text-xs text-slate-800 outline-none focus:border-emerald-600"
+                  className="w-full rounded-md border border-slate-300 bg-white py-1.5 pl-8 pr-3 text-xs text-slate-800 outline-none focus:border-emerald-600 sm:w-64"
                 />
               </div>
               <button
@@ -190,7 +190,7 @@ export default function AdminEmailsPage() {
             </p>
           ) : (
             <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200 bg-white">
-              <table className="w-full min-w-[820px] text-left">
+              <table className="table-cards w-full min-w-[820px] text-left">
                 <thead className="border-b border-slate-200 bg-slate-50">
                   <tr>
                     <th className="p-3 text-[10px] font-bold uppercase tracking-wide text-slate-500">When</th>
@@ -203,17 +203,17 @@ export default function AdminEmailsPage() {
                 <tbody>
                   {logs.map((log) => (
                     <tr key={log.id} className="border-b border-slate-100 last:border-0">
-                      <td className="whitespace-nowrap p-3 text-[11px] text-slate-500">
+                      <td data-label="When" className="whitespace-nowrap p-3 text-[11px] text-slate-500">
                         {formatWhen(log.createdAt)}
                       </td>
-                      <td className="p-3 text-xs text-slate-800">{log.recipient}</td>
-                      <td className="max-w-[260px] truncate p-3 text-xs text-slate-800">
+                      <td data-label="Recipient" className="p-3 text-xs text-slate-800">{log.recipient}</td>
+                      <td data-label="Subject" className="max-w-[260px] truncate p-3 text-xs text-slate-800">
                         {log.subject}
                       </td>
-                      <td className="p-3">
+                      <td data-label="Template" className="p-3">
                         <span className="font-mono text-[10px] text-slate-500">{log.template}</span>
                       </td>
-                      <td className="p-3">
+                      <td data-label="Status" className="p-3">
                         <span
                           className={`inline-flex rounded border px-2 py-0.5 text-[9px] font-bold ${
                             STATUS_STYLES[log.status] || STATUS_STYLES.SKIPPED

@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { round2 } from "@/lib/pricing";
 import { getFreeShippingThreshold } from "@/lib/settings";
 import { getTermsVersion } from "@/lib/pages";
+import { commissionOn } from "@/lib/shop";
 
 /**
  * Creates an order and reserves its stock.
@@ -36,6 +37,9 @@ import { getTermsVersion } from "@/lib/pages";
  *   shopper checked out. Recorded because the browser-side baskets are tidied on
  *   the return page, long after the state that knew this was thrown away by the
  *   redirect to Stripe — and each list needs different treatment.
+ * @param {{id: string, commissionRate: object, referrer: object|null}|null} [args.shop]
+ *   the partner shop this purchase came through, from resolveAttributedShop in
+ *   lib/shop.js.
  * @returns {Promise<{status: string, message?: string, order?: object}>}
  *   status: created | empty_cart | unavailable | out_of_stock
  */
@@ -45,6 +49,7 @@ export async function placeOrder({
   shippingAddress,
   clearAccountCart = true,
   cartSource = "account",
+  shop = null,
 }) {
   if (!Array.isArray(cart) || cart.length === 0) {
     return { status: "empty_cart", message: "Your cart is empty." };
@@ -186,6 +191,27 @@ export async function placeOrder({
             },
           },
         },
+        // On the goods only, never the delivery. Written now and counted only once
+        // the order is paid: see COUNTED_ORDER in lib/shop.js.
+        ...(shop
+          ? {
+              shopSale: {
+                create: {
+                  shopId: shop.id,
+                  rate: shop.commissionRate,
+                  goodsTotal: subtotal,
+                  commission: commissionOn(subtotal, shop.commissionRate),
+                  ...(shop.referrer
+                    ? {
+                        referrerShopId: shop.referrer.shopId,
+                        referrerRate: shop.referrer.rate,
+                        referrerCommission: commissionOn(subtotal, shop.referrer.rate),
+                      }
+                    : {}),
+                },
+              },
+            }
+          : {}),
       },
     });
 

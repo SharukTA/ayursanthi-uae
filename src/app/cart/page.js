@@ -325,7 +325,7 @@ export default function CartPage() {
                           </span>
                           <button
                             onClick={() => removeItem(item.productId, item.name)}
-                            className="text-[#565959] hover:text-rose-600 transition"
+                            className="-m-1.5 p-1.5 text-[#565959] hover:text-rose-600 transition"
                             title="Remove item"
                           >
                             <Trash2 className="size-4" />

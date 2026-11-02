@@ -723,7 +723,7 @@ export default function AdminDrawPage({ params }) {
         {/* Winners */}
         {draw.winners.length > 0 ? (
           <FadeIn className="mt-5 overflow-x-auto rounded-md border border-border bg-white shadow-sm">
-            <table className="w-full min-w-[900px] text-left text-xs">
+            <table className="table-cards w-full min-w-[900px] text-left text-xs">
               <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-wide text-slate-500">
                 <tr>
                   <th className="px-4 py-2.5">Prize</th>
@@ -743,8 +743,8 @@ export default function AdminDrawPage({ params }) {
                     key={winner.id}
                     className={`align-top ${winner.kind === "REFERRER" ? "bg-slate-50/60" : ""}`}
                   >
-                    <td className="px-4 py-3 font-bold text-slate-900">{winner.prize.name}</td>
-                    <td className="px-4 py-3">
+                    <td data-label="Prize" className="px-4 py-3 font-bold text-slate-900">{winner.prize.name}</td>
+                    <td data-label="Who" className="px-4 py-3">
                       <p className="font-semibold text-slate-900">{winner.user.name}</p>
                       <a
                         href={`mailto:${winner.user.email}`}
@@ -753,10 +753,10 @@ export default function AdminDrawPage({ params }) {
                         {winner.user.email}
                       </a>
                     </td>
-                    <td className="px-4 py-3">
+                    <td data-label="Contact" className="px-4 py-3">
                       <WinnerContact contact={winner.contact} />
                     </td>
-                    <td className="px-4 py-3">
+                    <td data-label="Why" className="px-4 py-3">
                       {winner.kind === "PRIMARY" ? (
                         <span className="rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[9px] font-black uppercase text-emerald-800">
                           Drawn
@@ -800,10 +800,10 @@ export default function AdminDrawPage({ params }) {
                         </div>
                       )}
                     </td>
-                    <td className="px-4 py-3 font-mono text-[10px] text-slate-600">
+                    <td data-label="Coupon" className="px-4 py-3 font-mono text-[10px] text-slate-600">
                       {winner.coupon?.code ?? "—"}
                     </td>
-                    <td className="px-4 py-3">
+                    <td data-label="Fulfilment" className="px-4 py-3">
                       <select
                         value={winner.status}
                         onChange={(e) => updateWinner(winner.id, { status: e.target.value })}

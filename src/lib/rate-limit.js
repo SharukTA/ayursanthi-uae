@@ -101,6 +101,22 @@ export async function resetRateLimit(key) {
 }
 
 /**
+ * Gives back the one attempt this request used, leaving any others on the counter. For a
+ * limit that should only count failures. Unlike resetRateLimit, this cannot be used to
+ * wipe out earlier wrong guesses by mixing in a correct one.
+ */
+export async function refundRateLimit(key) {
+  try {
+    await prisma.rateLimit.updateMany({
+      where: { key, count: { gt: 0 } },
+      data: { count: { decrement: 1 } },
+    });
+  } catch (error) {
+    console.error(`[rate-limit] Could not refund "${key}":`, error?.message || error);
+  }
+}
+
+/**
  * The caller's IP address.
  *
  * On Vercel the client address only exists in `x-forwarded-for`, whose LAST
@@ -187,4 +203,22 @@ export const RATE_LIMITS = {
   // row being rewritten in a loop. Generous enough for somebody working through
   // everything they have bought in one sitting.
   reviewPost: { limit: 10, windowSeconds: 60 * 60 },
+  // A shop code is the whole credential, with no username beside it, so one guess
+  // is tried against every shop at once. Counts wrong codes only, so owners sharing a
+  // network do not use up each other's attempts by signing in.
+  shopCode: { limit: 10, windowSeconds: 15 * 60 },
+  // Each request emails the admin, out of the daily Resend allowance that password
+  // resets also depend on. Past this the email is skipped and the request still goes
+  // through, so applicants never see a refusal.
+  shopRequest: { limit: 5, windowSeconds: 60 * 60 },
+  // The same allowance and the same handling. Cancelling and asking again is allowed,
+  // so this is what stops that sending emails in a loop.
+  shopWithdrawal: { limit: 5, windowSeconds: 60 * 60 },
+  // An owner changing their details. Each try checks their shop code, so this stops a
+  // phone left signed in being used to guess it.
+  shopProfile: { limit: 10, windowSeconds: 15 * 60 },
+  // Each one sends a code by email, out of the same daily allowance.
+  shopEmailChange: { limit: 3, windowSeconds: 60 * 60 },
+  // The same allowance and the same handling as withdrawal requests.
+  shopInvestmentChange: { limit: 5, windowSeconds: 60 * 60 },
 };

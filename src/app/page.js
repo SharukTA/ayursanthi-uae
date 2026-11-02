@@ -2,6 +2,7 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { HomeTop } from "@/components/HomeTop";
 import { HomeSections } from "@/components/HomeSections";
 import { HeroDealCards } from "@/components/HeroDealCards";
+import { HomeShortcutCards } from "@/components/HomeShortcutCards";
 import { GiftFloatingButton } from "@/components/GiftFloatingButton";
 import { getPageSections } from "@/lib/page-sections";
 import { getCatalogPage } from "@/lib/catalog";
@@ -60,6 +61,8 @@ export default async function Home() {
       {/* "New Arrivals" deal-style strip. Overlaps the hero's bottom edge on
           laptop; stacks two-up under it on phones. */}
       <HeroDealCards products={latestProducts} total={latestTotal} />
+
+      <HomeShortcutCards />
 
       {/* Everything below the hero is admin-managed via the Content Builder
           (/admin/home). Sections render in the order and with the content the

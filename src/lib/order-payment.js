@@ -3,6 +3,7 @@ import { sendNewOrderAdminEmail, sendOrderPlacedEmail } from "@/lib/email-orders
 import { sendLogisticsDispatchEmail } from "@/lib/email-logistics";
 import { queueEmail } from "@/lib/email-queue";
 import { mintCouponsForOrder } from "@/lib/gift-coupons";
+import { recordShopSaleDispute, recordShopSaleRefund } from "@/lib/shop";
 import { getStripe, isStripeConfigured, toFils } from "@/lib/stripe";
 
 /**
@@ -140,6 +141,59 @@ export async function confirmPaidOrder({ orderId, paymentIntentId, sessionId, ra
   queueEmail(() => sendLogisticsDispatchEmail(order.id));
 
   return { status: "paid", order };
+}
+
+/**
+ * Takes back a shop's profit on a refund Stripe has told us about.
+ *
+ * Deliberately touches nothing on the order itself. The same event fires for the
+ * refund cancelOrder() issues, and it can arrive before that cancellation has been
+ * written. cancelOrder() claims the order on its current paymentStatus, so changing
+ * that here could make a cancellation fail after its money had already gone back.
+ *
+ * @param {object} charge  the Stripe Charge from a charge.refunded event
+ */
+export async function recordStripeRefund(charge) {
+  const paymentIntentId =
+    typeof charge.payment_intent === "string" ? charge.payment_intent : charge.payment_intent?.id;
+  const payment = paymentIntentId
+    ? await prisma.payment.findUnique({
+        where: { providerPaymentId: paymentIntentId },
+        select: { orderId: true },
+      })
+    : null;
+  const orderId = payment?.orderId ?? charge.metadata?.orderId;
+  if (!orderId) return;
+
+  await recordShopSaleRefund({ orderId, refundedAmount: charge.amount_refunded / 100 });
+}
+
+// A dispute the store has won, or a card inquiry closed without the money being taken.
+const DISPUTE_SETTLED_FOR_STORE = ["won", "warning_closed"];
+
+/**
+ * Takes back a shop's profit while a card dispute is open or lost, and restores it if the
+ * store wins. Like a refund, this touches nothing on the order itself.
+ *
+ * @param {object} dispute  the Stripe Dispute from a charge.dispute.* event
+ * @param {number} eventCreated  the event's `created` time, in seconds
+ */
+export async function recordStripeDispute(dispute, eventCreated) {
+  const paymentIntentId =
+    typeof dispute.payment_intent === "string" ? dispute.payment_intent : dispute.payment_intent?.id;
+  if (!paymentIntentId) return;
+
+  const payment = await prisma.payment.findUnique({
+    where: { providerPaymentId: paymentIntentId },
+    select: { orderId: true },
+  });
+  if (!payment) return;
+
+  await recordShopSaleDispute({
+    orderId: payment.orderId,
+    lost: !DISPUTE_SETTLED_FOR_STORE.includes(dispute.status),
+    at: new Date(eventCreated * 1000),
+  });
 }
 
 /**

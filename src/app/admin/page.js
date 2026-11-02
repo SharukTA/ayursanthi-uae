@@ -18,7 +18,8 @@ import {
   FileText,
   Mail,
   Download,
-  Gift
+  Gift,
+  Store
 } from "lucide-react";
 import { FadeIn, PageReveal, Stagger, StaggerItem } from "@/components/Animated";
 import { SiteHeader } from "@/components/SiteHeader";
@@ -95,6 +96,9 @@ export default async function AdminDashboardPage() {
               <Link href="/admin/pages">About US Page ,Terms &amp; FAQ</Link>
             </Button>
             <Button asChild variant="secondary" className="bg-white border-2 border-white text-[#0f1111] hover:bg-[#f8fafc] shadow-lg shadow-black/30 h-9 rounded font-bold">
+              <Link href="/admin/shops">Shops</Link>
+            </Button>
+            <Button asChild variant="secondary" className="bg-white border-2 border-white text-[#0f1111] hover:bg-[#f8fafc] shadow-lg shadow-black/30 h-9 rounded font-bold">
               <Link href="/admin/settings">Settings</Link>
             </Button>
           </div>
@@ -155,7 +159,7 @@ export default async function AdminDashboardPage() {
           
           {/* Left panel: Recent Orders */}
           <FadeIn className="rounded-md border border-border bg-white p-6 shadow-sm">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-4">
               <h2 className="text-base font-bold text-slate-950 flex items-center gap-2">
                 <Clock className="size-5 text-emerald-700" />
                 Recent Orders
@@ -169,7 +173,7 @@ export default async function AdminDashboardPage() {
               {recentOrders.length === 0 ? (
                 <p className="text-sm text-slate-500 italic text-center py-10">No orders placed yet.</p>
               ) : (
-                <table className="w-full text-left text-xs font-medium text-slate-650 divide-y divide-slate-100">
+                <table className="table-cards w-full text-left text-xs font-medium text-slate-650 divide-y divide-slate-100">
                   <thead>
                     <tr className="text-slate-450 uppercase font-bold tracking-wider">
                       <th className="pb-3">Invoice</th>
@@ -182,13 +186,13 @@ export default async function AdminDashboardPage() {
                   <tbody className="divide-y divide-slate-100">
                     {recentOrders.map((ord) => (
                       <tr key={ord.id} className="hover:bg-slate-50/50">
-                        <td className="py-3.5 font-mono text-emerald-800 font-bold">{ord.orderNumber}</td>
-                        <td className="py-3.5">
+                        <td data-label="Invoice" className="py-3.5 font-mono text-emerald-800 font-bold">{ord.orderNumber}</td>
+                        <td data-label="Customer" className="py-3.5">
                           <p className="font-bold text-slate-900">{ord.user.name}</p>
                           <p className="text-[10px] text-slate-400">{ord.user.email}</p>
                         </td>
-                        <td className="py-3.5 font-extrabold text-slate-900">{formatMoney(ord.total)}</td>
-                        <td className="py-3.5">
+                        <td data-label="Total" className="py-3.5 font-extrabold text-slate-900">{formatMoney(ord.total)}</td>
+                        <td data-label="Status" className="py-3.5">
                           <span className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[9px] font-bold ${
                             ord.status === "DELIVERED" 
                               ? "bg-emerald-50 text-emerald-800 border border-emerald-200" 
@@ -197,7 +201,7 @@ export default async function AdminDashboardPage() {
                             {ord.status}
                           </span>
                         </td>
-                        <td className="py-3.5 text-[10px] text-slate-450">
+                        <td data-label="Date" className="py-3.5 text-[10px] text-slate-450">
                           {new Date(ord.createdAt).toLocaleDateString()}
                         </td>
                       </tr>
@@ -266,6 +270,13 @@ export default async function AdminDashboardPage() {
                   icon: Gift,
                   color: "bg-violet-100 text-violet-800",
                   covers: [{ label: "Gifts page", path: "/gifts" }]
+                },
+                {
+                  title: "Shops",
+                  desc: "Approve join requests, see what each shop has sold, and record commission paid.",
+                  href: "/admin/shops",
+                  icon: Store,
+                  color: "bg-orange-100 text-orange-800"
                 },
                 {
                   title: "Email Log",

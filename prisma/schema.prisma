@@ -374,6 +374,11 @@ model Order {
   // threshold in its subtotal. Minted when the payment clears, voided (never
   // deleted) if the order is later cancelled.
   giftCoupons         GiftCoupon[]
+  // The partner shop this order came through, if any. A relation rather than
+  // columns here on purpose: customer-facing routes return whole Order rows
+  // (see /api/user/orders), and a relation only ever leaves the database when a
+  // query names it. Never include this from anything a customer can reach.
+  shopSale            ShopSale?
   createdAt           DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
 }
@@ -571,6 +576,257 @@ model RateLimit {
 
   // Drives the opportunistic sweep of closed windows.
   @@index([expiresAt])
+}
+
+// ─── My Shop partner programme ───────────────────────────────────────────────
+//
+// Someone applies through the public form, and an admin approves them once the
+// investment has been received. They advertise the store with their shop link, and
+// earn a percentage of the goods bought by anyone who arrived through it. See
+// lib/shop.js.
+
+// One partner's shop.
+//
+// It carries three codes that must never be confused, because two are handed out
+// and the other opens the shop's earnings:
+//
+//   linkCode      PUBLIC. Rides in the advert URL (?via=…). Grants nothing beyond
+//                 crediting a sale to this shop.
+//   referralCode  SHARED. What the partner gives to people joining the programme.
+//                 Grants nothing beyond naming this shop as their referrer.
+//   accessCode    PRIVATE. What the partner types into "View my shop". Checked against
+//                 a keyed hash (hashShopCode in lib/shop.js), so a leaked database alone
+//                 cannot be used to guess codes offline. A second, encrypted copy exists
+//                 only so an admin can look it up. Both depend on SESSION_SECRET.
+model Shop {
+  id        String @id @default(cuid())
+  ownerName String
+  phone     String
+  // One shop per email, deactivated shops included. Stored lowercase by every writer.
+  email     String @unique
+
+  // What this owner's email and mobile used to be. A join request using any of these is
+  // flagged to the admin as possibly the referrer referring themselves.
+  formerEmails String[] @default([])
+  formerPhones String[] @default([])
+
+  // What the partner put in. A record of an arrangement made outside this
+  // system: nothing here collects or moves that money.
+  investmentAed  Decimal @db.Decimal(10, 2)
+  // Stored rather than derived from SHOP_TIERS, so revising the plan later cannot
+  // silently change the terms of a partner who already signed up.
+  commissionRate Decimal @db.Decimal(5, 2)
+
+  linkCode       String @unique
+  referralCode   String @unique
+  accessCodeHash String @unique
+  // AES-GCM under a key derived from SESSION_SECRET: see encryptShopCode in
+  // lib/shop.js. Read only by /api/admin/shops/[id]/code. Null for a shop whose code
+  // was set before this existed, until an admin replaces it.
+  accessCodeEncrypted String?
+
+  // The shop whose referral code this partner joined with. Set when the shop is
+  // created and never changed. One level only: a referrer earns on the shops they
+  // referred directly, and on nothing those shops go on to refer.
+  referredByShopId String?
+  referredBy       Shop?   @relation("ShopReferrals", fields: [referredByShopId], references: [id], onDelete: Restrict)
+  referredShops    Shop[]  @relation("ShopReferrals")
+
+  // Off stops the link earning and locks the partner out of the shop. Past sales
+  // stay on the books, which is why a shop is deactivated and never deleted.
+  isActive Boolean @default(true)
+
+  // Any shop session minted before this instant is refused. Moved to "now" when
+  // the access code is replaced, so a leaked code stops working everywhere at
+  // once rather than lingering in whichever browser used it.
+  sessionsValidFrom DateTime?
+
+  sales         ShopSale[] @relation("ShopSales")
+  // Sales made by the shops this one referred, which earn it the referrer's share.
+  referralSales ShopSale[] @relation("ShopReferralSales")
+  payouts       ShopPayout[]
+  withdrawals   ShopWithdrawal[]
+  emailChange   ShopEmailChange?
+  investmentChanges ShopInvestmentChange[]
+  // The public request this shop was approved from. Null only for shops created
+  // before approval became the one way in.
+  joinRequest   ShopRequest? @relation("ShopJoinRequest")
+  // Requests that named this shop's referral code.
+  referredRequests ShopRequest[] @relation("ShopRequestReferrer")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Every referrer's report lists the shops they referred, in the order they joined.
+  @@index([referredByShopId, createdAt])
+}
+
+enum ShopRequestStatus {
+  PENDING
+  APPROVED
+  DECLINED
+}
+
+// Someone asking to become a partner through the public form at /join-shop.
+//
+// Deliberately not a Shop with a "not approved yet" flag. A request has no codes and
+// no link, so nothing about it can open a shop or earn on a sale. The Shop row only
+// comes into existence when an admin approves, after the investment has been
+// received, which happens outside this system.
+model ShopRequest {
+  id            String            @id @default(cuid())
+  ownerName     String
+  phone         String
+  email         String
+  investmentAed Decimal           @db.Decimal(10, 2)
+  status        ShopRequestStatus @default(PENDING)
+  shopId        String?           @unique
+  shop          Shop?             @relation("ShopJoinRequest", fields: [shopId], references: [id], onDelete: Restrict)
+  // The shop whose referral code was entered on the form, if any. Copied to the new
+  // Shop when the request is approved.
+  referrerShopId String?
+  referrerShop   Shop?            @relation("ShopRequestReferrer", fields: [referrerShopId], references: [id], onDelete: Restrict)
+  reviewedAt    DateTime?
+  createdAt     DateTime          @default(now())
+
+  @@index([status, createdAt])
+  @@index([referrerShopId])
+}
+
+// One order that came through a shop link.
+//
+// Written with the order itself, while it is still only a reservation. Whether the
+// commission counts is read from the order's state at query time (COUNTED_ORDER in
+// lib/shop.js), so an abandoned payment or a cancellation removes it with no extra
+// bookkeeping here. The one later write is a refund made in Stripe's own dashboard,
+// which does not go through the order at all: see recordShopSaleRefund.
+model ShopSale {
+  id      String @id @default(cuid())
+  shopId  String
+  shop    Shop   @relation("ShopSales", fields: [shopId], references: [id], onDelete: Restrict)
+  orderId String @unique
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  // Frozen at the moment of sale, so moving a partner to a new tier only affects
+  // what they sell from then on.
+  rate       Decimal @db.Decimal(5, 2)
+  // Goods only. Delivery is passed through to the courier and earns nothing.
+  goodsTotal Decimal @db.Decimal(10, 2)
+  commission Decimal @db.Decimal(10, 2)
+
+  // The share owed to the shop that referred this one, on the same goods total and
+  // on top of the commission above. Null when there is no referrer. Frozen in the
+  // same way, so changing the percentage in settings only affects later sales.
+  //
+  // Lives on this row because it follows the same order: COUNTED_ORDER decides both
+  // amounts together. Never shown to the shop that made the sale.
+  referrerShopId     String?
+  referrerShop       Shop?    @relation("ShopReferralSales", fields: [referrerShopId], references: [id], onDelete: Restrict)
+  referrerRate       Decimal? @db.Decimal(5, 2)
+  referrerCommission Decimal? @db.Decimal(10, 2)
+
+  // What a refund in Stripe has taken back, in proportion to how much of the order
+  // was refunded. The amounts above are left as they were at the time of sale.
+  refundedGoods              Decimal @default(0) @db.Decimal(10, 2)
+  reversedCommission         Decimal @default(0) @db.Decimal(10, 2)
+  reversedReferrerCommission Decimal @default(0) @db.Decimal(10, 2)
+  refundedInFull             Boolean @default(false)
+
+  // A card dispute open or lost on this order, which takes all the profit away. Cleared
+  // if the store wins it. `disputeEventAt` is when Stripe raised the latest event, so one
+  // that arrives late cannot undo a newer one.
+  disputedAt     DateTime?
+  disputeEventAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([shopId, createdAt])
+  @@index([referrerShopId, createdAt])
+}
+
+// Commission the store has handed over to a partner. Paid by bank transfer or
+// similar outside this system, then written down here by an admin.
+model ShopPayout {
+  id     String  @id @default(cuid())
+  shopId String
+  shop   Shop    @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  amount Decimal @db.Decimal(10, 2)
+  note   String?
+
+  // The owner's request this payout settled, if it came from one.
+  withdrawal ShopWithdrawal?
+
+  createdAt DateTime @default(now())
+
+  @@index([shopId, createdAt])
+}
+
+// An owner's waiting email change: the new address and the one-time code sent to it.
+// Only its hash is kept, as with a reset OTP. One per shop, so asking again replaces it.
+model ShopEmailChange {
+  shopId   String   @id
+  shop     Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  newEmail String
+  otpHash  String
+  attempts Int      @default(0)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+enum ShopInvestmentChangeStatus {
+  PENDING
+  APPROVED
+  DECLINED
+  CANCELLED // taken back by the owner
+}
+
+// An owner asking to change their investment. It changes nothing on the Shop until an
+// admin approves, which is the only way a shop's investment and profit rate change.
+//
+// The migration also adds a partial unique index allowing one PENDING request per shop,
+// which this schema has no way to express.
+model ShopInvestmentChange {
+  id                String                     @id @default(cuid())
+  shopId            String
+  shop              Shop                       @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  fromInvestmentAed Decimal                    @db.Decimal(10, 2)
+  toInvestmentAed   Decimal                    @db.Decimal(10, 2)
+  status            ShopInvestmentChangeStatus @default(PENDING)
+  reviewedAt        DateTime?
+  createdAt         DateTime                   @default(now())
+
+  @@index([shopId, createdAt])
+  @@index([status, createdAt])
+}
+
+enum ShopWithdrawalStatus {
+  PENDING
+  PAID
+  DECLINED
+  CANCELLED // taken back by the owner
+}
+
+// A shop owner asking to be paid. It moves no money and does not change their balance:
+// the balance only falls when an admin has sent the transfer and marks this paid, which
+// is what creates the ShopPayout.
+//
+// The migration also adds a partial unique index allowing one PENDING request per shop,
+// which this schema has no way to express.
+model ShopWithdrawal {
+  id     String               @id @default(cuid())
+  shopId String
+  shop   Shop                 @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  amount Decimal              @db.Decimal(10, 2)
+  status ShopWithdrawalStatus @default(PENDING)
+
+  payoutId String?     @unique
+  payout   ShopPayout? @relation(fields: [payoutId], references: [id], onDelete: SetNull)
+
+  reviewedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([shopId, createdAt])
+  @@index([status, createdAt])
 }
 
 // ─── Gift draw programme ─────────────────────────────────────────────────────

@@ -415,7 +415,7 @@ function DrawsTab() {
         </p>
       ) : (
         <div className="overflow-x-auto rounded-md border border-border bg-white shadow-sm">
-          <table className="w-full min-w-[640px] text-left text-xs">
+          <table className="table-cards w-full min-w-[640px] text-left text-xs">
             <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-wide text-slate-500">
               <tr>
                 <th className="px-4 py-2.5">Cycle</th>
@@ -435,23 +435,23 @@ function DrawsTab() {
                   // key lives on a Fragment rather than on the <tr>.
                   <Fragment key={draw.id}>
                     <tr className="hover:bg-slate-50">
-                      <td className="px-4 py-3 font-mono font-bold text-slate-900">{draw.cycleKey}</td>
-                      <td className="px-4 py-3 text-slate-700">
+                      <td data-label="Cycle" className="px-4 py-3 font-mono font-bold text-slate-900">{draw.cycleKey}</td>
+                      <td data-label="Draw date" className="px-4 py-3 text-slate-700">
                         {formatDrawDateTime(draw.drawDate)}
                       </td>
-                      <td className="px-4 py-3">
+                      <td data-label="Status" className="px-4 py-3">
                         <StatusBadge status={draw.status} />
                       </td>
-                      <td className="px-4 py-3 text-slate-700">
+                      <td data-label="Prizes" className="px-4 py-3 text-slate-700">
                         {units} unit{units === 1 ? "" : "s"}
                       </td>
-                      <td className="px-4 py-3 text-slate-700">
+                      <td data-label="Entries" className="px-4 py-3 text-slate-700">
                         {draw.status === "SCHEDULED" && draw.id === data.openDrawId
                           ? `${data.liveEntryCount ?? 0} (live)`
                           : draw.entryCount}
                       </td>
-                      <td className="px-4 py-3 text-slate-700">{draw._count.winners}</td>
-                      <td className="px-4 py-3">
+                      <td data-label="Winners" className="px-4 py-3 text-slate-700">{draw._count.winners}</td>
+                      <td data-label="Actions" className="px-4 py-3">
                         <div className="flex items-center justify-end gap-3">
                           <Link
                             href={`/admin/gifts/draws/${draw.id}`}
@@ -1411,7 +1411,7 @@ export default function AdminGiftsPage() {
       </section>
 
       <section className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6 lg:px-8">
-        <div className="mb-5 flex gap-1 rounded-md border border-border bg-white p-1 shadow-sm">
+        <div className="mb-5 grid grid-cols-2 gap-1 rounded-md border border-border bg-white p-1 shadow-sm sm:flex">
           {TABS.map((item) => {
             const Icon = item.icon;
             return (

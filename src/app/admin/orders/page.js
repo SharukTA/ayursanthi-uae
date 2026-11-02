@@ -276,7 +276,7 @@ export default function AdminOrdersPage() {
           </FadeIn>
         ) : (
           <div className="overflow-x-auto rounded-md border border-border bg-white shadow-sm">
-            <table className="w-full text-left text-xs">
+            <table className="table-cards w-full text-left text-xs">
               <thead className="border-b border-slate-100 text-[10px] font-bold uppercase tracking-wider text-slate-450">
                 <tr>
                   <th className="p-4">Order</th>
@@ -297,7 +297,7 @@ export default function AdminOrdersPage() {
                   const cancellable = canCancelOrder(order, { windowHours, now });
                   return (
                   <tr key={order.id} className="hover:bg-slate-50/50">
-                    <td className="p-4">
+                    <td data-label="Order" className="p-4">
                       <p className="font-mono font-bold text-emerald-800">{order.orderNumber}</p>
                       <p className="mt-0.5 text-[10px] text-slate-400">
                         {new Date(order.createdAt).toLocaleDateString("en-AE", {
@@ -307,20 +307,20 @@ export default function AdminOrdersPage() {
                         })}
                       </p>
                     </td>
-                    <td className="p-4">
+                    <td data-label="Customer" className="p-4">
                       <p className="font-bold text-slate-900">{order.user?.name}</p>
                       <p className="text-[10px] text-slate-400">{order.user?.email}</p>
                     </td>
-                    <td className="p-4">
+                    <td data-label="Items" className="p-4">
                       <span className="inline-flex items-center gap-1 text-slate-600">
                         <Package className="size-3.5" />
                         {order.items.length}
                       </span>
                     </td>
-                    <td className="p-4 font-extrabold text-slate-900">
+                    <td data-label="Total" className="p-4 font-extrabold text-slate-900">
                       {formatMoney(order.total)}
                     </td>
-                    <td className="p-4">
+                    <td data-label="Payment" className="p-4">
                       <span
                         className={`font-bold ${
                           order.paymentStatus === "PAID"
@@ -338,7 +338,7 @@ export default function AdminOrdersPage() {
                         </p>
                       ) : null}
                     </td>
-                    <td className="p-4">
+                    <td data-label="Status" className="p-4">
                       <span
                         className={`inline-flex rounded border px-2 py-0.5 text-[9px] font-bold ${
                           STATUS_STYLES[order.status] || STATUS_STYLES.PENDING
@@ -353,7 +353,7 @@ export default function AdminOrdersPage() {
                         that no other screen reveals: an order can look paid,
                         confirmed and perfectly healthy while the dispatch email
                         that actually moves the parcel never arrived. */}
-                    <td className="p-4">
+                    <td data-label="Dispatch" className="p-4">
                       {order.logisticsNotifiedAt ? (
                         <>
                           <span className="inline-flex rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[9px] font-bold text-emerald-800">
@@ -400,7 +400,7 @@ export default function AdminOrdersPage() {
                       )}
                     </td>
 
-                    <td className="p-4">
+                    <td data-label="Action" className="p-4">
                       {cancellable.allowed ? (
                         <>
                           <button
