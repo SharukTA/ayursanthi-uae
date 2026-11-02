@@ -31,7 +31,7 @@ export const DEFAULT_SETTINGS = {
   // Where /online-consultation sends a client's case history, and the number it
   // displays. Validated in lib/settings-shared.js, because a wa.me link built
   // from a number with no country code opens a chat with nobody.
-  consultation_whatsapp: "+91 8289808134",
+  consultation_whatsapp: "+91 7306822369",
   // Every social platform defaults to blank, which means "not set up yet, hide
   // the icon". Derived from SOCIAL_SETTINGS so the key list has one home.
   ...Object.fromEntries(Object.keys(SOCIAL_SETTINGS).map((key) => [key, ""])),

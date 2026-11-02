@@ -41,7 +41,7 @@ const GROUPS = [
       {
         key: "consultation_whatsapp",
         label: "Online consultation WhatsApp",
-        placeholder: "+91 8289808134",
+        placeholder: "+91 7306822369",
         hint: "Online consultation forms are sent to this number, and it is shown on that page. Include + and the country code.",
       },
     ],
