@@ -30,6 +30,11 @@ export function SiteFooter() {
             <Link href="/login" className="hover:text-white">
               Your orders
             </Link>
+            {/* The partner programme's only entry point in the site's navigation:
+                /my-shoppee explains it and links on to /join-shop and /my-shop. */}
+            <Link href="/my-shoppee" className="hover:text-white">
+              My Shoppee
+            </Link>
           </div>
         </div>
         <div>
