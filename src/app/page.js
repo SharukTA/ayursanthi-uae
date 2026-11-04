@@ -62,12 +62,13 @@ export default async function Home() {
           laptop; stacks two-up under it on phones. */}
       <HeroDealCards products={latestProducts} total={latestTotal} />
 
-      <HomeShortcutCards />
-
       {/* Everything below the hero is admin-managed via the Content Builder
           (/admin/home). Sections render in the order and with the content the
           admin configured; if none exist, only the hero is shown. */}
       <HomeSections sections={bodySections} stats={stats} />
+
+      {/* Online Consultation card: last thing on the page, just above the footer. */}
+      <HomeShortcutCards />
 
       <SiteFooter />
 

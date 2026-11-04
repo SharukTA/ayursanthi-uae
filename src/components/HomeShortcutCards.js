@@ -47,8 +47,8 @@ export function ShortcutCard({ href, label, image, focus, sizes, className = "" 
 // from the header and the menu.
 //
 // Two columns, each card one New Arrivals card wide at every breakpoint (half the
-// row on phones and tablets, a quarter from lg), so they line up as a smaller
-// companion to the strip above.
+// row on phones and tablets, a quarter from lg). Rendered at the bottom of the
+// homepage, after the admin-managed sections and just above the footer.
 export function HomeShortcutCards() {
   return (
     <section className="relative z-10 mx-auto mt-6 max-w-7xl px-4 sm:px-6 lg:px-8">
