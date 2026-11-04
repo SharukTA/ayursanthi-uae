@@ -20,10 +20,15 @@ export function ShopNowButton({ href, size = "md", className = "" }) {
 
   // Tap targets follow Amazon's mobile CTA sizing — tall enough to hit with a
   // thumb, and never allowed to wrap or be clipped by a cramped card footer.
+  // `compact` is `sm` on tablets and up, a notch tighter on phones — for cards
+  // laid three across a phone (~105px each), where `sm` would not fit.
   const sizing =
-    size === "sm"
-      ? "gap-1 px-3 py-2 text-[11px]"
-      : "gap-1 px-3.5 py-2.5 text-xs";
+    size === "compact"
+      ? "gap-0.5 px-1.5 py-1.5 text-[10px] sm:gap-1 sm:px-3 sm:py-2 sm:text-[11px]"
+      : size === "sm"
+        ? "gap-1 px-3 py-2 text-[11px]"
+        : "gap-1 px-3.5 py-2.5 text-xs";
+  const chevron = size === "compact" ? "size-3 sm:size-3.5" : "size-3.5";
 
   return (
     <button
@@ -40,7 +45,7 @@ export function ShopNowButton({ href, size = "md", className = "" }) {
       className={`relative z-20 inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-full bg-[#ffd814] font-bold text-[#0f1111] shadow-md transition-colors hover:bg-[#f7ca00] ${sizing} ${className}`}
     >
       Shop now
-      <ChevronRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
+      <ChevronRight className={`${chevron} transition-transform group-hover:translate-x-0.5`} />
     </button>
   );
 }

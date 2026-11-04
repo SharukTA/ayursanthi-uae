@@ -5,7 +5,7 @@ import { HeroDealCards } from "@/components/HeroDealCards";
 import { HomeShortcutCards } from "@/components/HomeShortcutCards";
 import { GiftFloatingButton } from "@/components/GiftFloatingButton";
 import { getPageSections } from "@/lib/page-sections";
-import { getCatalogPage } from "@/lib/catalog";
+import { getNewestProducts } from "@/lib/catalog";
 import { isGiftProgramEnabled } from "@/lib/settings";
 
 // Re-query the homepage at most once per 5 minutes (ISR) so it stays fast while
@@ -23,11 +23,9 @@ export default async function Home() {
   // advertising it. Same read the /gifts page itself gates on.
   const giftEnabled = await isGiftProgramEnabled();
 
-  // Newest products for the laptop-only strip that overlaps the hero's bottom
-  // edge. `total` decides whether the "Show more" button (→ /products) appears.
-  const { products: latestProducts, total: latestTotal } = await getCatalogPage({
-    sort: "newest",
-  });
+  // Every active product, newest first, for the three-per-row grid under the
+  // hero. A product added in the admin joins the grid on the next revalidate.
+  const latestProducts = await getNewestProducts();
 
   // The hero's left panel is driven by the first VIDEO_CAROUSEL section; that
   // section is rendered in the hero, not again in the body.
@@ -58,9 +56,8 @@ export default async function Home() {
           transparent over the hero's video-colour gradient. */}
       <HomeTop videos={heroVideos} />
 
-      {/* "New Arrivals" deal-style strip. Overlaps the hero's bottom edge on
-          laptop; stacks two-up under it on phones. */}
-      <HeroDealCards products={latestProducts} total={latestTotal} />
+      {/* "New Arrivals" grid: every product, three per row on every screen. */}
+      <HeroDealCards products={latestProducts} />
 
       {/* Everything below the hero is admin-managed via the Content Builder
           (/admin/home). Sections render in the order and with the content the

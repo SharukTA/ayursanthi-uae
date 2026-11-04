@@ -210,6 +210,20 @@ async function queryCatalog({ tsquery, filters, sort, currentPage }) {
   };
 }
 
+// Every active product, newest first, in the same card shape as the catalog.
+// Feeds the homepage's new-arrivals grid, which lists the whole range rather
+// than one page of it. Pass `limit` to cap it if the catalog ever grows enough
+// for that grid to run too long.
+export async function getNewestProducts({ limit } = {}) {
+  const rows = await prisma.product.findMany({
+    where: { isActive: true },
+    orderBy: { createdAt: "desc" },
+    include: CATALOG_INCLUDE,
+    ...(limit ? { take: limit } : {}),
+  });
+  return rows.map(serializeCatalogProduct);
+}
+
 // One page of the catalog plus the totals the UI needs: `total` drives the
 // "N results" summary and `hasMore` tells the infinite-scroll list whether to
 // keep fetching. A non-empty `search` layers relevance ranking on top of the

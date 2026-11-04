@@ -81,6 +81,10 @@ export function ProductCard({
   // single product — must say so, or the optimizer picks a variant sized for a
   // card half the width and the photo lands soft.
   sizes = "(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw",
+  // Stacked layout only: tightens the text block and CTA on phones (below sm)
+  // for grids that put three cards across a phone, where each card is ~105px
+  // wide. Tablets and up render exactly as without it.
+  compact = false,
 }) {
   // Primary media, rendered by <ProductMedia> so stills go through the image
   // optimizer and clips stay unloaded until hover. The data layer already
@@ -145,14 +149,22 @@ export function ProductCard({
         {/* White text block — nothing here sits over the photo. Its vertical
             rhythm is deliberately tight: every line here is short, so the card's
             height was going into padding rather than content. */}
-        <div className="flex flex-1 flex-col p-2 sm:p-2.5">
+        <div className={`flex flex-1 flex-col ${compact ? "p-1.5" : "p-2"} sm:p-2.5`}>
           {category ? (
-            <p className="text-[10px] font-bold uppercase tracking-wider text-[#565959]">
+            <p
+              className={`font-bold uppercase tracking-wider text-[#565959] ${
+                compact ? "truncate text-[9px] sm:text-[10px]" : "text-[10px]"
+              }`}
+            >
               {category}
             </p>
           ) : null}
 
-          <h3 className="mt-0.5 line-clamp-2 text-sm font-bold leading-5 text-[#0f1111] group-hover:underline">
+          <h3
+            className={`mt-0.5 line-clamp-2 font-bold text-[#0f1111] group-hover:underline ${
+              compact ? "text-xs leading-4 sm:text-sm sm:leading-5" : "text-sm leading-5"
+            }`}
+          >
             {product.name}
           </h3>
 
@@ -168,27 +180,43 @@ export function ProductCard({
             {reviewCount > 0 ? (
               <>
                 <span className="text-xs font-bold text-slate-700">{rating.toFixed(1)}</span>
-                <RatingStars rating={rating} size="size-3.5" />
+                <RatingStars rating={rating} size={compact ? "size-3 sm:size-3.5" : "size-3.5"} />
                 <span className="text-[11px] font-medium text-slate-500">
                   ({reviewCount.toLocaleString("en-AE")})
                 </span>
               </>
             ) : (
               <>
-                <RatingStars rating={0} size="size-3.5" />
-                <span className="text-[11px] font-medium text-slate-500">No ratings yet</span>
+                <RatingStars rating={0} size={compact ? "size-3 sm:size-3.5" : "size-3.5"} />
+                {/* Compact phones show the empty stars alone: the label would
+                    take a line of its own in a third-of-a-phone card. */}
+                <span
+                  className={`text-[11px] font-medium text-slate-500 ${
+                    compact ? "hidden sm:inline" : ""
+                  }`}
+                >
+                  No ratings yet
+                </span>
               </>
             )}
           </div>
 
           {/* Price + CTA pinned to the bottom so they line up across the row. */}
           <div className="mt-auto pt-1.5">
-            <div className="flex flex-wrap items-baseline gap-x-2">
-              <span className="text-base font-extrabold text-[#0f1111] sm:text-lg">
+            <div className={`flex flex-wrap items-baseline ${compact ? "gap-x-1 sm:gap-x-2" : "gap-x-2"}`}>
+              <span
+                className={`font-extrabold text-[#0f1111] ${
+                  compact ? "text-sm sm:text-base lg:text-lg" : "text-base sm:text-lg"
+                }`}
+              >
                 {formatMoney(price)}
               </span>
               {hasDeal ? (
-                <span className="text-xs font-medium text-slate-500 line-through">
+                <span
+                  className={`font-medium text-slate-500 line-through ${
+                    compact ? "text-[10px] sm:text-xs" : "text-xs"
+                  }`}
+                >
                   {formatMoney(mrp)}
                 </span>
               ) : null}
@@ -196,7 +224,11 @@ export function ProductCard({
 
             {/* The price is final — say so on the card rather than leaving the
                 shopper to discover it at checkout. */}
-            <p className="mt-0.5 text-[10px] font-medium text-[#565959]">
+            <p
+              className={`mt-0.5 font-medium text-[#565959] ${
+                compact ? "text-[9px] leading-3 sm:text-[10px] sm:leading-normal" : "text-[10px]"
+              }`}
+            >
               {TAX_INCLUSIVE_LABEL}
             </p>
 
@@ -208,7 +240,7 @@ export function ProductCard({
               </p>
             ) : null}
 
-            <ShopNowButton href={href} size="sm" className="mt-1.5 w-full" />
+            <ShopNowButton href={href} size={compact ? "compact" : "sm"} className="mt-1.5 w-full" />
           </div>
         </div>
       </div>

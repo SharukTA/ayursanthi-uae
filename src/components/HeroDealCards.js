@@ -1,93 +1,69 @@
-import Link from "next/link";
-import { ChevronRight } from "lucide-react";
 import { ProductCard } from "@/components/ProductCard";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// HeroDealCards — the new-arrivals strip below the hero (no heading), showing
-// the four newest products as stacked cards (the same ProductCard the catalog
-// grid uses). When more than the four shown products exist, a "Show more" button
-// links to the full catalog (never expands inline).
+// HeroDealCards — the new-arrivals grid below the hero (no heading). It lists
+// every active product, newest first, three per row on phones, tablets and
+// laptops alike, and grows a row for every three products added. There is no
+// "Show more" button: the whole range is already here.
 //
-// Two shapes:
-//   laptop — four across, stacked under the hero with normal spacing. (It used
-//     to overlap the hero's lower edge, but without a heading in the overlap the
-//     cards themselves covered the video.)
-//   phone/tablet — two across, also stacked under the hero, and the "Show more"
-//     button drops onto its own full-width line below the grid.
+// On laptops the grid is held to max-w-5xl. At the full page width each of the
+// three cards would be ~400px wide, and with a 4:5 photo a single row would be
+// taller than most laptop screens.
 // ─────────────────────────────────────────────────────────────────────────────
-export function HeroDealCards({ products = [], total = 0 }) {
-  const cards = products.slice(0, 4);
-  if (cards.length === 0) return null;
+export function HeroDealCards({ products = [] }) {
+  if (products.length === 0) return null;
 
-  const hasMore = total > cards.length;
-
-  // A store showing exactly one new arrival widens that card, matching the CMS
-  // product carousels: at the row width (half a phone, a quarter of a laptop) a
-  // lone centred card reads as a mistake. Phone/tablet take the DEAL_GRID card's
-  // widths, laptop goes a step wider than it. No gap to subtract from the basis
-  // here — there's no neighbour. Two or more cards keep the ladder below.
-  const solo = cards.length === 1;
+  // A store with exactly one product widens that card, matching the CMS product
+  // carousels: at a third of the row a lone centred card reads as a mistake.
+  const solo = products.length === 1;
 
   return (
     <section className="relative z-10 block">
       <div className="mx-auto mt-8 max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:gap-5">
-          {/* A wrapping flex row rather than a grid, purely so a row that isn't
-              full is centred instead of left-hung — a store with one or two
-              products used to strand a lone card against the left margin. The
-              basis ladder reproduces the old grid exactly (two columns, four
-              from lg; each card gives up its share of the gap), so a full row of
-              four is pixel-identical to before. */}
-          <div className="flex flex-1 flex-wrap justify-center gap-3 sm:gap-4 lg:gap-5">
-            {cards.map((product) => (
-              <div
-                key={product.id}
-                className={
-                  solo
-                    ? "basis-[80%] sm:basis-[45%] lg:basis-[33.333%]"
-                    : "basis-[calc(50%-0.375rem)] sm:basis-[calc(50%-0.5rem)] lg:basis-[calc(25%-0.9375rem)]"
-                }
-              >
-                <ProductCard
-                  product={product}
-                  categoryName={product.categoryName}
-                  rating={product.rating}
-                  reviewCount={product.reviewCount}
-                  // Stacked, like the /products grid: the photo gets the top of
-                  // the card to itself and the text sits on white underneath.
-                  // The overlay layout drew the title/price over the lower half
-                  // of the photo, which hid the product itself.
-                  layout="stacked"
-                  // 4:5 — the exact shape stills are uploaded in (1122x1402), the
-                  // same box the /products grid uses. A square box here cropped
-                  // 140px off the top and bottom of every upload (more on hover
-                  // zoom), which cut into products shot close to the frame edge.
-                  aspect="aspect-[4/5]"
-                  // With the box matching the upload, "cover" crops nothing; it
-                  // only trims an odd-shaped upload instead of leaving bands.
-                  mediaFit="cover"
-                  // Must track the basis ladder above — the default assumes the
-                  // multi-card row and would fetch a photo sized for a card half
-                  // the width the solo card actually paints at.
-                  sizes={
-                    solo
-                      ? "(max-width: 640px) 80vw, (max-width: 1024px) 45vw, 33vw"
-                      : undefined
-                  }
-                />
-              </div>
-            ))}
-          </div>
-
-          {hasMore ? (
-            <Link
-              href="/products"
-              className="inline-flex shrink-0 items-center justify-center gap-1 rounded-full bg-[#232f3e] px-5 py-2.5 text-sm font-bold text-white shadow-md transition hover:bg-[#131921]"
+        {/* A wrapping flex row rather than a grid, so a last row that isn't full
+            (four products: three, then one) is centred instead of left-hung.
+            Each basis is a third of the row minus its share of the two gaps
+            (8 / 16 / 20px), which makes a full row exactly three across.
+            `min-w-0` is what holds that: a flex item won't shrink below its
+            content's widest unbreakable run by default, so a long one-line
+            category label ("VARNA KALPA (BEAUTY CARE )") widened every card
+            past a third and the row wrapped two-up on phones. */}
+        <div className="mx-auto flex max-w-5xl flex-wrap justify-center gap-2 sm:gap-4 lg:gap-5">
+          {products.map((product) => (
+            <div
+              key={product.id}
+              className={`min-w-0 ${
+                solo
+                  ? "basis-[80%] sm:basis-[45%] lg:basis-[33.333%]"
+                  : "basis-[calc((100%-1rem)/3)] sm:basis-[calc((100%-2rem)/3)] lg:basis-[calc((100%-2.5rem)/3)]"
+              }`}
             >
-              Show more
-              <ChevronRight className="size-4" />
-            </Link>
-          ) : null}
+              <ProductCard
+                product={product}
+                categoryName={product.categoryName}
+                rating={product.rating}
+                reviewCount={product.reviewCount}
+                // Stacked, like the /products grid: the photo gets the top of
+                // the card to itself and the text sits on white underneath.
+                layout="stacked"
+                // 4:5 — the exact shape stills are uploaded in (1122x1402), the
+                // same box the /products grid uses, so "cover" crops nothing.
+                aspect="aspect-[4/5]"
+                mediaFit="cover"
+                // A third of a phone is ~105px wide: tighten the text block and
+                // the CTA there so the price and "Shop now" still fit.
+                compact={!solo}
+                // Must track the basis ladder above. Past lg the grid stops
+                // growing at max-w-5xl (1024px), so a card never paints wider
+                // than ~330px.
+                sizes={
+                  solo
+                    ? "(max-width: 640px) 80vw, (max-width: 1024px) 45vw, 33vw"
+                    : "(max-width: 1024px) 33vw, 330px"
+                }
+              />
+            </div>
+          ))}
         </div>
       </div>
     </section>
