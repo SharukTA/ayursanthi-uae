@@ -58,15 +58,13 @@ export function HeroDealCards({ products = [], total = 0 }) {
                   // The overlay layout drew the title/price over the lower half
                   // of the photo, which hid the product itself.
                   layout="stacked"
-                  // Square rather than the 4:5 stills are uploaded in, matching
-                  // the CMS carousels: it takes a fifth off the card's height.
-                  aspect="aspect-square"
-                  // …and the photo fills that square instead of being fitted
-                  // inside it, so there are no blank bands down the sides. A 4:5
-                  // upload gives up 10% off the top and 10% off the bottom —
-                  // the margin around a centred product, not the product. Don't
-                  // widen `aspect` past square without revisiting this; the crop
-                  // grows fast from here.
+                  // 4:5 — the exact shape stills are uploaded in (1122x1402), the
+                  // same box the /products grid uses. A square box here cropped
+                  // 140px off the top and bottom of every upload (more on hover
+                  // zoom), which cut into products shot close to the frame edge.
+                  aspect="aspect-[4/5]"
+                  // With the box matching the upload, "cover" crops nothing; it
+                  // only trims an odd-shaped upload instead of leaving bands.
                   mediaFit="cover"
                   // Must track the basis ladder above — the default assumes the
                   // multi-card row and would fetch a photo sized for a card half
