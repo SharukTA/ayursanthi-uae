@@ -34,6 +34,9 @@ export function ImageFill({
   // that can show a placeholder should pass this — a bare <Image> failure leaves
   // a broken-image icon, which looks like a bug to a customer.
   onError,
+  // Fires once the file has decoded; the event's target is the <img>, so a
+  // caller can read naturalWidth/naturalHeight off it.
+  onLoad,
 }) {
   if (!src) return null;
 
@@ -46,6 +49,7 @@ export function ImageFill({
       quality={quality}
       preload={preload}
       onError={onError}
+      onLoad={onLoad}
       unoptimized={!isOptimizableSrc(src)}
       className={`${fit === "contain" ? "object-contain" : "object-cover"} ${className}`}
     />

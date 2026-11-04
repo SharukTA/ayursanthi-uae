@@ -32,6 +32,10 @@ const FALLBACK_IMAGE =
 // `-movflags +faststart`.
 const POSTER_FRAGMENT = "#t=0.1";
 
+// Bounds on the viewer frame's width/height ratio: 2:3 portrait to 3:2 landscape.
+const FRAME_RATIO_MIN = 2 / 3;
+const FRAME_RATIO_MAX = 3 / 2;
+
 // Shown in place of an image whose file cannot be loaded at all (deleted from
 // storage, 404, offline). Rendering a neutral tile is deliberate: swapping in
 // another remote image would just risk a second failure, and a broken-image icon
@@ -104,6 +108,20 @@ export function ProductGallery({
   // than sitting on an empty black rectangle.
   const [modalFailed, setModalFailed] = useState(false);
   const videoRefs = useRef([]);
+  // Width/height of the viewer frame, taken from the first photo once it has
+  // decoded so the frame hugs the product shot — no crop and no white bands.
+  // Starts square to match the loading skeleton. Every slide shares this one
+  // frame (the carousel needs a single height); later slides of a different
+  // shape fall back to `contain` inside it.
+  const [frameRatio, setFrameRatio] = useState(1);
+
+  const onFirstImageLoad = useCallback((e) => {
+    const { naturalWidth: w, naturalHeight: h } = e.target;
+    if (!w || !h) return;
+    // Clamped so an extreme banner or skinny strip can't make the viewer
+    // absurdly short or push the buy box off-screen.
+    setFrameRatio(Math.min(FRAME_RATIO_MAX, Math.max(FRAME_RATIO_MIN, w / h)));
+  }, []);
 
   const scrollTo = useCallback((idx) => emblaApi?.scrollTo(idx), [emblaApi]);
 
@@ -153,6 +171,10 @@ export function ProductGallery({
   }, []);
 
   const hasMany = items.length > 1;
+  // The photo that sets the frame's shape: the first still, wherever it sits.
+  // Not simply slide 0 — a product whose gallery opens on a video would leave
+  // the frame square, banding every portrait photo after it.
+  const shapeIndex = items.findIndex((item) => item.mediaType !== "VIDEO");
 
   return (
     <div className="flex flex-col gap-3">
@@ -167,9 +189,10 @@ export function ProductGallery({
               return (
                 <div key={index} className="min-w-0 flex-[0_0_100%]">
                   <div
-                    className={`relative flex aspect-square w-full items-center justify-center ${
+                    className={`relative flex w-full items-center justify-center ${
                       isVideo ? "bg-black" : "bg-white"
                     }`}
+                    style={{ aspectRatio: frameRatio }}
                   >
                     {isBroken ? (
                       <BrokenImage />
@@ -190,6 +213,10 @@ export function ProductGallery({
                             playsInline
                             preload="metadata"
                             onError={() => markPosterFailed(index)}
+                            // cover: this is only a still preview, and contain
+                            // left black side bars wherever the clip's shape
+                            // differs from the frame. The lightbox plays the
+                            // whole clip uncropped.
                             className="pointer-events-none size-full object-cover"
                           />
                         )}
@@ -211,7 +238,11 @@ export function ProductGallery({
                       <ImageFill
                         src={item.url}
                         alt={item.altText || productName}
-                        fit="cover"
+                        // "contain", not "cover": cover crops the tops of tall
+                        // bottles. The frame takes the first photo's shape, so
+                        // that photo fills it exactly with no bands.
+                        fit="contain"
+                        onLoad={index === shapeIndex ? onFirstImageLoad : undefined}
                         // The detail page hard-caps this column at 360px on
                         // mobile and 500px above it, so asking for viewport
                         // widths would over-fetch on every large phone.
@@ -277,6 +308,7 @@ export function ProductGallery({
                   <ImageFill
                     src={item.url}
                     alt={item.altText || `${productName} ${index + 1}`}
+                    fit="contain"
                     // Tops out at 80px (sm:size-20); quality 50 is invisible here.
                     sizes="80px"
                     quality={50}

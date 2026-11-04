@@ -46,9 +46,11 @@ export function HeroDealCards({ products = [] }) {
                 // Stacked, like the /products grid: the photo gets the top of
                 // the card to itself and the text sits on white underneath.
                 layout="stacked"
-                // 4:5 — the exact shape stills are uploaded in (1122x1402), the
-                // same box the /products grid uses, so "cover" crops nothing.
-                aspect="aspect-[4/5]"
+                // 3:4. Uploads aren't one shape: as of 2026-11-04 the first
+                // stills run from 2:3 (1024x1536) to ~4:5 (1116x1410). A 4:5
+                // box cut ~8% off each end of the tallest; 3:4 sits between
+                // them, so "cover" trims at most ~5% per edge and never bands.
+                aspect="aspect-[3/4]"
                 mediaFit="cover"
                 // A third of a phone is ~105px wide: tighten the text block and
                 // the CTA there so the price and "Shop now" still fit.
