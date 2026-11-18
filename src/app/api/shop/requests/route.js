@@ -3,7 +3,6 @@ import { queueEmail } from "@/lib/email-queue";
 import { sendShopRequestAdminEmail } from "@/lib/email-shop";
 import { clientIp, consumeRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { findReferrerShop } from "@/lib/shop";
-import { findShopTier } from "@/lib/shop-shared";
 import {
   normalizePhone,
   readJsonObject,
@@ -46,9 +45,6 @@ export async function POST(request) {
 
     const emailError = validateEmail(rawEmail);
     if (emailError) return refused("email", emailError);
-
-    const tier = findShopTier(body.investmentAed);
-    if (!tier) return refused("investmentAed", "Please choose an investment amount.");
 
     const email = rawEmail.toLowerCase();
     const phone = normalizePhone(rawPhone);
@@ -93,7 +89,6 @@ export async function POST(request) {
         ownerName,
         phone,
         email,
-        investmentAed: tier.investmentAed,
         referrerShopId: referrer?.id ?? null,
       },
     });

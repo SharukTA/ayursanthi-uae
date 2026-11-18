@@ -16,7 +16,6 @@ export async function GET() {
       ownerName: true,
       phone: true,
       email: true,
-      investmentAed: true,
       createdAt: true,
       referrerShop: { select: { ownerName: true, ...OWNER_CONTACT_FIELDS } },
     },
@@ -25,7 +24,6 @@ export async function GET() {
   return Response.json({
     requests: requests.map(({ referrerShop, ...request }) => ({
       ...request,
-      investmentAed: Number(request.investmentAed),
       referrerName: referrerShop?.ownerName ?? null,
       // Whether this may be the referrer referring themselves, for the admin to judge.
       referrerSameContact: referrerShop

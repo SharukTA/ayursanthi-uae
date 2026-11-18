@@ -3,19 +3,29 @@
 // proxy.js runs on every page request and the rest runs in the browser. Everything
 // that touches the database or a secret lives in lib/shop.js.
 
-// The published plan: what a partner puts in, and the share of goods they earn.
-export const SHOP_TIERS = [
-  { investmentAed: 1000, commissionRate: 10 },
-  { investmentAed: 10000, commissionRate: 13 },
-  { investmentAed: 25000, commissionRate: 14 },
-  { investmentAed: 50000, commissionRate: 15 },
+// The published plan (the Distributor table on /my-shoppee): a shop's share of goods
+// goes up with the units it has sold through its link, counted over all time. Below the
+// first tier it earns nothing, and from the last one on the rate stays where it is.
+// Joining costs nothing: there is no investment.
+export const SHOP_PROFIT_TIERS = [
+  { minUnits: 51, rate: 10 },
+  { minUnits: 101, rate: 13 },
+  { minUnits: 201, rate: 14 },
+  { minUnits: 301, rate: 15 },
 ];
 
-export function findShopTier(investmentAed) {
-  // Number([10000]) is 10000, so a list from a hand-made request would otherwise pass.
-  if (Array.isArray(investmentAed)) return null;
-  const amount = Number(investmentAed);
-  return SHOP_TIERS.find((tier) => tier.investmentAed === amount) ?? null;
+/** The profit % a shop earns once it has sold this many units in all. */
+export function shopProfitRateForUnits(units) {
+  let rate = 0;
+  for (const tier of SHOP_PROFIT_TIERS) {
+    if (units >= tier.minUnits) rate = tier.rate;
+  }
+  return rate;
+}
+
+/** The next tier this many units has not reached yet, or null at the top. */
+export function nextShopProfitTier(units) {
+  return SHOP_PROFIT_TIERS.find((tier) => units < tier.minUnits) ?? null;
 }
 
 // Deliberately neutral names. Both are visible to a shopper who clicks an advert

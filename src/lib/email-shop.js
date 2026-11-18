@@ -8,7 +8,7 @@ import {
   renderInfoRows,
   sendEmail,
 } from "@/lib/email";
-import { findShopTier, SHOP_ATTRIBUTION_DAYS } from "@/lib/shop-shared";
+import { SHOP_ATTRIBUTION_DAYS, SHOP_PROFIT_TIERS } from "@/lib/shop-shared";
 
 /**
  * Emails for the My Shop join requests: the alert to the admin when someone applies,
@@ -34,6 +34,12 @@ const SHOP_PAGE_GUIDE = [
     "Give this code to people who want to join the business partnership. They enter it on the join form, and once they are approved, you also earn a share of every purchase made through their link.",
   ],
   [
+    "Your profit",
+    `Your profit grows with the number of units sold through your link: ${SHOP_PROFIT_TIERS.map(
+      (tier) => `${tier.rate}% from ${tier.minUnits} units`
+    ).join(", ")}. Each purchase earns the percentage you are on when it is made.`,
+  ],
+  [
     "Your sales and profit",
     "See your revenue, stock sold, profit and payments.",
   ],
@@ -45,8 +51,6 @@ export async function sendShopRequestAdminEmail(request, referrer = null) {
   if (!to) return;
 
   const { brand, supportEmail, siteUrl } = await getBrandContext();
-  const tier = findShopTier(request.investmentAed);
-  const investment = formatMoney(request.investmentAed, { decimals: 0 });
   const referredBy = referrer
     ? `${referrer.ownerName}${referrer.sameContact ? " (has the same email or mobile as this applicant)" : ""}`
     : null;
@@ -57,8 +61,6 @@ export async function sendShopRequestAdminEmail(request, referrer = null) {
       ["Name", request.ownerName],
       ["Phone", request.phone],
       ["Email", request.email],
-      ["Investment", investment],
-      tier ? ["Profit rate", `${tier.commissionRate}%`] : null,
       referredBy ? ["Referred by", referredBy] : null,
     ]),
     renderButton(`${siteUrl}/admin/shops`, "Open in admin"),
@@ -69,7 +71,7 @@ export async function sendShopRequestAdminEmail(request, referrer = null) {
     template: "admin_shop_request",
     subject: `New partnership request: ${request.ownerName}`,
     html: renderEmailLayout({ brand, supportEmail, bodyHtml }),
-    text: `New partnership request\nName: ${request.ownerName}\nPhone: ${request.phone}\nEmail: ${request.email}\nInvestment: ${investment}${referredBy ? `\nReferred by: ${referredBy}` : ""}\n\n${siteUrl}/admin/shops`,
+    text: `New partnership request\nName: ${request.ownerName}\nPhone: ${request.phone}\nEmail: ${request.email}${referredBy ? `\nReferred by: ${referredBy}` : ""}\n\n${siteUrl}/admin/shops`,
   });
 }
 
@@ -97,35 +99,6 @@ export async function sendShopWithdrawalAdminEmail({ shop, amount, available }) 
     subject: `Withdrawal request: ${shop.ownerName}, ${formatMoney(amount)}`,
     html: renderEmailLayout({ brand, supportEmail, bodyHtml }),
     text: `${shop.ownerName} has asked to withdraw ${formatMoney(amount)} (${formatMoney(available)} available).\nPhone: ${shop.phone}\nEmail: ${shop.email}\n\n${siteUrl}/admin/shops`,
-  });
-}
-
-/** Non-critical, so wrap it in queueEmail(): the request is already saved. */
-export async function sendShopInvestmentChangeAdminEmail({ shop, tier }) {
-  const to = adminRecipient();
-  if (!to) return;
-
-  const { brand, supportEmail, siteUrl } = await getBrandContext();
-  const current = `${formatMoney(shop.investmentAed, { decimals: 0 })} (${shop.commissionRate}%)`;
-  const requested = `${formatMoney(tier.investmentAed, { decimals: 0 })} (${tier.commissionRate}%)`;
-
-  const bodyHtml = [
-    paragraph(`${shop.ownerName} has asked to change their investment.`),
-    renderInfoRows([
-      ["Current", current],
-      ["Requested", requested],
-      ["Phone", shop.phone],
-      ["Email", shop.email],
-    ]),
-    renderButton(`${siteUrl}/admin/shops`, "Open in admin"),
-  ].join("\n");
-
-  await sendEmail({
-    to,
-    template: "admin_shop_investment_change",
-    subject: `Investment change request: ${shop.ownerName}`,
-    html: renderEmailLayout({ brand, supportEmail, bodyHtml }),
-    text: `${shop.ownerName} has asked to change their investment.\nCurrent: ${current}\nRequested: ${requested}\nPhone: ${shop.phone}\nEmail: ${shop.email}\n\n${siteUrl}/admin/shops`,
   });
 }
 

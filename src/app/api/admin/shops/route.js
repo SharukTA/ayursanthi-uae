@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/admin-api";
 import { getShopWithdrawalMinimum } from "@/lib/settings";
-import { getShopTotals, serializeShop, SHOP_PUBLIC_FIELDS } from "@/lib/shop";
+import { getShopTotals, SHOP_PUBLIC_FIELDS } from "@/lib/shop";
 
 export const runtime = "nodejs";
 
@@ -26,6 +26,6 @@ export async function GET() {
 
   return Response.json({
     withdrawalMinimum,
-    shops: shops.map((shop) => ({ ...serializeShop(shop), totals: totals.get(shop.id) })),
+    shops: shops.map((shop) => ({ ...shop, totals: totals.get(shop.id) })),
   });
 }

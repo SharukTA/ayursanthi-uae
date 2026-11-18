@@ -3,6 +3,7 @@ import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { ShortcutCard } from "@/components/HomeShortcutCards";
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
+import { SHOP_PROFIT_TIERS } from "@/lib/shop-shared";
 
 export const metadata = {
   title: "MY-SHOPPEE | Ayurshoppee",
@@ -12,7 +13,8 @@ export const metadata = {
 
 // The MY-SHOPPEE business plan as the client supplied it (a PDF), set in the site's
 // flat content-page style: ink headings over hairlines, like /about. The figures here
-// are the plan's own and are not read from the shop programme's settings.
+// are the plan's own, except the Distributor table, which is what the shop programme
+// actually pays (SHOP_PROFIT_TIERS).
 
 const SHOP_CARDS = [
   {
@@ -77,14 +79,15 @@ const SHOP_OWNER_BENEFITS = {
   rows: [["100,000", "My Face", "10%", "4444", "Minimum 15 at a time"]],
 };
 
+// Read from SHOP_PROFIT_TIERS, the same table the shop programme pays from, so this
+// page cannot promise a rate the code does not pay.
 const DISTRIBUTOR_BENEFITS = {
-  head: ["Product", "Quantity", "Profit %"],
-  rows: [
-    ["MY FACE", "51", "10%"],
-    ["MY FACE", "101", "13%"],
-    ["MY FACE", "201", "14%"],
-    ["MY FACE", "301", "15%"],
-  ],
+  head: ["Product", "Quantity sold", "Profit %"],
+  rows: SHOP_PROFIT_TIERS.map((tier, i) => {
+    const next = SHOP_PROFIT_TIERS[i + 1];
+    const quantity = next ? `${tier.minUnits} – ${next.minUnits - 1}` : `${tier.minUnits} and above`;
+    return ["MY FACE", quantity, `${tier.rate}%`];
+  }),
 };
 
 const PRICE_LIST = {
@@ -321,7 +324,10 @@ export default function MyShoppeePage() {
           </p>
 
           <SubHeading>Distributor Participation Benefits</SubHeading>
-          <PlanTable {...DISTRIBUTOR_BENEFITS} caption="Other product lines will be added soon." />
+          <PlanTable
+            {...DISTRIBUTOR_BENEFITS}
+            caption={`No participation amount is needed to join. Your profit % is set by the total units sold through your link over all time: no profit is earned until ${SHOP_PROFIT_TIERS[0].minUnits} units, and from ${SHOP_PROFIT_TIERS.at(-1).minUnits} units it stays at ${SHOP_PROFIT_TIERS.at(-1).rate}%. Each purchase earns the % you are on when it is made. Other product lines will be added soon.`}
+          />
         </Section>
 
         <Section title="Online Distribution Price List" subtitle="Special Distributor Pricing">

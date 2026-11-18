@@ -9,8 +9,8 @@ import {
   ShopWithdrawalCard,
   ShopSignOutButton,
 } from "@/components/MyShopControls";
+import { ShopProfitCard } from "@/components/ShopProfitCard";
 import { ShopReport } from "@/components/ShopReport";
-import { formatMoney } from "@/lib/currency";
 import { prisma } from "@/lib/prisma";
 import { getShopReferralRate } from "@/lib/settings";
 import { getCurrentShop, getShopReport } from "@/lib/shop";
@@ -58,7 +58,7 @@ export default async function MyShopPage({ searchParams }) {
   }
 
   const query = readShopReportQuery(await searchParams);
-  const [report, referralRate, products, pendingEmailChange, investmentChanges] = await Promise.all([
+  const [report, referralRate, products, pendingEmailChange] = await Promise.all([
     getShopReport(shop.id, query),
     getShopReferralRate(),
     prisma.product.findMany({
@@ -70,13 +70,8 @@ export default async function MyShopPage({ searchParams }) {
       where: { shopId: shop.id, expiresAt: { gt: new Date() } },
       select: { newEmail: true },
     }),
-    prisma.shopInvestmentChange.findMany({
-      where: { shopId: shop.id },
-      orderBy: { createdAt: "desc" },
-      take: 1,
-      select: { id: true, toInvestmentAed: true, status: true },
-    }),
   ]);
+  const { profitTier } = report;
 
   return (
     <main className="flex min-h-screen flex-col bg-slate-50 text-white">
@@ -86,14 +81,15 @@ export default async function MyShopPage({ searchParams }) {
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-white">{shop.ownerName}&apos;s shop</h1>
             <p className="mt-2 text-sm text-slate-300">
-              Investment {formatMoney(shop.investmentAed, { decimals: 0 })},{" "}
-              {shop.commissionRate}% profit on every purchase
+              Your profit: <span className="font-bold text-white">{profitTier.rate}%</span> &middot;{" "}
+              {profitTier.unitsSold} {profitTier.unitsSold === 1 ? "unit" : "units"} sold
             </p>
           </div>
           <ShopSignOutButton />
         </div>
       </section>
       <section className="mx-auto grid w-full max-w-5xl flex-1 gap-6 px-4 py-8 sm:px-6">
+        <ShopProfitCard shopId={shop.id} profitTier={profitTier} />
         <ShopLinkCard linkCode={shop.linkCode} products={products} />
         <ShopReferralCard referralCode={shop.referralCode} referralRate={referralRate} />
         <ShopReport
@@ -107,16 +103,6 @@ export default async function MyShopPage({ searchParams }) {
           phone={shop.phone}
           email={shop.email}
           pendingEmail={pendingEmailChange?.newEmail ?? null}
-          investmentAed={shop.investmentAed}
-          commissionRate={shop.commissionRate}
-          latestInvestmentChange={
-            investmentChanges[0]
-              ? {
-                  status: investmentChanges[0].status,
-                  amount: Number(investmentChanges[0].toInvestmentAed),
-                }
-              : null
-          }
         />
       </section>
       <SiteFooter />

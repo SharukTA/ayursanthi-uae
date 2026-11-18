@@ -219,6 +219,4 @@ export const RATE_LIMITS = {
   shopProfile: { limit: 10, windowSeconds: 15 * 60 },
   // Each one sends a code by email, out of the same daily allowance.
   shopEmailChange: { limit: 3, windowSeconds: 60 * 60 },
-  // The same allowance and the same handling as withdrawal requests.
-  shopInvestmentChange: { limit: 5, windowSeconds: 60 * 60 },
 };

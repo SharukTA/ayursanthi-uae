@@ -13,6 +13,9 @@ import {
   isValidLinkCode,
   isValidShopReferralCode,
   SHOP_ATTRIBUTION_COOKIE,
+  nextShopProfitTier,
+  shopProfitRateForUnits,
+  SHOP_PROFIT_TIERS,
 } from "@/lib/shop-shared";
 
 /**
@@ -28,6 +31,9 @@ import {
  *
  * A partner can also hand out their referral code to people joining. Each sale by a
  * shop they referred then earns them a share as well, on top of what that shop earns.
+ *
+ * Joining costs nothing. A shop's own profit % comes from the units it has sold in all
+ * (SHOP_PROFIT_TIERS in lib/shop-shared.js), and is frozen on each sale when it is made.
  */
 
 // Fields that are safe to hand to the admin screens. Named explicitly so that
@@ -38,21 +44,11 @@ export const SHOP_PUBLIC_FIELDS = {
   ownerName: true,
   phone: true,
   email: true,
-  investmentAed: true,
-  commissionRate: true,
   linkCode: true,
   referralCode: true,
   isActive: true,
   createdAt: true,
 };
-
-export function serializeShop(shop) {
-  return {
-    ...shop,
-    investmentAed: Number(shop.investmentAed),
-    commissionRate: Number(shop.commissionRate),
-  };
-}
 
 // ── Codes ───────────────────────────────────────────────────────────────────
 
@@ -222,7 +218,7 @@ export const getCurrentShop = cache(async () => {
   }
 
   const { sessionsValidFrom, ...rest } = shop;
-  return serializeShop(rest);
+  return rest;
 });
 
 // ── Attribution ─────────────────────────────────────────────────────────────
@@ -263,7 +259,9 @@ async function resolveReferrerShare(referrer) {
  *
  * Never throws: a problem crediting a partner must not stop a customer paying.
  *
- * @returns {Promise<{id: string, commissionRate: object, referrer: {shopId: string, rate: number}|null}|null>}
+ * @returns {Promise<{id: string, unitsSold: number, referrer: {shopId: string, rate: number}|null}|null>}
+ *   `unitsSold` is the shop's all-time count before this order. With the order's own
+ *   units it decides the shop's profit %: see placeOrder in lib/checkout.js.
  */
 export async function resolveAttributedShop() {
   try {
@@ -275,17 +273,16 @@ export async function resolveAttributedShop() {
       where: { linkCode, isActive: true },
       select: {
         id: true,
-        commissionRate: true,
         referredBy: { select: { id: true, isActive: true } },
       },
     });
     if (!shop) return null;
 
-    return {
-      id: shop.id,
-      commissionRate: shop.commissionRate,
-      referrer: await resolveReferrerShare(shop.referredBy),
-    };
+    const [unitsSold, referrer] = await Promise.all([
+      getShopUnitsSold([shop.id]),
+      resolveReferrerShare(shop.referredBy),
+    ]);
+    return { id: shop.id, unitsSold: unitsSold.get(shop.id) ?? 0, referrer };
   } catch (error) {
     console.error("[shop] Could not resolve attribution:", error?.message || error);
     return null;
@@ -340,6 +337,36 @@ function saleStatus(sale, cutoff) {
 const netOf = (amount, taken) => round2(Number(amount ?? 0) - Number(taken ?? 0));
 
 /**
+ * Units each shop has sold through its link over all time, as a Map keyed by shop id:
+ * what decides its profit %. Only sales that count for profit count here, so an unpaid,
+ * cancelled, fully refunded or disputed order adds nothing. A partly refunded one still
+ * counts in full, as nothing records which of its units went back.
+ */
+export async function getShopUnitsSold(shopIds) {
+  const sums = await Promise.all(
+    shopIds.map((shopId) =>
+      prisma.orderItem.aggregate({
+        where: {
+          order: { ...COUNTED_ORDER, shopSale: { is: { shopId, refundedInFull: false, disputedAt: null } } },
+        },
+        _sum: { quantity: true },
+      })
+    )
+  );
+  return new Map(shopIds.map((id, index) => [id, sums[index]._sum.quantity ?? 0]));
+}
+
+/** Where a shop stands on SHOP_PROFIT_TIERS. Plain values, for the browser. */
+export function describeShopProfitTier(unitsSold) {
+  const next = nextShopProfitTier(unitsSold);
+  return {
+    unitsSold,
+    rate: shopProfitRateForUnits(unitsSold),
+    next: next ? { minUnits: next.minUnits, rate: next.rate, unitsToGo: next.minUnits - unitsSold } : null,
+  };
+}
+
+/**
  * Takes back profit on an order refunded in Stripe, in proportion to how much of the
  * order's total has gone back. The owner and their referrer lose the same share.
  *
@@ -390,6 +417,7 @@ const EMPTY_TOTALS = {
   settled: 0,
   paidOut: 0,
   balance: 0,
+  profitTier: describeShopProfitTier(0),
 };
 
 /**
@@ -402,6 +430,8 @@ const EMPTY_TOTALS = {
  * `orders` and `sales` are the shop's own. `commission` and everything worked out from
  * it also include the referrer's share of sales by shops it referred, which follows
  * the same rules and is also shown alone as `referralProfit`.
+ *
+ * `profitTier` is where the shop's own all-time units put it on SHOP_PROFIT_TIERS.
  */
 export async function getShopTotals(shopIds) {
   const cutoff = cancelWindowCutoff(await getCancelWindowHours());
@@ -410,7 +440,7 @@ export async function getShopTotals(shopIds) {
 
   const settledSale = { ...COUNTED_SALE, order: { ...COUNTED_ORDER, createdAt: { lte: cutoff } } };
 
-  const [counted, settled, referral, referralSettled, payouts] = await Promise.all([
+  const [counted, settled, referral, referralSettled, payouts, unitsSold] = await Promise.all([
     prisma.shopSale.groupBy({
       by: ["shopId"],
       where: { ...scope, ...COUNTED_SALE },
@@ -437,6 +467,7 @@ export async function getShopTotals(shopIds) {
       where: scope,
       _sum: { amount: true },
     }),
+    getShopUnitsSold(shopIds),
   ]);
 
   const countedById = new Map(counted.map((row) => [row.shopId, row]));
@@ -470,6 +501,7 @@ export async function getShopTotals(shopIds) {
           pending: round2(commission - settledAmount),
           paidOut,
           balance: round2(settledAmount - paidOut),
+          profitTier: describeShopProfitTier(unitsSold.get(id) ?? 0),
         },
       ];
     })
@@ -746,10 +778,29 @@ export async function getShopReport(
     referralSum._sum.reversedReferrerCommission
   );
   const totals = totalsById.get(shopId) ?? EMPTY_TOTALS;
+  const { rate } = totals.profitTier;
+  const tierIndex = SHOP_PROFIT_TIERS.findIndex((tier) => tier.rate === rate);
+
+  // When the shop reached its current rate: the first sale still counted that earned it.
+  // Missing when no counted sale did, as when two orders crossing a tier at once were
+  // both priced before either was paid.
+  const reachedAt =
+    rate > 0
+      ? await prisma.shopSale.findFirst({
+          where: { shopId, ...COUNTED_SALE, rate: { gte: rate } },
+          orderBy: { createdAt: "asc" },
+          select: { createdAt: true },
+        })
+      : null;
 
   return {
     range,
     totals,
+    profitTier: {
+      ...totals.profitTier,
+      previousRate: tierIndex > 0 ? SHOP_PROFIT_TIERS[tierIndex - 1].rate : 0,
+      since: reachedAt?.createdAt.toISOString() ?? null,
+    },
     withdrawal: {
       minimum: withdrawalMinimum,
       canWithdraw: totals.balance > 0 && totals.balance >= withdrawalMinimum,

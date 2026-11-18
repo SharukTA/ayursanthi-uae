@@ -7,10 +7,9 @@ import {
   generateReferralCode,
   generateShopCode,
   hashShopCode,
-  serializeShop,
   SHOP_PUBLIC_FIELDS,
 } from "@/lib/shop";
-import { findShopTier, validateShopCode } from "@/lib/shop-shared";
+import { validateShopCode } from "@/lib/shop-shared";
 import { readJsonObject } from "@/lib/validation";
 
 export const runtime = "nodejs";
@@ -49,9 +48,6 @@ export async function POST(request, { params }) {
     const joinRequest = await prisma.shopRequest.findUnique({ where: { id } });
     if (!joinRequest) return jsonError("Request not found.", 404);
 
-    const tier = findShopTier(joinRequest.investmentAed);
-    if (!tier) return jsonError("This investment amount is no longer offered.");
-
     const typedCode = String(body.code || "").trim();
     if (typedCode) {
       const codeError = validateShopCode(typedCode, joinRequest);
@@ -73,8 +69,6 @@ export async function POST(request, { params }) {
           ownerName: joinRequest.ownerName,
           phone: joinRequest.phone,
           email: joinRequest.email,
-          investmentAed: tier.investmentAed,
-          commissionRate: tier.commissionRate,
           linkCode: generateLinkCode(),
           referralCode: generateReferralCode(),
           referredByShopId: joinRequest.referrerShopId,
@@ -103,7 +97,7 @@ export async function POST(request, { params }) {
     }
 
     return Response.json({
-      shop: serializeShop(shop),
+      shop,
       emailed,
       ...(emailed ? {} : { code }),
     });

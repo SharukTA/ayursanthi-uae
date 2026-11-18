@@ -10,7 +10,7 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
 import { Button } from "@/components/ui/button";
 import { formatMoney } from "@/lib/currency";
-import { buildShopLink, readShopReportQuery, shopReportQueryString, SHOP_TIERS } from "@/lib/shop-shared";
+import { buildShopLink, readShopReportQuery, shopReportQueryString } from "@/lib/shop-shared";
 
 const FIELD =
   "w-full min-w-0 min-h-10 rounded border border-input bg-white px-3 text-xs font-normal outline-none transition focus:border-emerald-700";
@@ -84,58 +84,6 @@ function ShopCodeRow({ shopId }) {
           {state === "loading" ? "Loading..." : "Show"}
         </button>
       )}
-    </div>
-  );
-}
-
-// One owner asking to change their investment.
-function InvestmentChangeCard({ change, onApprove, onDecline }) {
-  const [busy, setBusy] = useState(false);
-
-  const act = async (handler) => {
-    setBusy(true);
-    try {
-      await handler();
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className="rounded-md border border-amber-300 bg-white p-4 shadow-sm">
-      <p className="text-sm font-bold text-slate-950">{change.ownerName}</p>
-      <p className="mt-1 text-xs text-slate-600 wrap-break-word">
-        <a href={`tel:${change.phone}`} className="underline">{change.phone}</a> &middot;{" "}
-        <a href={`mailto:${change.email}`} className="underline">{change.email}</a>
-      </p>
-      <p className="mt-1 text-xs text-slate-600">
-        {`${formatMoney(change.currentAed, { decimals: 0 })} (${change.currentRate}%) to `}
-        <span className="font-bold text-slate-900">
-          {`${formatMoney(change.requestedAed, { decimals: 0 })} (${change.requestedRate ?? "?"}%)`}
-        </span>
-      </p>
-      <p className="mt-1 text-xs text-slate-600">
-        Requested {new Date(change.createdAt).toLocaleDateString("en-AE", { timeZone: "Asia/Dubai" })}
-      </p>
-      <div className="mt-3 flex flex-wrap gap-2">
-        <Button
-          type="button"
-          disabled={busy}
-          onClick={() => act(() => onApprove(change))}
-          className="h-10 bg-emerald-700 hover:bg-emerald-800 rounded-md text-xs font-semibold"
-        >
-          {busy ? <Loader2 className="size-3 animate-spin mr-1.5" /> : null}
-          Approve
-        </Button>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => act(() => onDecline(change))}
-          className="h-10 rounded-md border border-slate-200 px-3 text-xs font-semibold text-rose-700 hover:bg-slate-50 disabled:opacity-50"
-        >
-          Decline
-        </button>
-      </div>
     </div>
   );
 }
@@ -226,8 +174,6 @@ function JoinRequestCard({ request, onApprove, onDecline }) {
     }
   };
 
-  const tier = SHOP_TIERS.find((entry) => entry.investmentAed === request.investmentAed);
-
   return (
     <div className="rounded-md border border-amber-300 bg-white p-4 shadow-sm">
       <p className="text-sm font-bold text-slate-950">{request.ownerName}</p>
@@ -236,8 +182,7 @@ function JoinRequestCard({ request, onApprove, onDecline }) {
         <a href={`mailto:${request.email}`} className="underline">{request.email}</a>
       </p>
       <p className="mt-1 text-xs text-slate-600">
-        {formatMoney(request.investmentAed, { decimals: 0 })}
-        {tier ? ` · ${tier.commissionRate}%` : ""} &middot; Requested{" "}
+        Requested{" "}
         {new Date(request.createdAt).toLocaleDateString("en-AE", { timeZone: "Asia/Dubai" })}
       </p>
       {request.referrerName ? (
@@ -297,7 +242,6 @@ export default function AdminShopsPage() {
   const [requests, setRequests] = useState([]);
   const [withdrawalMinimum, setWithdrawalMinimum] = useState(0);
   const [withdrawals, setWithdrawals] = useState([]);
-  const [investmentChanges, setInvestmentChanges] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // A code exists in readable form only in the response that created it, so this
@@ -316,11 +260,6 @@ export default function AdminShopsPage() {
     const data = await send("/api/admin/shops", "GET");
     setShops(data.shops || []);
     setWithdrawalMinimum(data.withdrawalMinimum ?? 0);
-  };
-
-  const loadInvestmentChanges = async () => {
-    const data = await send("/api/admin/shop-investment-changes", "GET");
-    setInvestmentChanges(data.changes || []);
   };
 
   const loadWithdrawals = async () => {
@@ -350,7 +289,7 @@ export default function AdminShopsPage() {
   useEffect(() => {
     async function initPage() {
       try {
-        await Promise.all([loadShops(), loadRequests(), loadWithdrawals(), loadInvestmentChanges()]);
+        await Promise.all([loadShops(), loadRequests(), loadWithdrawals()]);
       } catch (error) {
         toast.error(error.message);
       } finally {
@@ -364,7 +303,7 @@ export default function AdminShopsPage() {
   const approveRequest = async (request, code) => {
     const ok = await confirm({
       title: "Approve this request?",
-      description: `Only approve once you have received ${formatMoney(request.investmentAed, { decimals: 0 })} from ${request.ownerName}. This creates their shop and emails the shop code to ${request.email}.`,
+      description: `This creates ${request.ownerName}'s shop and emails the shop code to ${request.email}.`,
       confirmLabel: "Approve",
     });
     if (!ok) return;
@@ -396,42 +335,6 @@ export default function AdminShopsPage() {
     try {
       await send(`/api/admin/shop-requests/${request.id}`, "POST", { action: "decline" });
       await loadRequests();
-    } catch (error) {
-      toast.error(error.message);
-    }
-  };
-
-  const approveInvestmentChange = async (change) => {
-    const raising = change.requestedAed > change.currentAed;
-    const ok = await confirm({
-      title: "Approve this change?",
-      description: `${change.ownerName} moves to ${formatMoney(change.requestedAed, { decimals: 0 })} and ${change.requestedRate}% profit on new sales. Past sales keep their rate. ${
-        raising
-          ? "Only approve once you have received the extra money."
-          : "This lowers their investment, so sort out any money owed back first."
-      }`,
-      confirmLabel: "Approve",
-    });
-    if (!ok) return;
-    try {
-      await send(`/api/admin/shop-investment-changes/${change.id}`, "POST", { action: "approve" });
-      toast.success("Investment updated.");
-      await Promise.all([loadShops(), loadInvestmentChanges()]);
-    } catch (error) {
-      toast.error(error.message);
-    }
-  };
-
-  const declineInvestmentChange = async (change) => {
-    const ok = await confirm({
-      title: "Decline this change?",
-      description: `${change.ownerName} stays on ${formatMoney(change.currentAed, { decimals: 0 })} and ${change.currentRate}%. No email is sent, so let them know why. They can ask again.`,
-      confirmLabel: "Decline",
-    });
-    if (!ok) return;
-    try {
-      await send(`/api/admin/shop-investment-changes/${change.id}`, "POST", { action: "decline" });
-      await loadInvestmentChanges();
     } catch (error) {
       toast.error(error.message);
     }
@@ -607,24 +510,6 @@ export default function AdminShopsPage() {
           </div>
         ) : null}
 
-        {investmentChanges.length > 0 ? (
-          <div className="mb-8">
-            <h2 className="mb-3 text-base font-bold text-slate-950">
-              Investment change requests ({investmentChanges.length})
-            </h2>
-            <div className="grid gap-3 lg:grid-cols-2">
-              {investmentChanges.map((change) => (
-                <InvestmentChangeCard
-                  key={change.id}
-                  change={change}
-                  onApprove={approveInvestmentChange}
-                  onDecline={declineInvestmentChange}
-                />
-              ))}
-            </div>
-          </div>
-        ) : null}
-
         {withdrawals.length > 0 ? (
           <div className="mb-8">
             <h2 className="mb-3 text-base font-bold text-slate-950">
@@ -693,8 +578,10 @@ export default function AdminShopsPage() {
                           {shop.phone} &middot; {shop.email}
                         </p>
                         <p className="mt-1 text-xs text-slate-600">
-                          {formatMoney(shop.investmentAed, { decimals: 0 })} &middot;{" "}
-                          {shop.commissionRate}%
+                          {shop.totals.profitTier.rate}% profit &middot; {shop.totals.profitTier.unitsSold} units sold
+                          {shop.totals.profitTier.next
+                            ? ` · ${shop.totals.profitTier.next.unitsToGo} more for ${shop.totals.profitTier.next.rate}%`
+                            : " · top rate"}
                         </p>
                         <p className="mt-1 text-xs text-slate-600">
                           Referral code <span className="font-mono font-semibold">{shop.referralCode}</span>

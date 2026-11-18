@@ -13,8 +13,8 @@ const text = (value) => (typeof value === "string" ? value.trim() : "");
 
 /**
  * The owner changing their own name and mobile number. The shop comes from their
- * session, and only these two fields are read, so investment and profit rate cannot be
- * changed this way. Email has its own route, because it is checked first.
+ * session, and only these two fields are read. Email has its own route, because it is
+ * checked first.
  *
  * Asks for the shop code again, so a phone left signed in is not enough.
  */

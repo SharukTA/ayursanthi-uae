@@ -4,8 +4,7 @@ import { useState } from "react";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { PhoneField } from "@/components/PhoneField";
 import { Button } from "@/components/ui/button";
-import { formatMoney } from "@/lib/currency";
-import { SHOP_TIERS } from "@/lib/shop-shared";
+import { SHOP_PROFIT_TIERS } from "@/lib/shop-shared";
 import { validateEmail, validateMobile, validateName } from "@/lib/validation";
 
 const FIELD =
@@ -39,7 +38,6 @@ export function ShopRequestForm() {
     ownerName: "",
     phone: "",
     email: "",
-    investmentAed: String(SHOP_TIERS[0].investmentAed),
     referralCode: "",
     website: "",
   });
@@ -157,21 +155,13 @@ export function ShopRequestForm() {
         />
         <FieldError id="join-email-error" message={errors.email} />
       </label>
-      <label className={LABEL}>
-        Investment *
-        <select
-          value={form.investmentAed}
-          onChange={setField("investmentAed")}
-          className={`${FIELD} ${fieldBorder(errors.investmentAed)}`}
-        >
-          {SHOP_TIERS.map((tier) => (
-            <option key={tier.investmentAed} value={tier.investmentAed}>
-              {formatMoney(tier.investmentAed, { decimals: 0 })}: {tier.commissionRate}% profit on sales
-            </option>
-          ))}
-        </select>
-        <FieldError id="join-investment-error" message={errors.investmentAed} />
-      </label>
+      <div className="rounded border border-slate-200 bg-slate-50 p-3 text-xs leading-5 text-slate-600">
+        <p className="font-semibold text-slate-800">Joining is free.</p>
+        <p className="mt-1">
+          Your profit grows with the units sold through your link:{" "}
+          {SHOP_PROFIT_TIERS.map((tier) => `${tier.rate}% from ${tier.minUnits} units`).join(", ")}.
+        </p>
+      </div>
       <label className={LABEL}>
         Shop referral code (optional)
         <input

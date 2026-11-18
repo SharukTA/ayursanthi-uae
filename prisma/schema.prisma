@@ -580,10 +580,10 @@ model RateLimit {
 
 // ─── My Shop partner programme ───────────────────────────────────────────────
 //
-// Someone applies through the public form, and an admin approves them once the
-// investment has been received. They advertise the store with their shop link, and
-// earn a percentage of the goods bought by anyone who arrived through it. See
-// lib/shop.js.
+// Someone applies through the public form, free of charge, and an admin approves them.
+// They advertise the store with their shop link, and earn a percentage of the goods
+// bought by anyone who arrived through it, which rises with the units they have sold
+// (SHOP_PROFIT_TIERS in lib/shop-shared.js). See lib/shop.js.
 
 // One partner's shop.
 //
@@ -610,14 +610,9 @@ model Shop {
   formerEmails String[] @default([])
   formerPhones String[] @default([])
 
-  // What the partner put in. A record of an arrangement made outside this
-  // system: nothing here collects or moves that money.
-  investmentAed  Decimal @db.Decimal(10, 2)
-  // Stored rather than derived from SHOP_TIERS, so revising the plan later cannot
-  // silently change the terms of a partner who already signed up.
-  commissionRate Decimal @db.Decimal(5, 2)
+  // No profit rate here: it follows the units sold, and each ShopSale keeps its own.
 
-  linkCode       String @unique
+  linkCode      String @unique
   referralCode   String @unique
   accessCodeHash String @unique
   // AES-GCM under a key derived from SESSION_SECRET: see encryptShopCode in
@@ -647,7 +642,6 @@ model Shop {
   payouts       ShopPayout[]
   withdrawals   ShopWithdrawal[]
   emailChange   ShopEmailChange?
-  investmentChanges ShopInvestmentChange[]
   // The public request this shop was approved from. Null only for shops created
   // before approval became the one way in.
   joinRequest   ShopRequest? @relation("ShopJoinRequest")
@@ -671,15 +665,13 @@ enum ShopRequestStatus {
 //
 // Deliberately not a Shop with a "not approved yet" flag. A request has no codes and
 // no link, so nothing about it can open a shop or earn on a sale. The Shop row only
-// comes into existence when an admin approves, after the investment has been
-// received, which happens outside this system.
+// comes into existence when an admin approves.
 model ShopRequest {
   id            String            @id @default(cuid())
   ownerName     String
   phone         String
   email         String
-  investmentAed Decimal           @db.Decimal(10, 2)
-  status        ShopRequestStatus @default(PENDING)
+  status       ShopRequestStatus @default(PENDING)
   shopId        String?           @unique
   shop          Shop?             @relation("ShopJoinRequest", fields: [shopId], references: [id], onDelete: Restrict)
   // The shop whose referral code was entered on the form, if any. Copied to the new
@@ -771,32 +763,6 @@ model ShopEmailChange {
   attempts Int      @default(0)
   expiresAt DateTime
   createdAt DateTime @default(now())
-}
-
-enum ShopInvestmentChangeStatus {
-  PENDING
-  APPROVED
-  DECLINED
-  CANCELLED // taken back by the owner
-}
-
-// An owner asking to change their investment. It changes nothing on the Shop until an
-// admin approves, which is the only way a shop's investment and profit rate change.
-//
-// The migration also adds a partial unique index allowing one PENDING request per shop,
-// which this schema has no way to express.
-model ShopInvestmentChange {
-  id                String                     @id @default(cuid())
-  shopId            String
-  shop              Shop                       @relation(fields: [shopId], references: [id], onDelete: Restrict)
-  fromInvestmentAed Decimal                    @db.Decimal(10, 2)
-  toInvestmentAed   Decimal                    @db.Decimal(10, 2)
-  status            ShopInvestmentChangeStatus @default(PENDING)
-  reviewedAt        DateTime?
-  createdAt         DateTime                   @default(now())
-
-  @@index([shopId, createdAt])
-  @@index([status, createdAt])
 }
 
 enum ShopWithdrawalStatus {

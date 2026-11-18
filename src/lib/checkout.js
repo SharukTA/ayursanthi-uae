@@ -3,6 +3,7 @@ import { round2 } from "@/lib/pricing";
 import { getFreeShippingThreshold } from "@/lib/settings";
 import { getTermsVersion } from "@/lib/pages";
 import { commissionOn } from "@/lib/shop";
+import { shopProfitRateForUnits } from "@/lib/shop-shared";
 
 /**
  * Creates an order and reserves its stock.
@@ -37,7 +38,7 @@ import { commissionOn } from "@/lib/shop";
  *   shopper checked out. Recorded because the browser-side baskets are tidied on
  *   the return page, long after the state that knew this was thrown away by the
  *   redirect to Stripe — and each list needs different treatment.
- * @param {{id: string, commissionRate: object, referrer: object|null}|null} [args.shop]
+ * @param {{id: string, unitsSold: number, referrer: object|null}|null} [args.shop]
  *   the partner shop this purchase came through, from resolveAttributedShop in
  *   lib/shop.js.
  * @returns {Promise<{status: string, message?: string, order?: object}>}
@@ -116,6 +117,13 @@ export async function placeOrder({
   // Read outside the transaction: it is an independent lookup, and keeping it
   // out means it cannot lengthen the window in which stock rows are locked.
   const termsVersion = await getTermsVersion();
+
+  // The partner's profit % comes from their all-time units with this order's own added,
+  // so the order that takes a shop to 51 units is the first to earn 10%. Frozen on the
+  // sale: moving up a tier later changes nothing already sold.
+  const shopRate = shop
+    ? shopProfitRateForUnits(shop.unitsSold + items.reduce((sum, it) => sum + it.quantity, 0))
+    : 0;
 
   const order = await prisma.$transaction(async (tx) => {
     // Reserve the stock with a conditional decrement — one statement per line,
@@ -198,9 +206,9 @@ export async function placeOrder({
               shopSale: {
                 create: {
                   shopId: shop.id,
-                  rate: shop.commissionRate,
+                  rate: shopRate,
                   goodsTotal: subtotal,
-                  commission: commissionOn(subtotal, shop.commissionRate),
+                  commission: commissionOn(subtotal, shopRate),
                   ...(shop.referrer
                     ? {
                         referrerShopId: shop.referrer.shopId,

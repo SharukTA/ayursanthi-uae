@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { PhoneField } from "@/components/PhoneField";
 import { Button } from "@/components/ui/button";
 import { formatMoney } from "@/lib/currency";
-import { buildShopLink, SHOP_TIERS } from "@/lib/shop-shared";
+import { buildShopLink } from "@/lib/shop-shared";
 
 const subscribeToNothing = () => () => {};
 
@@ -209,26 +209,14 @@ function DetailRow({ label, value }) {
 /**
  * The owner's own name, mobile and email. Only they can change these. Every change asks
  * for the shop code again, and an email change also needs a code sent to the new address.
- * A new investment is only a request, which changes nothing until an admin approves it.
  */
-export function ShopDetailsCard({
-  ownerName,
-  phone,
-  email,
-  pendingEmail,
-  investmentAed,
-  commissionRate,
-  latestInvestmentChange,
-}) {
+export function ShopDetailsCard({ ownerName, phone, email, pendingEmail }) {
   const router = useRouter();
   const [mode, setMode] = useState("view");
   const [draft, setDraft] = useState({ ownerName, phone, newEmail: "", code: "", otp: "" });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [newInvestment, setNewInvestment] = useState("");
   const waitingFor = mode === "view" ? pendingEmail : null;
-  const otherTiers = SHOP_TIERS.filter((tier) => tier.investmentAed !== investmentAed);
-  const investmentWaiting = latestInvestmentChange?.status === "PENDING";
 
   const setField = (key) => (event) => setDraft((prev) => ({ ...prev, [key]: event.target.value }));
 
@@ -289,10 +277,6 @@ export function ShopDetailsCard({
           <DetailRow label="Name" value={ownerName} />
           <DetailRow label="Mobile number" value={phone} />
           <DetailRow label="Email" value={email} />
-          <DetailRow
-            label="Investment"
-            value={`${formatMoney(investmentAed, { decimals: 0 })}, ${commissionRate}% profit`}
-          />
         </dl>
       ) : null}
 
@@ -304,97 +288,10 @@ export function ShopDetailsCard({
           <button type="button" onClick={() => open("email")} className={secondaryButton}>
             Change email
           </button>
-          {investmentWaiting ? null : (
-            <button type="button" onClick={() => open("investment")} className={secondaryButton}>
-              Change investment
-            </button>
-          )}
         </div>
-      ) : null}
-
-      {mode === "view" && investmentWaiting ? (
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded border border-amber-200 bg-amber-50 p-3">
-          <p className="text-[13px] leading-5 text-slate-700">
-            You asked to change your investment to{" "}
-            <span className="font-bold">
-              {formatMoney(latestInvestmentChange.amount, { decimals: 0 })}
-            </span>
-            . Your current investment and profit stay the same unless we approve it.
-          </p>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() =>
-              run(
-                () => sendDetails("/api/shop/investment", "DELETE"),
-                () => toast.success("Your investment request was cancelled.")
-              )
-            }
-            className="text-xs font-semibold text-rose-700 underline disabled:opacity-50"
-          >
-            Cancel request
-          </button>
-        </div>
-      ) : null}
-
-      {mode === "view" && latestInvestmentChange?.status === "DECLINED" ? (
-        <p className="mt-3 text-[13px] leading-5 text-slate-600">
-          Your request to change your investment to{" "}
-          {formatMoney(latestInvestmentChange.amount, { decimals: 0 })} was declined, so it stays
-          as it is.
-        </p>
       ) : null}
 
       {mode === "view" && error ? errorLine : null}
-
-      {mode === "investment" ? (
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            run(
-              () => sendDetails("/api/shop/investment", "POST", {
-                investmentAed: newInvestment || otherTiers[0].investmentAed,
-                code: draft.code,
-              }),
-              () => {
-                setMode("view");
-                toast.success("Your request was sent.");
-              }
-            );
-          }}
-          className="mt-3 grid gap-3"
-        >
-          <p className="text-[13px] leading-5 text-slate-600">
-            We will contact you about this request. Your investment and profit stay the same
-            unless we approve it, and a new profit rate applies to new purchases only.
-          </p>
-          <label className={DETAIL_LABEL}>
-            New investment
-            <select
-              value={newInvestment || otherTiers[0].investmentAed}
-              onChange={(event) => setNewInvestment(event.target.value)}
-              className={DETAIL_FIELD}
-            >
-              {otherTiers.map((tier) => (
-                <option key={tier.investmentAed} value={tier.investmentAed}>
-                  {formatMoney(tier.investmentAed, { decimals: 0 })}: {tier.commissionRate}% profit
-                </option>
-              ))}
-            </select>
-          </label>
-          {shopCodeField}
-          {errorLine}
-          <div className="flex flex-wrap gap-2">
-            <Button type="submit" disabled={busy} className={primaryButton}>
-              {spinner}
-              Send request
-            </Button>
-            <button type="button" onClick={() => open("view")} className={secondaryButton}>
-              Cancel
-            </button>
-          </div>
-        </form>
-      ) : null}
 
       {mode === "details" ? (
         <form
@@ -537,10 +434,6 @@ export function ShopDetailsCard({
             <DetailRow label="Name" value={ownerName} />
             <DetailRow label="Mobile number" value={phone} />
             <DetailRow label="Email" value={email} />
-          <DetailRow
-            label="Investment"
-            value={`${formatMoney(investmentAed, { decimals: 0 })}, ${commissionRate}% profit`}
-          />
           </dl>
           <p className="mt-2 text-[13px] leading-5 text-slate-700">
             Your email was changed. Your shop code stays the same.
